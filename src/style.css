@@ -59,3 +59,48 @@ body {
   background: rgba(0, 0, 0, 0.6);
   pointer-events: none;
 }
+
+.loading {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: min(60vw, 280px);
+  height: 6px;
+  transform: translate(-50%, -50%);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.loading__bar {
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  transition: width 0.15s linear;
+}
+
+/* The server didn't say how big the file is, so show movement instead. */
+.loading--unknown .loading__bar {
+  width: 35%;
+  animation: loading-sweep 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes loading-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+
+.loading--failed {
+  width: auto;
+  height: auto;
+  padding: 0 16px;
+  background: none;
+  font: 15px/1.4 system-ui, sans-serif;
+  color: #333;
+  text-align: center;
+}
