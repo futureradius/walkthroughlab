@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "optimize": "node scripts/optimize-environments.mjs"
+    "optimize": "node scripts/optimize-environments.mjs",
+    "bake": "node scripts/bake.mjs"
   },
   "dependencies": {
     "marked": "^18.1.0",
@@ -22,6 +23,7 @@
     "sharp": "^0.35.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "watlas": "^1.0.1"
   }
 }

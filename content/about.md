@@ -22,5 +22,6 @@ Test environment prepared in Rhino. Sources and licences of its textures and of 
 
 - [Three.js](https://threejs.org/), [MIT licence](https://github.com/mrdoob/three.js/blob/dev/LICENSE)
 - [Marked](https://marked.js.org/), [MIT licence](https://github.com/markedjs/marked/blob/master/LICENSE.md)
+- Light baked with [Blender](https://www.blender.org/)
 
 Source code: [github.com/futureradius/walkthroughlab](https://github.com/futureradius/walkthroughlab)

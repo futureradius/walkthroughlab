@@ -7,6 +7,8 @@ Walk through an architectural space in the browser: https://futureradius.github.
 2. Put the sky, an equirectangular `.exr` panorama, into `models-source/` as well.
 3. Run `npm run optimize`. It shrinks the textures and writes the file viewers download to `public/models/`. From the sky it writes a picture and a small light file to `public/skies/`.
 
+4. Run `npm run bake`. It needs [Blender](https://www.blender.org/) installed and takes a few minutes: it computes the light and shadow the sky casts on the environment and writes them as one picture next to the environment in `public/models/`. Run it again whenever the environment or its sky changes.
+
 `models-source/` is not committed; `public/models/` and `public/skies/` are.
 
 ## Moving through it

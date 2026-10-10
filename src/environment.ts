@@ -2,6 +2,7 @@ import {
   DoubleSide,
   EquirectangularReflectionMapping,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PMREMGenerator,
   SRGBColorSpace,
@@ -17,12 +18,16 @@ import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 
 /** The Rhino layer whose contents are the collision mesh rather than something to see. */
 const COLLISION_LAYER = "Collision Mesh";
+/** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
+const BAKED_LIGHT_RANGE = 4;
 
 /** The files `npm run optimize` writes for one environment and its sky. */
 export interface EnvironmentFiles {
   model: string;
   skyPicture: string;
   skyLight: string;
+  /** Written by `npm run bake`; without it the sky lights the surfaces live. */
+  bakedLight?: string;
 }
 
 export interface Environment {
@@ -68,6 +73,24 @@ function prepare(material: Material, anisotropy: number) {
 }
 
 /**
+ * A surface whose light was baked only has to show its own colour times that
+ * light, which is the cheapest thing a phone can draw.
+ */
+function withBakedLight(material: MeshStandardMaterial, bakedLight: Texture) {
+  const baked = new MeshBasicMaterial({
+    name: material.name,
+    color: material.color,
+    map: material.map,
+    side: material.side,
+    lightMap: bakedLight,
+    // Undoes the division by pi three.js applies and the bake's range.
+    lightMapIntensity: Math.PI * BAKED_LIGHT_RANGE,
+  });
+  material.dispose();
+  return baked;
+}
+
+/**
  * Download an environment and its sky, and split the environment into what
  * the viewer sees and its collision mesh. `onProgress` gets the fraction
  * downloaded, or undefined while the server hasn't said how big the files are.
@@ -94,10 +117,11 @@ export async function loadEnvironment(
         : undefined,
     );
   };
-  const [gltf, light, skyPicture] = await Promise.all([
+  const [gltf, light, skyPicture, bakedLight] = await Promise.all([
     new GLTFLoader().loadAsync(files.model, track(downloads[0])),
     new HDRLoader().loadAsync(files.skyLight, track(downloads[1])),
     new TextureLoader().loadAsync(files.skyPicture),
+    files.bakedLight ? new TextureLoader().loadAsync(files.bakedLight) : undefined,
   ]);
 
   // The loader rewrites names; the one written in Rhino is kept in userData.
@@ -112,8 +136,27 @@ export async function loadEnvironment(
   collisionLayer.removeFromParent();
 
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  if (bakedLight) {
+    bakedLight.colorSpace = SRGBColorSpace;
+    // Laid out like the environment's own textures, top row first.
+    bakedLight.flipY = false;
+    // The second set of texture coordinates, written by `npm run optimize`.
+    bakedLight.channel = 1;
+  }
+  const baked = new Map<Material, Material>();
   gltf.scene.traverse((object) => {
-    if (object instanceof Mesh) prepare(object.material, anisotropy);
+    if (!(object instanceof Mesh)) return;
+    const material: Material = object.material;
+    prepare(material, anisotropy);
+    // Only surfaces the bake painted carry the second set of coordinates.
+    if (
+      bakedLight &&
+      material instanceof MeshStandardMaterial &&
+      object.geometry.hasAttribute("uv1")
+    ) {
+      if (!baked.has(material)) baked.set(material, withBakedLight(material, bakedLight));
+      object.material = baked.get(material);
+    }
   });
 
   skyPicture.colorSpace = SRGBColorSpace;

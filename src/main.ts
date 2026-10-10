@@ -39,6 +39,7 @@ const TEST_ENVIRONMENT = {
     model: `${import.meta.env.BASE_URL}models/test-environment.glb`,
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
+    bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
   },
   // At the foot of the stairs, looking up them.
   start: { x: -13.4, z: 13, heading: 0 },

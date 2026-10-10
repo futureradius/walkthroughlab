@@ -16,6 +16,10 @@ _Avoid_: Model, scene, level, map
 The surrounding panorama an author chooses for an environment, which the viewer sees beyond the architecture and which lights it.
 _Avoid_: HDRI, skybox, environment map, backdrop
 
+**Baked light**:
+The light and shadow computed once in advance for an environment under its sky and stored with it, so a viewer's device only has to display it.
+_Avoid_: Lightmap, global illumination, GI
+
 **Collision mesh**:
 The simplified, invisible geometry an author builds alongside an environment to decide where the viewpoint can go: its floors and slopes carry the viewpoint and its walls stop it.
 _Avoid_: Collider, navmesh, hitbox, physics mesh

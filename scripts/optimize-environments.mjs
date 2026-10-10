@@ -10,11 +10,13 @@ import {
   join,
   prune,
   textureCompress,
+  unwrapPrimitives,
   weld,
 } from "@gltf-transform/functions";
 import sharp from "sharp";
 import { FloatType } from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
+import * as watlas from "watlas";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
@@ -34,6 +36,8 @@ const DROPPED_EXTENSIONS = [
   "KHR_materials_emissive_strength",
 ];
 const LINEAR_MIPMAP_LINEAR = 9987;
+/** The Rhino layer whose contents are the collision mesh rather than something to see. */
+const COLLISION_LAYER = "Collision Mesh";
 /** Width of the sky picture viewers see: the largest texture old phones accept. */
 const SKY_PICTURE_WIDTH = 4096;
 const SKY_PICTURE_QUALITY = 85;
@@ -60,6 +64,24 @@ function simplifyMaterials(document) {
   for (const extension of document.getRoot().listExtensionsUsed()) {
     if (DROPPED_EXTENSIONS.includes(extension.extensionName)) extension.dispose();
   }
+}
+
+/** Every surface that takes baked light: seen, solid and not metal. */
+function bakedPrimitives(document) {
+  const primitives = [];
+  const visit = (node) => {
+    if (node.getName() === COLLISION_LAYER) return;
+    for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+      const material = primitive.getMaterial();
+      // Glass and metal show the sky live, in reflections, instead.
+      if (material?.getAlphaMode() === "BLEND") continue;
+      if (material && material.getMetallicFactor() > 0.5) continue;
+      primitives.push(primitive);
+    }
+    node.listChildren().forEach(visit);
+  };
+  for (const scene of document.getRoot().listScenes()) scene.listChildren().forEach(visit);
+  return primitives;
 }
 
 /** Shrink a panorama of linear colour rows by averaging blocks of pixels. */
@@ -198,6 +220,9 @@ async function optimizeEnvironment(io, file) {
     }),
     prune(),
   );
+  // A second set of texture coordinates in which no two surfaces overlap, so
+  // `npm run bake` can paint each one's light into a single shared picture.
+  unwrapPrimitives(bakedPrimitives(document), { watlas, texcoord: 1, overwrite: true });
   await io.write(to, document);
   console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}`);
 }
@@ -219,6 +244,7 @@ async function optimizeSky(file) {
 }
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+await watlas.Initialize();
 await mkdir(MODELS, { recursive: true });
 await mkdir(SKIES, { recursive: true });
 const files = await readdir(SOURCE);
