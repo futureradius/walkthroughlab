@@ -34,7 +34,7 @@ describe("advance", () => {
   });
 
   it("walks east after a quarter turn to the right", () => {
-    const facingEast = advance(start, { x: 1, y: 0 }, 0.5, room);
+    const facingEast = advance(start, { x: 1, y: 0 }, 0.75, room);
     const next = advance(facingEast, { x: 0, y: 1 }, 1, room);
     expect(next.x).toBeCloseTo(WALK_SPEED);
     expect(next.z).toBeCloseTo(0);

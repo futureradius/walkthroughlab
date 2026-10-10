@@ -36,8 +36,8 @@ export interface Limits {
 
 /** Metres per second at full stick. */
 export const WALK_SPEED = 1.4;
-/** Radians per second at full stick while standing still: half a turn. */
-export const STANDING_TURN_SPEED = Math.PI;
+/** Radians per second at full stick while standing still: a third of a turn. */
+export const STANDING_TURN_SPEED = (Math.PI * 2) / 3;
 /** Radians per second at full stick while walking at full speed: a quarter turn. */
 export const WALKING_TURN_SPEED = Math.PI / 2;
 
