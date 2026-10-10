@@ -5,6 +5,7 @@ import {
   Scene,
   WebGLRenderer,
 } from "three";
+import { addAbout } from "./about";
 import { collisionMesh } from "./collision";
 import { Controls } from "./controls";
 import { loadEnvironment } from "./environment";
@@ -128,6 +129,8 @@ const fps = params.has("fps")
       Object.assign(document.createElement("div"), { className: "fps" }),
     )
   : null;
+
+addAbout(document.body);
 
 // Add ?room to the address to walk the gridded white room instead.
 const place = params.has("room") ? enterWhiteRoom() : await enterTestEnvironment();

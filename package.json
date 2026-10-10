@@ -11,6 +11,7 @@
     "optimize": "node scripts/optimize-environments.mjs"
   },
   "dependencies": {
+    "marked": "^18.1.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

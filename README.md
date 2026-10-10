@@ -20,3 +20,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 
 - `npm run dev` serves the walkthrough on your network, for testing on a phone.
 - Add `?room` to the address for the gridded white room, and `?fps` to show the frame rate.
+
+## Information and credits
+
+The "i" button in the top-right corner opens a panel whose text is `content/about.md`. Edit that file to name sources and licences; ordinary Markdown works, and links open in a new tab.

@@ -12,6 +12,8 @@ export class Keyboard {
   constructor() {
     window.addEventListener("keydown", (event) => {
       if (!this.moves(event.code) || event.ctrlKey || event.metaKey || event.altKey) return;
+      // Keys pressed in an open panel scroll it rather than walk behind it.
+      if (event.target instanceof Element && event.target.closest("dialog")) return;
       // Arrow keys would otherwise scroll the page.
       event.preventDefault();
       this.held.add(event.code);
