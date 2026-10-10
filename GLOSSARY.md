@@ -12,6 +12,10 @@ _Avoid_: Tour, flythrough, animation, render
 The architectural space an author prepares and a viewer sees and moves through in a walkthrough.
 _Avoid_: Model, scene, level, map
 
+**Sky**:
+The surrounding panorama an author chooses for an environment, which the viewer sees beyond the architecture and which lights it.
+_Avoid_: HDRI, skybox, environment map, backdrop
+
 **Collision mesh**:
 The simplified, invisible geometry an author builds alongside an environment to decide where the viewpoint can go: its floors and slopes carry the viewpoint and its walls stop it.
 _Avoid_: Collider, navmesh, hitbox, physics mesh

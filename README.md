@@ -4,9 +4,10 @@ Walk through an architectural space in the browser: https://futureradius.github.
 ## Preparing an environment
 
 1. In Rhino, put the collision mesh on a layer named `Collision Mesh` and export everything as one `.glb` into `models-source/`.
-2. Run `npm run optimize`. It shrinks the textures and writes the file viewers download to `public/models/`.
+2. Put the sky, an equirectangular `.exr` panorama, into `models-source/` as well.
+3. Run `npm run optimize`. It shrinks the textures and writes the file viewers download to `public/models/`. From the sky it writes a picture and a small light file to `public/skies/`.
 
-`models-source/` is not committed; `public/models/` is.
+`models-source/` is not committed; `public/models/` and `public/skies/` are.
 
 ## Moving through it
 

@@ -1,33 +1,39 @@
 import {
-  DirectionalLight,
   DoubleSide,
-  Group,
-  HemisphereLight,
+  EquirectangularReflectionMapping,
   Mesh,
-  MeshLambertMaterial,
   MeshStandardMaterial,
   PMREMGenerator,
+  SRGBColorSpace,
+  TextureLoader,
   Vector3,
   type Material,
   type Object3D,
   type Texture,
   type WebGLRenderer,
 } from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 
 /** The Rhino layer whose contents are the collision mesh rather than something to see. */
 const COLLISION_LAYER = "Collision Mesh";
-/** Polished metal is blurred this much so its made-up reflection never reads as a mirror. */
-const MIN_METAL_ROUGHNESS = 0.3;
-const SKY_LIGHT = 0xffffff;
-const GROUND_LIGHT = 0x9c968c;
+
+/** The files `npm run optimize` writes for one environment and its sky. */
+export interface EnvironmentFiles {
+  model: string;
+  skyPicture: string;
+  skyLight: string;
+}
 
 export interface Environment {
-  /** Everything the viewer sees, lights included. */
-  visible: Group;
+  /** Everything of the architecture the viewer sees. */
+  visible: Object3D;
   /** The collision mesh as nine numbers per triangle: the x, y, z of three corners. */
   collision: Float32Array;
+  /** The sky as the viewer sees it beyond the architecture. */
+  skyPicture: Texture;
+  /** The sky as the light that falls on the architecture and reflects in it. */
+  skyLight: Texture;
 }
 
 /** Corner positions of every triangle under an object, in world space. */
@@ -50,54 +56,49 @@ function trianglesOf(root: Object3D): Float32Array {
   return new Float32Array(corners);
 }
 
-/**
- * Swap a loaded material for the cheapest one that still looks right on an
- * old phone: metal keeps a soft reflection, everything else is plainly lit.
- */
-function simplify(material: Material, reflection: Texture): Material {
-  if (!(material instanceof MeshStandardMaterial)) return material;
+/** Adjust a loaded material for surfaces drawn in Rhino. */
+function prepare(material: Material, anisotropy: number) {
   // Rhino doesn't care which way a face points, so show both sides.
-  const shared = {
-    color: material.color,
-    map: material.map,
-    side: DoubleSide,
-    transparent: material.transparent,
-    opacity: material.opacity,
-    depthWrite: !material.transparent,
-  };
-  const simple =
-    material.metalness > 0.5
-      ? new MeshStandardMaterial({
-          ...shared,
-          metalness: 1,
-          roughness: Math.max(material.roughness, MIN_METAL_ROUGHNESS),
-          envMap: reflection,
-        })
-      : new MeshLambertMaterial(shared);
-  simple.name = material.name;
-  material.dispose();
-  return simple;
-}
-
-function lights(): Object3D[] {
-  const sun = new DirectionalLight(SKY_LIGHT, 2);
-  sun.position.set(-3, 6, 4);
-  return [new HemisphereLight(SKY_LIGHT, GROUND_LIGHT, 2.2), sun];
+  material.side = DoubleSide;
+  // See-through surfaces must not hide what is drawn behind them.
+  material.depthWrite = !material.transparent;
+  if (material instanceof MeshStandardMaterial && material.map) {
+    material.map.anisotropy = anisotropy;
+  }
 }
 
 /**
- * Download an environment and split it into what the viewer sees and its
- * collision mesh. `onProgress` gets the fraction downloaded, or undefined
- * when the server doesn't say how big the file is.
+ * Download an environment and its sky, and split the environment into what
+ * the viewer sees and its collision mesh. `onProgress` gets the fraction
+ * downloaded, or undefined while the server hasn't said how big the files are.
  */
 export async function loadEnvironment(
-  url: string,
+  files: EnvironmentFiles,
   renderer: WebGLRenderer,
   onProgress: (fraction: number | undefined) => void,
 ): Promise<Environment> {
-  const gltf = await new GLTFLoader().loadAsync(url, (event) =>
-    onProgress(event.lengthComputable ? event.loaded / event.total : undefined),
-  );
+  // The sky picture loads as an image, which reports no progress, so the bar
+  // follows the other two files.
+  const downloads = [
+    { loaded: 0, total: 0 },
+    { loaded: 0, total: 0 },
+  ];
+  const track = (download: { loaded: number; total: number }) => (event: ProgressEvent) => {
+    download.loaded = event.loaded;
+    download.total = event.lengthComputable ? event.total : 0;
+    const known = downloads.every(({ total }) => total > 0);
+    onProgress(
+      known
+        ? downloads.reduce((sum, { loaded }) => sum + loaded, 0) /
+            downloads.reduce((sum, { total }) => sum + total, 0)
+        : undefined,
+    );
+  };
+  const [gltf, light, skyPicture] = await Promise.all([
+    new GLTFLoader().loadAsync(files.model, track(downloads[0])),
+    new HDRLoader().loadAsync(files.skyLight, track(downloads[1])),
+    new TextureLoader().loadAsync(files.skyPicture),
+  ]);
 
   // The loader rewrites names; the one written in Rhino is kept in userData.
   let collisionLayer: Object3D | undefined;
@@ -110,24 +111,19 @@ export async function loadEnvironment(
   const collision = trianglesOf(collisionLayer);
   collisionLayer.removeFromParent();
 
-  const generator = new PMREMGenerator(renderer);
-  const reflection = generator.fromScene(new RoomEnvironment()).texture;
-  generator.dispose();
-
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-  const simplified = new Map<Material, Material>();
   gltf.scene.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    const original = object.material as Material;
-    if (!simplified.has(original)) {
-      simplified.set(original, simplify(original, reflection));
-    }
-    object.material = simplified.get(original);
-    const map = (object.material as MeshLambertMaterial).map;
-    if (map) map.anisotropy = anisotropy;
+    if (object instanceof Mesh) prepare(object.material, anisotropy);
   });
 
-  const visible = new Group();
-  visible.add(gltf.scene, ...lights());
-  return { visible, collision };
+  skyPicture.colorSpace = SRGBColorSpace;
+  skyPicture.mapping = EquirectangularReflectionMapping;
+  // Blurred copies of the sky at every roughness, so lighting costs one lookup.
+  light.mapping = EquirectangularReflectionMapping;
+  const generator = new PMREMGenerator(renderer);
+  const skyLight = generator.fromEquirectangular(light).texture;
+  generator.dispose();
+  light.dispose();
+
+  return { visible: gltf.scene, collision, skyPicture, skyLight };
 }

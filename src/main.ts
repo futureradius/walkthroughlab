@@ -1,4 +1,10 @@
-import { Color, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import {
+  Color,
+  NeutralToneMapping,
+  PerspectiveCamera,
+  Scene,
+  WebGLRenderer,
+} from "three";
 import { collisionMesh } from "./collision";
 import { Controls } from "./controls";
 import { loadEnvironment } from "./environment";
@@ -23,11 +29,16 @@ const EYE_CATCH_UP = 12;
 /** Farthest distance drawn, in metres. */
 const VIEW_DISTANCE = 300;
 const ROOM_BACKDROP = 0xffffff;
-const SKY = 0xdde8f0;
+/** Shown behind the loading bar until the sky arrives. */
+const LOADING_BACKDROP = 0xdde8f0;
 
 /** The environment the link opens, and where the viewer starts in it. */
 const TEST_ENVIRONMENT = {
-  url: `${import.meta.env.BASE_URL}models/test-environment.glb`,
+  files: {
+    model: `${import.meta.env.BASE_URL}models/test-environment.glb`,
+    skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
+    skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
+  },
   // At the foot of the stairs, looking up them.
   start: { x: -13.4, z: 13, heading: 0 },
 };
@@ -75,7 +86,9 @@ function enterWhiteRoom(): Place {
 }
 
 async function enterTestEnvironment(): Promise<Place> {
-  scene.background = new Color(SKY);
+  scene.background = new Color(LOADING_BACKDROP);
+  // Must match the tone mapping baked into sky pictures by `npm run optimize`.
+  renderer.toneMapping = NeutralToneMapping;
   const loading = document.body.appendChild(
     Object.assign(document.createElement("div"), { className: "loading" }),
   );
@@ -84,7 +97,7 @@ async function enterTestEnvironment(): Promise<Place> {
   );
   try {
     const environment = await loadEnvironment(
-      TEST_ENVIRONMENT.url,
+      TEST_ENVIRONMENT.files,
       renderer,
       (fraction) => {
         loading.classList.toggle("loading--unknown", fraction === undefined);
@@ -92,6 +105,8 @@ async function enterTestEnvironment(): Promise<Place> {
       },
     );
     scene.add(environment.visible);
+    scene.background = environment.skyPicture;
+    scene.environment = environment.skyLight;
     const { terrain, floorAt } = collisionMesh(environment.collision);
     const { x, z, heading } = TEST_ENVIRONMENT.start;
     const floor = floorAt(x, z, 0);
