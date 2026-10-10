@@ -36,8 +36,10 @@ export interface Limits {
 
 /** Metres per second at full stick. */
 export const WALK_SPEED = 1.4;
-/** Radians per second at full stick: a quarter turn. */
-export const TURN_SPEED = Math.PI / 2;
+/** Radians per second at full stick while standing still: a third of a turn. */
+export const STANDING_TURN_SPEED = (Math.PI * 2) / 3;
+/** Radians per second at full stick while walking at full speed: a quarter turn. */
+export const WALKING_TURN_SPEED = Math.PI / 2;
 
 const clamp = (value: number, limit: number) =>
   Math.max(-limit, Math.min(limit, value));
@@ -53,7 +55,9 @@ export function withinLimits(limits: Limits): Terrain {
 
 /**
  * Move the viewpoint for one frame. Sideways stick turns on the spot and
- * never sidesteps; forward and back walk along the current heading.
+ * never sidesteps; forward and back walk along the current heading. Turning
+ * is quickest standing still and eases off the faster the viewer walks, so
+ * curves stay gentle.
  */
 export function advance(
   from: Viewpoint,
@@ -61,7 +65,10 @@ export function advance(
   seconds: number,
   terrain: Terrain,
 ): Viewpoint {
-  const heading = from.heading + stick.x * TURN_SPEED * seconds;
+  const turnSpeed =
+    STANDING_TURN_SPEED +
+    (WALKING_TURN_SPEED - STANDING_TURN_SPEED) * Math.abs(stick.y);
+  const heading = from.heading + stick.x * turnSpeed * seconds;
   const distance = stick.y * WALK_SPEED * seconds;
   const footing = terrain(
     from,
