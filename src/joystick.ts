@@ -1,4 +1,4 @@
-import type { Stick } from "./motion";
+import type { Stick } from "./controls";
 
 /** Deflection below this fraction of full travel counts as centred. */
 const DEAD_ZONE = 0.12;

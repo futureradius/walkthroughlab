@@ -8,6 +8,13 @@ Walk through an architectural space in the browser: https://futureradius.github.
 
 `models-source/` is not committed; `public/models/` is.
 
+## Moving through it
+
+- The joystick walks forward and back and turns on the spot.
+- Dragging anywhere else is free look: the scene follows the finger or mouse. While a drag is held, pushing the joystick sideways sidesteps instead of turning.
+- On a keyboard, W/S or the up/down arrows walk, A/D sidestep, and the left/right arrows turn.
+- A view tilted up or down returns to level once the viewer sets off, unless a drag is being held.
+
 ## Running it
 
 - `npm run dev` serves the walkthrough on your network, for testing on a phone.

@@ -1,7 +1,10 @@
 import { Color, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { collisionMesh } from "./collision";
+import { Controls } from "./controls";
 import { loadEnvironment } from "./environment";
+import { FreeLook } from "./freelook";
 import { Joystick } from "./joystick";
+import { Keyboard } from "./keyboard";
 import { advance, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { buildRoom, ROOM } from "./room";
 
@@ -67,7 +70,7 @@ function enterWhiteRoom(): Place {
       halfWidth: ROOM.width / 2 - WALL_MARGIN,
       halfDepth: ROOM.depth / 2 - WALL_MARGIN,
     }),
-    start: { x: 0, z: 0, floor: 0, heading: 0 },
+    start: { x: 0, z: 0, floor: 0, heading: 0, pitch: 0 },
   };
 }
 
@@ -96,7 +99,7 @@ async function enterTestEnvironment(): Promise<Place> {
       throw new Error("The starting spot is not on the collision mesh.");
     }
     loading.remove();
-    return { terrain, start: { x, z, floor, heading } };
+    return { terrain, start: { x, z, floor, heading, pitch: 0 } };
   } catch (error) {
     loading.className = "loading loading--failed";
     loading.textContent = "This walkthrough could not be loaded.";
@@ -115,6 +118,9 @@ const fps = params.has("fps")
 const place = params.has("room") ? enterWhiteRoom() : await enterTestEnvironment();
 
 const joystick = new Joystick(document.body);
+const keyboard = new Keyboard();
+const freeLook = new FreeLook(canvas);
+const controls = new Controls();
 let viewpoint = place.start;
 let eyes = viewpoint.floor + EYE_HEIGHT;
 let frames = 0;
@@ -126,11 +132,19 @@ renderer.setAnimationLoop((now) => {
   const seconds = Math.min((now - previous) / 1000, MAX_STEP_SECONDS);
   previous = now;
 
-  viewpoint = advance(viewpoint, joystick.stick, seconds, place.terrain);
+  // One pixel covers this angle, so a dragged spot stays under the finger.
+  const radiansPerPixel = (camera.fov * Math.PI) / 180 / window.innerHeight;
+  const intent = controls.read(
+    joystick.stick,
+    keyboard.keys,
+    freeLook.take(radiansPerPixel),
+  );
+  viewpoint = advance(viewpoint, intent, seconds, place.terrain);
   eyes +=
     (viewpoint.floor + EYE_HEIGHT - eyes) * Math.min(1, seconds * EYE_CATCH_UP);
   camera.position.set(viewpoint.x, eyes, viewpoint.z);
   camera.rotation.y = -viewpoint.heading;
+  camera.rotation.x = viewpoint.pitch;
   renderer.render(scene, camera);
 
   if (fps) {

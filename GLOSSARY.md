@@ -29,9 +29,9 @@ The position and direction of the viewer's eyes within the space.
 _Avoid_: Camera, player, character
 
 **Joystick**:
-The single on-screen control that moves the viewpoint through a walkthrough: pushing it forward or back walks, pushing it sideways turns on the spot, and it never sidesteps.
+The single on-screen control that moves the viewpoint through a walkthrough: pushing it forward or back walks, and pushing it sideways turns on the spot. During free look, pushing it sideways sidesteps instead.
 _Avoid_: Gamepad, controller, D-pad, thumbstick
 
 **Free look**:
-Turning the view, including up and down, by dragging a second finger anywhere outside the joystick. Not part of the first prototype.
+Turning the view, including up and down, by dragging anywhere outside the joystick.
 _Avoid_: Camera control, orbit, mouse look

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BODY, collisionMesh } from "./collision";
-import { advance, WALK_SPEED, type Viewpoint } from "./motion";
+import { advance, IDLE, WALK_SPEED, type Viewpoint } from "./motion";
 
 type Corner = [x: number, y: number, z: number];
 const quad = (a: Corner, b: Corner, c: Corner, d: Corner) => [
@@ -14,8 +14,8 @@ const floor = (x0: number, z0: number, x1: number, z1: number, y: number) =>
 const wall = (x0: number, z0: number, x1: number, z1: number, y0: number, y1: number) =>
   quad([x0, y0, z0], [x1, y0, z1], [x1, y1, z1], [x0, y1, z0]);
 
-const start: Viewpoint = { x: 0, z: 0, floor: 0, heading: 0 };
-const forward = { x: 0, y: 1 };
+const start: Viewpoint = { x: 0, z: 0, floor: 0, heading: 0, pitch: 0 };
+const forward = { ...IDLE, walk: 1 };
 const FRAME = 0.05;
 /** Walk forward for a while in small frames, as the render loop does. */
 function walk(from: Viewpoint, terrain: ReturnType<typeof collisionMesh>["terrain"], seconds: number) {
