@@ -11,6 +11,8 @@ const WALL_MARGIN = 0.4;
 /** Vertical field of view in degrees: wide in portrait to offset the narrow screen. */
 const PORTRAIT_FOV = 90;
 const LANDSCAPE_FOV = 60;
+const NARROWEST_FOV = 30;
+const WIDEST_FOV = 120;
 /** Old phones report pixel ratios of 3 or more; rendering that many pixels is the main cost. */
 const MAX_PIXEL_RATIO = 2;
 /** Longest step simulated in one frame, so a stalled tab doesn't teleport the viewer. */
@@ -36,6 +38,11 @@ interface Place {
 }
 
 const params = new URLSearchParams(location.search);
+// Add ?fov=75 to the address to try another portrait field of view.
+const portraitFov = Math.max(
+  NARROWEST_FOV,
+  Math.min(WIDEST_FOV, Number(params.get("fov")) || PORTRAIT_FOV),
+);
 const canvas = document.querySelector<HTMLCanvasElement>("#walkthrough")!;
 const renderer = new WebGLRenderer({
   canvas,
@@ -44,7 +51,7 @@ const renderer = new WebGLRenderer({
 });
 
 const scene = new Scene();
-const camera = new PerspectiveCamera(PORTRAIT_FOV, 1, 0.1, VIEW_DISTANCE);
+const camera = new PerspectiveCamera(portraitFov, 1, 0.1, VIEW_DISTANCE);
 camera.rotation.order = "YXZ";
 
 function resize() {
@@ -53,7 +60,7 @@ function resize() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
-  camera.fov = camera.aspect < 1 ? PORTRAIT_FOV : LANDSCAPE_FOV;
+  camera.fov = camera.aspect < 1 ? portraitFov : LANDSCAPE_FOV;
   camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
