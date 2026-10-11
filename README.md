@@ -22,7 +22,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 
 - `npm run dev` serves the walkthrough on your network, for testing on a phone.
 - Add `?room` to the address for the gridded white room, and `?fps` to show the frame rate.
-- Add `?ao` for ambient occlusion, which is still being tried out, and `?ao=alone` to see only the darkening it adds.
+- Add `?ao` for ambient occlusion, which is still being tried out, and `?ao=alone` to see only the darkening it adds. `?ao=tune` adds a panel for changing its settings while walking; combine it with `?fps` to see what each one costs.
 
 ## Information and credits
 

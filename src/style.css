@@ -189,3 +189,41 @@ body {
 .about__content a {
   color: #0b57d0;
 }
+
+.tuning {
+  position: fixed;
+  top: calc(36px + env(safe-area-inset-top, 0px));
+  left: 8px;
+  width: 200px;
+  padding: 4px 8px;
+  font: 12px/1.4 monospace;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.tuning summary {
+  cursor: pointer;
+}
+
+.tuning__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.tuning__row--slider {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.tuning__row input[type="checkbox"] {
+  margin: 0;
+}
+
+.tuning__row input[type="range"] {
+  width: 100%;
+  margin: 0;
+  /* Tall enough for a thumb on a phone. */
+  height: 24px;
+}

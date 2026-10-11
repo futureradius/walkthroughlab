@@ -15,10 +15,28 @@ import {
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
 
-/** How far a surface looks for neighbours that shade it, in metres. */
-const REACH = 0.4;
-/** How dark full ambient occlusion gets: 0 leaves the picture alone, 1 is black. */
-const STRENGTH = 0.7;
+/** What can be changed about ambient occlusion while it runs; see tuning.ts. */
+export interface OcclusionSettings {
+  /** Off draws the scene as if ambient occlusion had never been asked for. */
+  on: boolean;
+  /** Show the darkening alone, on white, to judge it while tuning. */
+  alone: boolean;
+  /** How far a surface looks for neighbours that shade it, in metres. */
+  reach: number;
+  /** How dark full ambient occlusion gets: 0 leaves the picture alone, 1 is black. */
+  strength: number;
+  /** How many spots around each pixel are checked for neighbours. */
+  samples: number;
+  /** The share of the canvas's width and height the darkening is worked out at. */
+  detail: number;
+  /** Whether the speckle left by so few samples is smoothed away. */
+  smooth: boolean;
+}
+
+/** The pass keeps the step that draws each of its stages to itself. */
+interface PassInternals {
+  _renderPass(renderer: WebGLRenderer, material: Material, ...rest: unknown[]): void;
+}
 
 function seeThrough(object: Object3D): object is Mesh {
   if (!(object instanceof Mesh)) return false;
@@ -31,8 +49,15 @@ function seeThrough(object: Object3D): object is Mesh {
  * drawn without it, then darkens the picture where surfaces come close.
  */
 export class AmbientOcclusion {
-  /** Show the darkening alone, on white, to judge it while tuning. */
-  alone = false;
+  readonly settings: OcclusionSettings = {
+    on: true,
+    alone: false,
+    reach: 0.4,
+    strength: 0.7,
+    samples: 16,
+    detail: 1,
+    smooth: true,
+  };
 
   private readonly renderer: WebGLRenderer;
   private readonly pass: GTAOPass;
@@ -54,14 +79,20 @@ export class AmbientOcclusion {
     this.pass = new GTAOPass(scene, camera, this.size.x, this.size.y);
     // Work the darkening out, but leave drawing it to `darken`.
     this.pass.output = GTAOPass.OUTPUT.Off;
-    this.pass.updateGtaoMaterial({ radius: REACH });
+    // The pass always smooths, so leaving that out means stepping over it.
+    const internals = this.pass as unknown as PassInternals;
+    const renderPass = internals._renderPass.bind(this.pass);
+    internals._renderPass = (renderer, material, ...rest) => {
+      if (material === this.pass.pdMaterial && !this.settings.smooth) return;
+      renderPass(renderer, material, ...rest);
+    };
     // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
     this.pass.normalMaterial.side = DoubleSide;
     this.darken = new FullScreenQuad(
       new ShaderMaterial({
         uniforms: {
           occlusion: { value: this.pass.gtaoMap },
-          strength: { value: STRENGTH },
+          strength: { value: this.settings.strength },
         },
         vertexShader: /* glsl */ `
           varying vec2 vUv;
@@ -93,11 +124,21 @@ export class AmbientOcclusion {
 
   /** Draw the scene to the canvas with ambient occlusion over it. */
   render(scene: Scene, camera: PerspectiveCamera) {
-    const { renderer, pass } = this;
-    renderer.getDrawingBufferSize(this.size);
-    if (pass.width !== this.size.x || pass.height !== this.size.y) {
-      pass.setSize(this.size.x, this.size.y);
+    const { renderer, pass, settings } = this;
+    if (!settings.on) {
+      renderer.render(scene, camera);
+      return;
     }
+    renderer.getDrawingBufferSize(this.size);
+    const width = Math.max(1, Math.round(this.size.x * settings.detail));
+    const height = Math.max(1, Math.round(this.size.y * settings.detail));
+    if (pass.width !== width || pass.height !== height) pass.setSize(width, height);
+    pass.updateGtaoMaterial({ radius: settings.reach, samples: settings.samples });
+    const { uniforms } = this.darken.material as ShaderMaterial;
+    uniforms.occlusion.value = (
+      settings.smooth ? pass.pdRenderTarget : pass.gtaoRenderTarget
+    ).texture;
+    uniforms.strength.value = settings.strength;
 
     // Glass neither shades what is near it nor hides what is behind it, and
     // the sky is too far away to shade anything.
@@ -118,7 +159,7 @@ export class AmbientOcclusion {
     // Everything bound for the canvas is drawn in one go, after the work off
     // screen, so a phone never has to set a half-drawn canvas aside.
     renderer.setRenderTarget(null);
-    if (this.alone) {
+    if (settings.alone) {
       renderer.setClearColor(0xffffff);
       renderer.clear();
     } else {

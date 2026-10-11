@@ -15,6 +15,7 @@ import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
 import { advance, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { buildRoom, ROOM } from "./room";
+import { addOcclusionTuning } from "./tuning";
 
 const EYE_HEIGHT = 1.6;
 /** How close the viewpoint may get to a wall of the white room, in metres. */
@@ -132,12 +133,16 @@ const fps = params.has("fps")
     )
   : null;
 
-// Add ?ao to the address for ambient occlusion, and ?ao=alone to see only it.
+// Add ?ao to the address for ambient occlusion, ?ao=alone to see only it, and
+// ?ao=tune for a panel that changes its settings while walking.
 const occlusion =
   params.has("ao") && AmbientOcclusion.supported(renderer)
     ? new AmbientOcclusion(renderer, scene, camera)
     : null;
-if (occlusion) occlusion.alone = params.get("ao") === "alone";
+if (occlusion) occlusion.settings.alone = params.get("ao") === "alone";
+if (occlusion && params.get("ao") === "tune") {
+  addOcclusionTuning(document.body, occlusion.settings);
+}
 
 addAbout(document.body);
 
