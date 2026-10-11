@@ -9,6 +9,7 @@ import { addAbout } from "./about";
 import { collisionMesh } from "./collision";
 import { Controls } from "./controls";
 import { loadEnvironment } from "./environment";
+import { AmbientOcclusion } from "./occlusion";
 import { FreeLook } from "./freelook";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
@@ -131,6 +132,13 @@ const fps = params.has("fps")
     )
   : null;
 
+// Add ?ao to the address for ambient occlusion, and ?ao=alone to see only it.
+const occlusion =
+  params.has("ao") && AmbientOcclusion.supported(renderer)
+    ? new AmbientOcclusion(renderer, scene, camera)
+    : null;
+if (occlusion) occlusion.alone = params.get("ao") === "alone";
+
 addAbout(document.body);
 
 // Add ?room to the address to walk the gridded white room instead.
@@ -164,7 +172,8 @@ renderer.setAnimationLoop((now) => {
   camera.position.set(viewpoint.x, eyes, viewpoint.z);
   camera.rotation.y = -viewpoint.heading;
   camera.rotation.x = viewpoint.pitch;
-  renderer.render(scene, camera);
+  if (occlusion) occlusion.render(scene, camera);
+  else renderer.render(scene, camera);
 
   if (fps) {
     frames++;

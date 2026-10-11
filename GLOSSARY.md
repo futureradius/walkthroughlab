@@ -20,6 +20,10 @@ _Avoid_: HDRI, skybox, environment map, backdrop
 The light and shadow computed once in advance for an environment under its sky and stored with it, so a viewer's device only has to display it.
 _Avoid_: Lightmap, global illumination, GI
 
+**Ambient occlusion**:
+The soft darkening a viewer's device adds live where surfaces meet or come close, finer than baked light can hold.
+_Avoid_: AO, SSAO, contact shadow
+
 **Collision mesh**:
 The simplified, invisible geometry an author builds alongside an environment to decide where the viewpoint can go: its floors and slopes carry the viewpoint and its walls stop it.
 _Avoid_: Collider, navmesh, hitbox, physics mesh
