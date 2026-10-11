@@ -39,6 +39,8 @@ export interface Environment {
   skyPicture: Texture;
   /** The sky as the light that falls on the architecture and reflects in it. */
   skyLight: Texture;
+  /** The baked light picture, if the environment has one. */
+  bakedLight?: Texture;
 }
 
 /** Corner positions of every triangle under an object, in world space. */
@@ -168,5 +170,5 @@ export async function loadEnvironment(
   generator.dispose();
   light.dispose();
 
-  return { visible: gltf.scene, collision, skyPicture, skyLight };
+  return { visible: gltf.scene, collision, skyPicture, skyLight, bakedLight };
 }

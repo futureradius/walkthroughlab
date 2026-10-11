@@ -111,6 +111,7 @@ async function enterTestEnvironment(): Promise<Place> {
     scene.add(environment.visible);
     scene.background = environment.skyPicture;
     scene.environment = environment.skyLight;
+    if (occlusion) occlusion.bakedLight = environment.bakedLight ?? null;
     const { terrain, floorAt } = collisionMesh(environment.collision);
     const { x, z, heading } = TEST_ENVIRONMENT.start;
     const floor = floorAt(x, z, 0);

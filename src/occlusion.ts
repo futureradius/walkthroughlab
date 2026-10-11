@@ -9,7 +9,9 @@ import {
   type Material,
   type PerspectiveCamera,
   type Scene,
+  type Texture,
   type WebGLRenderer,
+  type WebGLRenderTarget,
 } from "three";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
@@ -22,8 +24,12 @@ export interface OcclusionSettings {
   alone: boolean;
   /** How far a surface looks for neighbours that shade it, in metres. */
   reach: number;
-  /** How dark full ambient occlusion gets: 0 leaves the picture alone, 1 is black. */
+  /** How hard the darkening is pressed: 0 leaves the picture alone, 1 is as worked out, more is darker. */
   strength: number;
+  /** How much of the darkening sunlit surfaces are let off: 0 is none, 1 is all. */
+  spare: number;
+  /** How bright baked light must be for a surface to count as sunlit, from 0 to 1 of what the picture holds. */
+  sunlit: number;
   /** How many spots around each pixel are checked for neighbours. */
   samples: number;
   /** The share of the canvas's width and height the darkening is worked out at. */
@@ -35,6 +41,7 @@ export interface OcclusionSettings {
 /** The pass keeps the step that draws each of its stages to itself. */
 interface PassInternals {
   _renderPass(renderer: WebGLRenderer, material: Material, ...rest: unknown[]): void;
+  normalRenderTarget: WebGLRenderTarget;
 }
 
 function seeThrough(mesh: Mesh): boolean {
@@ -55,12 +62,18 @@ export class AmbientOcclusion {
     on: true,
     alone: false,
     reach: 0.2,
-    strength: 1,
+    strength: 2,
+    spare: 1,
+    sunlit: 0.2,
     samples: 8,
     detail: 0.5,
     smooth: true,
   };
 
+  /** The environment's baked light, which tells sunlit surfaces from shaded ones. */
+  bakedLight: Texture | null = null;
+
+  private readonly light = { value: null as Texture | null };
   private readonly renderer: WebGLRenderer;
   private readonly pass: GTAOPass;
   private readonly darken: FullScreenQuad;
@@ -91,11 +104,43 @@ export class AmbientOcclusion {
     };
     // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
     this.pass.normalMaterial.side = DoubleSide;
+    // The picture of which way surfaces face has a spare channel, which
+    // carries how brightly the baked light falls on each of them.
+    this.pass.normalMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.bakedLight = this.light;
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "void main() {",
+          /* glsl */ `
+          attribute vec2 uv1;
+          varying vec2 vBakedUv;
+
+          void main() {
+            vBakedUv = uv1;`,
+        );
+      shader.fragmentShader =
+        shader.fragmentShader.replace(
+          "void main() {",
+          /* glsl */ `
+          uniform sampler2D bakedLight;
+          varying vec2 vBakedUv;
+
+          void facing() {`,
+        ) +
+        /* glsl */ `
+          void main() {
+            facing();
+            gl_FragColor.a = dot(texture2D(bakedLight, vBakedUv).rgb, vec3(0.2126, 0.7152, 0.0722));
+          }`;
+    };
     this.darken = new FullScreenQuad(
       new ShaderMaterial({
         uniforms: {
           occlusion: { value: this.pass.gtaoMap },
           strength: { value: this.settings.strength },
+          facing: { value: internals.normalRenderTarget.texture },
+          spare: { value: this.settings.spare },
+          sunlit: { value: this.settings.sunlit },
         },
         vertexShader: /* glsl */ `
           varying vec2 vUv;
@@ -107,10 +152,17 @@ export class AmbientOcclusion {
         fragmentShader: /* glsl */ `
           uniform sampler2D occlusion;
           uniform float strength;
+          uniform sampler2D facing;
+          uniform float spare;
+          uniform float sunlit;
           varying vec2 vUv;
 
           void main() {
-            float light = mix(1.0, texture2D(occlusion, vUv).r, strength);
+            float light = pow(texture2D(occlusion, vUv).r, strength);
+            // Ambient occlusion only dims light from all around, and a
+            // surface in the sun gets nearly all its light from one place.
+            float inSun = smoothstep(sunlit - 0.05, sunlit + 0.05, texture2D(facing, vUv).a);
+            light = mix(light, 1.0, spare * inSun);
             // The canvas holds colours encoded for display, where taking away
             // a share of the light takes away a smaller share of the number.
             gl_FragColor = vec4(vec3(pow(light, 1.0 / 2.2)), 1.0);
@@ -148,6 +200,9 @@ export class AmbientOcclusion {
       settings.smooth ? pass.pdRenderTarget : pass.gtaoRenderTarget
     ).texture;
     uniforms.strength.value = settings.strength;
+    uniforms.spare.value = settings.spare;
+    uniforms.sunlit.value = settings.sunlit;
+    this.light.value = this.bakedLight;
 
     // Glass neither shades what is near it nor hides what is behind it, and
     // the sky is too far away to shade anything.

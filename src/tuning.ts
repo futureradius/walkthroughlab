@@ -57,10 +57,24 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
     ),
     slider(
       "Strength",
-      { min: 0, max: 1, step: 0.05 },
+      { min: 0, max: 4, step: 0.1 },
       settings.strength,
-      (value) => value.toFixed(2),
+      (value) => value.toFixed(1),
       (value) => (settings.strength = value),
+    ),
+    slider(
+      "Spare sunlit",
+      { min: 0, max: 1, step: 0.05 },
+      settings.spare,
+      (value) => `${Math.round(value * 100)} %`,
+      (value) => (settings.spare = value),
+    ),
+    slider(
+      "Sunlit above",
+      { min: 0.05, max: 0.4, step: 0.01 },
+      settings.sunlit,
+      (value) => value.toFixed(2),
+      (value) => (settings.sunlit = value),
     ),
     slider(
       "Samples",
