@@ -7,7 +7,6 @@ import {
   Vector2,
   ZeroFactor,
   type Material,
-  type Object3D,
   type PerspectiveCamera,
   type Scene,
   type WebGLRenderer,
@@ -38,10 +37,13 @@ interface PassInternals {
   _renderPass(renderer: WebGLRenderer, material: Material, ...rest: unknown[]): void;
 }
 
-function seeThrough(object: Object3D): object is Mesh {
-  if (!(object instanceof Mesh)) return false;
-  const materials: Material[] = [object.material].flat();
+function seeThrough(mesh: Mesh): boolean {
+  const materials: Material[] = [mesh.material].flat();
   return materials.some((material) => material.transparent);
+}
+
+function show(meshes: Mesh[], visible: boolean) {
+  for (const mesh of meshes) mesh.visible = visible;
 }
 
 /**
@@ -52,10 +54,10 @@ export class AmbientOcclusion {
   readonly settings: OcclusionSettings = {
     on: true,
     alone: false,
-    reach: 0.4,
-    strength: 0.7,
-    samples: 16,
-    detail: 1,
+    reach: 0.2,
+    strength: 1,
+    samples: 8,
+    detail: 0.5,
     smooth: true,
   };
 
@@ -63,7 +65,8 @@ export class AmbientOcclusion {
   private readonly pass: GTAOPass;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
-  private readonly hidden: Object3D[] = [];
+  private readonly glass: Mesh[] = [];
+  private readonly solid: Mesh[] = [];
 
   /** Whether this device can work out ambient occlusion at all. */
   static supported(renderer: WebGLRenderer): boolean {
@@ -133,7 +136,13 @@ export class AmbientOcclusion {
     const width = Math.max(1, Math.round(this.size.x * settings.detail));
     const height = Math.max(1, Math.round(this.size.y * settings.detail));
     if (pass.width !== width || pass.height !== height) pass.setSize(width, height);
-    pass.updateGtaoMaterial({ radius: settings.reach, samples: settings.samples });
+    pass.updateGtaoMaterial({
+      radius: settings.reach,
+      // Nothing farther in front than the reach may shade a surface, or a
+      // column draws an outline on whatever stands a little way behind it.
+      thickness: settings.reach,
+      samples: settings.samples,
+    });
     const { uniforms } = this.darken.material as ShaderMaterial;
     uniforms.occlusion.value = (
       settings.smooth ? pass.pdRenderTarget : pass.gtaoRenderTarget
@@ -143,18 +152,15 @@ export class AmbientOcclusion {
     // Glass neither shades what is near it nor hides what is behind it, and
     // the sky is too far away to shade anything.
     scene.traverse((object) => {
-      if (object.visible && seeThrough(object)) {
-        object.visible = false;
-        this.hidden.push(object);
-      }
+      if (!object.visible || !(object instanceof Mesh)) return;
+      (seeThrough(object) ? this.glass : this.solid).push(object);
     });
+    show(this.glass, false);
     const background = scene.background;
     scene.background = null;
     // The pass reads neither buffer when its output is off.
     pass.render(renderer, null!, null!, 0, false);
     scene.background = background;
-    for (const object of this.hidden) object.visible = true;
-    this.hidden.length = 0;
 
     // Everything bound for the canvas is drawn in one go, after the work off
     // screen, so a phone never has to set a half-drawn canvas aside.
@@ -168,6 +174,18 @@ export class AmbientOcclusion {
     const autoClear = renderer.autoClear;
     renderer.autoClear = false;
     this.darken.render(renderer);
+    show(this.glass, true);
+    if (!settings.alone) {
+      // Glass goes on last, so the darkening behind it is seen through it
+      // like everything else there rather than lying on top of it.
+      show(this.solid, false);
+      scene.background = null;
+      renderer.render(scene, camera);
+      scene.background = background;
+      show(this.solid, true);
+    }
     renderer.autoClear = autoClear;
+    this.glass.length = 0;
+    this.solid.length = 0;
   }
 }
