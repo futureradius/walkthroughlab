@@ -13,17 +13,18 @@ export interface CoastingSettings {
 }
 
 /**
- * The usual brakes. An ordinary throw carries about a third of a turn and
- * the hardest about a whole one, at rest in two to three seconds. With reduced
- * motion the view settles within a few degrees and a quarter of a second.
+ * The usual brakes, tuned by hand on a phone. An ordinary throw carries
+ * about a fifth of a turn and the hardest over half of one, at rest in about
+ * a second and a half. With reduced motion the view settles within a few
+ * degrees and a third of a second.
  */
 export const COASTING: CoastingSettings = {
   on: true,
-  glide: 2,
+  glide: 3.5,
   grip: 0.1,
   reduced: false,
-  reducedGlide: 16,
-  reducedGrip: 4,
+  reducedGlide: 14,
+  reducedGrip: 3.5,
 };
 
 /** How long before letting go a drag still counts towards the throw, in milliseconds. */
