@@ -52,6 +52,24 @@ _Avoid_: Camera control, orbit, mouse look
 The view carrying on turning after a free-look drag is let go, slowing to a stop unless the viewer catches it by touching the view.
 _Avoid_: Inertia, momentum, fling, kinetic scrolling
 
+### Movement
+
+**Moving part**:
+A piece of the architecture that moves between set positions, such as a door, a window, a shutter, or an elevator and its doors.
+_Avoid_: Dynamic object, animated object, prop, actor
+
+**Window**:
+A moving part that opens and closes an opening in a wall. The see-through surface in it is glass.
+_Avoid_: Using "window" for the material
+
+**Sway**:
+The movement in place of soft things in the wind, such as grass, bushes, trees, curtains and flags, which never leave their spot.
+_Avoid_: Wind animation, vertex animation, foliage motion
+
+**Traffic**:
+Things that travel through an environment along fixed routes to make it busy, such as birds, metro wagons and cars. Viewers never steer them.
+_Avoid_: NPCs, vehicles, agents, crowd
+
 ### Materials
 
 **Glass**:

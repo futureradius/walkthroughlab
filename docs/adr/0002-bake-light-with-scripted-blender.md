@@ -4,4 +4,4 @@ Shadows and bounced light make an environment readable, but computing them live 
 
 ## Consequences
 
-Blender becomes a second 3D tool the project depends on, though authors never open it: it only has to be installed. Baked light is fixed for one sky at one rotation, so changing either means baking again, which takes minutes. Nothing in an environment can move, since its shadow would stay behind. An environment without baked light still works; its sky lights it live, without shadows.
+Blender becomes a second 3D tool the project depends on, though authors never open it: it only has to be installed. Baked light is fixed for one sky at one rotation, so changing either means baking again, which takes minutes. A thing that moves would leave its baked shadow behind; ADR 0003 says how moving things are handled. An environment without baked light still works; its sky lights it live, without shadows.
