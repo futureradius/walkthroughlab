@@ -134,14 +134,14 @@ const fps = params.has("fps")
     )
   : null;
 
-// Add ?ao to the address for ambient occlusion, ?ao=alone to see only it, and
-// ?ao=tune for a panel that changes its settings while walking.
+// Ambient occlusion is on wherever the device can work it out. Add ?ao to the
+// address for a panel that changes its settings while walking. The white room
+// stays as plain as it was unless the panel is asked for.
 const occlusion =
-  params.has("ao") && AmbientOcclusion.supported(renderer)
+  (params.has("ao") || !params.has("room")) && AmbientOcclusion.supported(renderer)
     ? new AmbientOcclusion(renderer, scene, camera)
     : null;
-if (occlusion) occlusion.settings.alone = params.get("ao") === "alone";
-if (occlusion && params.get("ao") === "tune") {
+if (occlusion && params.has("ao")) {
   addOcclusionTuning(document.body, occlusion.settings);
 }
 

@@ -18,7 +18,7 @@ import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
 
 /** What can be changed about ambient occlusion while it runs; see tuning.ts. */
 export interface OcclusionSettings {
-  /** Off draws the scene as if ambient occlusion had never been asked for. */
+  /** Off draws the scene as if there were no ambient occlusion. */
   on: boolean;
   /** Show the darkening alone, on white, to judge it while tuning. */
   alone: boolean;
