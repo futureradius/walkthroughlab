@@ -22,7 +22,7 @@ export interface OcclusionSettings {
   on: boolean;
   /** Show the darkening alone, on white, to judge it while tuning. */
   alone: boolean;
-  /** How the darkening is worked out: `gtao` is three.js's own way, `n8ao` is N8AO, on trial beside it. */
+  /** How the darkening is worked out: `n8ao` is N8AO, `gtao` is three.js's own way. */
   method: string;
   /** How far a surface looks for neighbours that shade it, in metres. */
   reach: number;
@@ -45,6 +45,12 @@ export interface OcclusionSettings {
    * altogether.
    */
   falloff: number;
+  /**
+   * With `n8ao` only, and a detail of half or less: whether the darkening is
+   * enlarged with an eye on where surfaces end, so it stays within their
+   * edges. The depths it goes by are drawn at twice the detail.
+   */
+  edges: boolean;
 }
 
 /** A way of working the darkening out. */
@@ -164,15 +170,16 @@ export class AmbientOcclusion {
   readonly settings: OcclusionSettings = {
     on: true,
     alone: false,
-    method: "gtao",
+    method: "n8ao",
     reach: 0.2,
-    strength: 2,
+    strength: 2.5,
     spare: 1,
     sunlit: 0.2,
-    samples: 8,
+    samples: 12,
     detail: 0.5,
     smooth: true,
-    falloff: 1,
+    falloff: 3,
+    edges: false,
   };
 
   /** The environment's baked light, which tells sunlit surfaces from shaded ones. */

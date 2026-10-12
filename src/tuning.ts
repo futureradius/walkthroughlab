@@ -112,6 +112,7 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
       (value) => value.toFixed(1),
       (value) => (settings.falloff = value),
     ),
+    tick("Edge-aware (n8ao)", settings.edges, (value) => (settings.edges = value)),
   );
   const copy = element("button", {
     className: "tuning__copy",

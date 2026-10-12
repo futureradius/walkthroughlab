@@ -12,6 +12,11 @@ declare module "n8ao" {
       distanceFalloff: number;
       denoiseSamples: number;
       denoiseIterations: number;
+      intensity: number;
+      renderMode: number;
+      colorMultiply: boolean;
+      gammaCorrection: boolean;
+      halfRes: boolean;
       autoRenderBeauty: boolean;
       transparencyAware: boolean;
     };

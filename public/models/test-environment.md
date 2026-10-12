@@ -15,21 +15,22 @@ walking. Its "Copy for the settings file" button copies this list with the
 panel's values, ready to paste over the one below.
 
 - on: yes
-- method: gtao
+- method: n8ao
 - reach: 0.2
-- strength: 2
+- strength: 2.5
 - spare: 1
 - sunlit: 0.2
-- samples: 8
+- samples: 12
 - detail: 0.5
 - smooth: yes
-- falloff: 1
+- falloff: 3
+- edges: no
 
 What they mean:
 
 - `on`: `no` leaves ambient occlusion out altogether.
-- `method`: how the darkening is worked out. `gtao` is the one three.js
-  brings; `n8ao` is N8AO, on trial beside it.
+- `method`: how the darkening is worked out. `n8ao` is N8AO; `gtao` is the
+  one three.js brings.
 - `reach`: how far a surface looks for neighbours that shade it, in metres.
 - `strength`: how hard the darkening is pressed. 0 is none, 1 is as worked
   out, more is darker.
@@ -44,3 +45,6 @@ What they mean:
 - `smooth`: whether the speckle that few samples leave is smoothed away.
 - `falloff`: with `n8ao` only. Smaller leaves less of a dark outline around
   whatever stands in front of a wall, and less darkening altogether.
+- `edges`: with `n8ao` only, and a `detail` of 0.5 or less. `yes` enlarges
+  the darkening with an eye on where surfaces end, so it stays within their
+  edges. It costs more: the depths it goes by are drawn at twice the detail.

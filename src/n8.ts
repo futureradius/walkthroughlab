@@ -12,10 +12,13 @@ import {
 import { N8AOPass } from "n8ao";
 import type { OcclusionSettings, OcclusionWorkings } from "./occlusion";
 
+/** The pass's way of showing the darkening alone instead of on the picture. */
+const DARKENING_ALONE = 1;
+
 /**
- * Works the darkening out with N8AO, on trial beside three.js's own way. Only
- * its sampling and smoothing are used: it would otherwise draw the whole
- * picture off screen itself, without the canvas's antialiasing.
+ * Works the darkening out with N8AO. Only its sampling, smoothing and
+ * enlarging are used: it would otherwise draw the whole picture off screen
+ * itself, without the canvas's antialiasing.
  */
 export class N8 implements OcclusionWorkings {
   private readonly scene: Scene;
@@ -23,6 +26,9 @@ export class N8 implements OcclusionWorkings {
   private readonly pass: N8AOPass;
   /** How far away each surface is, which is all the pass looks at. */
   private readonly depths: WebGLRenderTarget;
+  /** The darkening after the pass enlarged it, when it is asked to. */
+  private readonly enlarged = new WebGLRenderTarget(1, 1, { depthBuffer: false });
+  private enlarging = false;
   private readonly light = { value: null as Texture | null };
   /** Drawn in place of every surface: nothing but how brightly baked light falls on it. */
   private readonly brightness = new ShaderMaterial({
@@ -61,8 +67,17 @@ export class N8 implements OcclusionWorkings {
     pass.configuration.transparencyAware = false;
     // What it calls its mobile setting.
     pass.configuration.denoiseSamples = 4;
-    // Putting the darkening on the picture is left to AmbientOcclusion.
-    pass.effectCompositerQuad.render = () => {};
+    // Putting the darkening on the picture is left to AmbientOcclusion, so
+    // the pass's last step only runs to enlarge the darkening, as it is.
+    pass.configuration.renderMode = DARKENING_ALONE;
+    pass.configuration.colorMultiply = false;
+    pass.configuration.gammaCorrection = false;
+    pass.configuration.intensity = 1;
+    const quad = pass.effectCompositerQuad;
+    const enlarge = quad.render.bind(quad);
+    quad.render = (renderer) => {
+      if (this.enlarging) enlarge(renderer);
+    };
   }
 
   work(
@@ -72,8 +87,17 @@ export class N8 implements OcclusionWorkings {
     settings: OcclusionSettings,
     bakedLight: Texture | null,
   ) {
-    const { scene, pass } = this;
-    if (pass.width !== width || pass.height !== height) pass.setSize(width, height);
+    const { scene, pass, enlarged } = this;
+    // The pass can only enlarge to twice the size, guided by a picture of
+    // the depths at that size, which not every device can make.
+    this.enlarging =
+      settings.edges && settings.detail <= 0.5 && renderer.extensions.has("EXT_color_buffer_float");
+    const scale = this.enlarging ? 2 : 1;
+    pass.configuration.halfRes = this.enlarging;
+    if (pass.width !== width * scale || pass.height !== height * scale) {
+      pass.setSize(width * scale, height * scale);
+    }
+    if (this.enlarging) enlarged.setSize(width * scale, height * scale);
     pass.configuration.aoRadius = settings.reach;
     pass.configuration.distanceFalloff = settings.falloff;
     pass.configuration.aoSamples = Math.max(1, Math.round(settings.samples));
@@ -85,7 +109,10 @@ export class N8 implements OcclusionWorkings {
     renderer.setRenderTarget(this.depths);
     renderer.render(scene, this.camera);
     scene.overrideMaterial = override;
-    pass.render(renderer, null, null, 0, false);
-    return { occlusion: pass.accumulationRenderTarget.texture, brightness: this.depths.texture };
+    pass.render(renderer, enlarged, null, 0, false);
+    return {
+      occlusion: (this.enlarging ? enlarged : pass.accumulationRenderTarget).texture,
+      brightness: this.depths.texture,
+    };
   }
 }
