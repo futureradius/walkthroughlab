@@ -172,7 +172,7 @@ export class AmbientOcclusion {
     alone: false,
     method: "n8ao",
     reach: 0.2,
-    strength: 2.5,
+    strength: 4,
     spare: 1,
     sunlit: 0.2,
     samples: 12,

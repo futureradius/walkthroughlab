@@ -17,7 +17,7 @@ the panel's values, ready to paste over the one below.
 - on: yes
 - method: n8ao
 - reach: 0.2
-- strength: 2.5
+- strength: 4
 - spare: 1
 - sunlit: 0.2
 - samples: 12
