@@ -1,4 +1,5 @@
 import type { OcclusionSettings } from "./occlusion";
+import { writeSettings } from "./settings";
 
 const element = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -12,6 +13,16 @@ function tick(label: string, value: boolean, set: (value: boolean) => void) {
   box.checked = value;
   box.addEventListener("change", () => set(box.checked));
   row.append(box, label);
+  return row;
+}
+
+function choice(label: string, options: string[], value: string, set: (value: string) => void) {
+  const row = element("label", { className: "tuning__row" });
+  const select = document.createElement("select");
+  for (const option of options) select.append(element("option", { textContent: option }));
+  select.value = value;
+  select.addEventListener("change", () => set(select.value));
+  row.append(label, select);
   return row;
 }
 
@@ -40,7 +51,9 @@ function slider(
 
 /**
  * Add a panel that changes ambient occlusion's settings while walking, to
- * find by feel and by frame rate which of them a device can afford.
+ * find by feel and by frame rate which of them suit an environment and which
+ * a device can afford. Its button copies them as the environment's settings
+ * file lists them.
  */
 export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSettings) {
   const panel = element("details", { className: "tuning", open: true });
@@ -48,6 +61,7 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
     element("summary", { textContent: "Ambient occlusion" }),
     tick("On", settings.on, (value) => (settings.on = value)),
     tick("Only the darkening", settings.alone, (value) => (settings.alone = value)),
+    choice("Method", ["gtao", "n8ao"], settings.method, (value) => (settings.method = value)),
     slider(
       "Reach",
       { min: 0.05, max: 2, step: 0.05 },
@@ -91,6 +105,29 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
       (value) => (settings.detail = value),
     ),
     tick("Smoothing", settings.smooth, (value) => (settings.smooth = value)),
+    slider(
+      "Falloff (n8ao)",
+      { min: 0.1, max: 5, step: 0.1 },
+      settings.falloff,
+      (value) => value.toFixed(1),
+      (value) => (settings.falloff = value),
+    ),
   );
+  const copy = element("button", {
+    className: "tuning__copy",
+    type: "button",
+    textContent: "Copy for the settings file",
+  });
+  copy.addEventListener("click", async () => {
+    // Showing only the darkening is for judging it, not for viewers.
+    const { alone: _, ...kept } = settings;
+    try {
+      await navigator.clipboard.writeText(writeSettings("Ambient occlusion", kept));
+      copy.textContent = "Copied";
+    } catch {
+      copy.textContent = "Could not copy";
+    }
+  });
+  panel.append(copy);
   parent.append(panel);
 }

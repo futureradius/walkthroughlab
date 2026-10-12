@@ -15,6 +15,7 @@ import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
 import { advance, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { buildRoom, ROOM } from "./room";
+import { applySettings } from "./settings";
 import { addOcclusionTuning } from "./tuning";
 
 const EYE_HEIGHT = 1.6;
@@ -42,6 +43,7 @@ const TEST_ENVIRONMENT = {
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
     bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
+    settings: `${import.meta.env.BASE_URL}models/test-environment.md`,
   },
   // At the foot of the stairs, looking up them.
   start: { x: -13.4, z: 13, heading: 0 },
@@ -111,7 +113,16 @@ async function enterTestEnvironment(): Promise<Place> {
     scene.add(environment.visible);
     scene.background = environment.skyPicture;
     scene.environment = environment.skyLight;
-    if (occlusion) occlusion.bakedLight = environment.bakedLight ?? null;
+    if (occlusion) {
+      occlusion.bakedLight = environment.bakedLight ?? null;
+      const refused = applySettings(
+        occlusion.settings,
+        environment.settings["ambient occlusion"],
+      );
+      if (refused.length > 0) {
+        console.warn(`The settings file's ${refused.join(", ")} could not be used.`);
+      }
+    }
     const { terrain, floorAt } = collisionMesh(environment.collision);
     const { x, z, heading } = TEST_ENVIRONMENT.start;
     const floor = floorAt(x, z, 0);
@@ -134,21 +145,23 @@ const fps = params.has("fps")
     )
   : null;
 
-// Ambient occlusion is on wherever the device can work it out. Add ?ao to the
-// address for a panel that changes its settings while walking. The white room
-// stays as plain as it was unless the panel is asked for.
+// Ambient occlusion is on wherever the device can work it out. The white room
+// stays as plain as it was unless ?ao asks for the panel below.
 const occlusion =
   (params.has("ao") || !params.has("room")) && AmbientOcclusion.supported(renderer)
-    ? new AmbientOcclusion(renderer, scene, camera)
+    ? new AmbientOcclusion(renderer)
     : null;
-if (occlusion && params.has("ao")) {
-  addOcclusionTuning(document.body, occlusion.settings);
-}
 
 addAbout(document.body);
 
 // Add ?room to the address to walk the gridded white room instead.
 const place = params.has("room") ? enterWhiteRoom() : await enterTestEnvironment();
+
+// Add ?ao to the address for a panel that changes ambient occlusion's settings
+// while walking, starting from those the environment's settings file gave.
+if (occlusion && params.has("ao")) {
+  addOcclusionTuning(document.body, occlusion.settings);
+}
 
 const joystick = new Joystick(document.body);
 const keyboard = new Keyboard();

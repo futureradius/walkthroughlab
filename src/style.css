@@ -221,6 +221,17 @@ body {
   margin: 0;
 }
 
+.tuning__row select {
+  margin-left: auto;
+  font: inherit;
+}
+
+.tuning__copy {
+  width: 100%;
+  margin: 8px 0 4px;
+  font: inherit;
+}
+
 .tuning__row input[type="range"] {
   width: 100%;
   margin: 0;

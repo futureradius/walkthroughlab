@@ -23,6 +23,11 @@ Walk through an architectural space in the browser: https://futureradius.github.
 - `npm run dev` serves the walkthrough on your network, for testing on a phone.
 - Add `?room` to the address for the gridded white room, and `?fps` to show the frame rate.
 - Ambient occlusion is on wherever the device can work it out. Add `?ao` for a panel that changes its settings while walking, switches it off, or shows only the darkening it adds; combine it with `?fps` to see what each setting costs. The white room has none unless `?ao` is added.
+- The panel's "Method" switches between three.js's own ambient occlusion (`gtao`) and [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is being tried out beside it.
+
+## Settings for an environment
+
+`public/models/test-environment.md` holds the settings the walkthrough uses for the environment, with a note on each. Change a value there by hand, or tune in the `?ao` panel and paste what its "Copy for the settings file" button copies.
 
 ## Information and credits
 
