@@ -45,8 +45,12 @@ The single on-screen control that moves the viewpoint through a walkthrough: pus
 _Avoid_: Gamepad, controller, D-pad, thumbstick
 
 **Free look**:
-Turning the view, including up and down, by dragging anywhere outside the joystick.
+Turning the view, including up and down, by dragging anywhere outside the joystick. A drag let go of while moving ends in coasting.
 _Avoid_: Camera control, orbit, mouse look
+
+**Coasting**:
+The view carrying on turning after a free-look drag is let go, slowing to a stop unless the viewer catches it by touching the view.
+_Avoid_: Inertia, momentum, fling, kinetic scrolling
 
 ### Materials
 

@@ -15,6 +15,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 
 - The joystick walks forward and back and turns on the spot.
 - Dragging anywhere else is free look: the scene follows the finger or mouse. While a drag is held, pushing the joystick sideways sidesteps instead of turning.
+- A drag let go of while moving throws the view: it coasts on, slowing to a stop, and the next touch on the view catches it. A finger that rests before lifting leaves the view where it is. With the device's reduced-motion setting on, it settles almost at once.
 - On a keyboard, W/S or the up/down arrows walk, A/D sidestep, and the left/right arrows turn.
 - A view tilted up or down returns to level once the viewer sets off, unless a drag is being held.
 
@@ -24,7 +25,8 @@ Walk through an architectural space in the browser: https://futureradius.github.
 - Add `?fps` to the address to show the frame rate.
 - Add `?config` for a panel that changes settings while walking; its sections start folded shut.
 - Ambient occlusion is on wherever the device can work it out. The panel's "Ambient occlusion" section changes its settings, switches it off, or shows only the darkening it adds; combine it with `?fps` to see what each setting costs.
-- That section's "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, and three.js's own ambient occlusion (`gtao`).
+- The panel's "Coasting" section changes how hard a thrown view is braked: "Glide" is the brake that is always on, "Grip" the one that grows with speed. It can switch coasting off and behave as with reduced motion. What suits goes into `src/coasting.ts` by hand.
+- The "Ambient occlusion" section's "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, and three.js's own ambient occlusion (`gtao`).
 
 ## Settings for an environment
 

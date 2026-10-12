@@ -1,3 +1,4 @@
+import type { CoastingSettings } from "./coasting";
 import type { OcclusionSettings } from "./occlusion";
 import { writeSettings } from "./settings";
 
@@ -138,5 +139,51 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
     }
   });
   panel.append(copy);
+  parent.append(panel);
+}
+
+/**
+ * Add a section that changes how a thrown view is braked, to find by feel
+ * how far and how long it should coast, usually and with reduced motion.
+ * What suits goes into coasting.ts by hand: it is the same for every
+ * environment.
+ */
+export function addCoastingTuning(parent: HTMLElement, settings: CoastingSettings) {
+  const panel = element("details", {});
+  const perSecond = (value: number) => `${value.toFixed(1)} /s`;
+  const perRadian = (value: number) => value.toFixed(2);
+  panel.append(
+    element("summary", { textContent: "Coasting" }),
+    tick("On", settings.on, (value) => (settings.on = value)),
+    slider(
+      "Glide",
+      { min: 0.5, max: 10, step: 0.1 },
+      settings.glide,
+      perSecond,
+      (value) => (settings.glide = value),
+    ),
+    slider(
+      "Grip",
+      { min: 0, max: 2, step: 0.01 },
+      settings.grip,
+      perRadian,
+      (value) => (settings.grip = value),
+    ),
+    tick("As with reduced motion", settings.reduced, (value) => (settings.reduced = value)),
+    slider(
+      "Glide (reduced)",
+      { min: 2, max: 40, step: 0.5 },
+      settings.reducedGlide,
+      perSecond,
+      (value) => (settings.reducedGlide = value),
+    ),
+    slider(
+      "Grip (reduced)",
+      { min: 0, max: 10, step: 0.1 },
+      settings.reducedGrip,
+      perRadian,
+      (value) => (settings.reducedGrip = value),
+    ),
+  );
   parent.append(panel);
 }

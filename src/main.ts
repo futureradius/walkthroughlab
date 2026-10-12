@@ -6,6 +6,7 @@ import {
   WebGLRenderer,
 } from "three";
 import { addAbout } from "./about";
+import { COASTING, Coasting } from "./coasting";
 import { collisionMesh } from "./collision";
 import { Controls } from "./controls";
 import { loadEnvironment } from "./environment";
@@ -15,7 +16,7 @@ import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
 import { advance, type Terrain, type Viewpoint } from "./motion";
 import { applySettings } from "./settings";
-import { addOcclusionTuning, addTuning } from "./tuning";
+import { addCoastingTuning, addOcclusionTuning, addTuning } from "./tuning";
 
 const EYE_HEIGHT = 1.6;
 /** Vertical field of view in degrees: wide in portrait to offset the narrow screen. */
@@ -145,14 +146,23 @@ const place = await enterTestEnvironment();
 
 // Add ?config to the address for a panel that changes settings while walking.
 // Ambient occlusion's start from those the environment's settings file gave.
+// With reduced motion a thrown view is braked much harder.
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const coasting = new Coasting({ ...COASTING, reduced: reducedMotion.matches });
 if (params.has("config")) {
   const tuning = addTuning(document.body);
   if (occlusion) addOcclusionTuning(tuning, occlusion.settings);
+  addCoastingTuning(tuning, coasting.settings);
+} else {
+  // The panel has a switch for this instead, to try both brakes on one device.
+  reducedMotion.addEventListener("change", () => {
+    coasting.settings.reduced = reducedMotion.matches;
+  });
 }
 
 const joystick = new Joystick(document.body);
 const keyboard = new Keyboard();
-const freeLook = new FreeLook(canvas);
+const freeLook = new FreeLook(canvas, coasting);
 const controls = new Controls();
 let viewpoint = place.start;
 let eyes = viewpoint.floor + EYE_HEIGHT;
@@ -170,7 +180,7 @@ renderer.setAnimationLoop((now) => {
   const intent = controls.read(
     joystick.stick,
     keyboard.keys,
-    freeLook.take(radiansPerPixel),
+    freeLook.take(radiansPerPixel, seconds),
   );
   viewpoint = advance(viewpoint, intent, seconds, place.terrain);
   eyes +=
