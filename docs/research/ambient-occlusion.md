@@ -37,6 +37,23 @@ MXAO cannot be ported at all: its licence forbids using its source in another pr
 4. **If `GTAOPass` looks right but is too slow**, borrow Amplify's half-resolution and bilateral-upsample design (MIT) into a custom pass. That is the one place Amplify's code is worth reading closely.
 5. **Expect to keep it off by default on phones.** Every option adds at least two full-screen passes and floating-point render targets, removes the cheap canvas MSAA, and changes how the sky is tone mapped (see "Project-specific concerns"). **(judgement)**
 
+## Outcome and an option kept open
+
+Added 2026-10-12, after both were built and compared by eye in the test environment.
+
+**What is in use.** N8AO, preferred for its look over `GTAOPass`, which stays selectable (`method` in the environment's settings file). Only N8AO's sampling and smoothing run. The scene is still drawn straight to the canvas and the darkening is multiplied on top ([src/occlusion.ts][occlusion], [src/n8.ts][n8-ours]), which keeps canvas MSAA, the tone mapping and the sky as they were, and avoids every problem in "Leaving direct-to-canvas rendering" below. The price is that N8AO's one-scene-render advantage (recommendation 3) is not had: the canvas's depth cannot be read, so the scene is drawn a second time for depth, with a trivial material and at half the width and height. A denser bake (recommendation 2) was ruled out: longer bakes and a bigger download.
+
+**Measured.** The chunk holding N8AO is 160 kB minified, 84 kB compressed; of the `postprocessing` peer dependency only the `Pass` base class is imported. Viewers download it while the environment loads.
+
+**Edge-aware upscaling.** N8AO's half-resolution mode with depth-aware upsampling is wired up (`edges` in the settings file) and looks clearly better: no speckle, and the darkening stops at edges. It is off because it needs the depth drawing at twice the size, four times the pixels, plus one more full-screen pass, which was judged too costly.
+
+**The option kept open: draw the scene once, off screen, with a full-size depth texture.** This is the stock N8AO arrangement. It was judged not worth it now, since the second drawing is cheap for this environment while the costs are certain: canvas MSAA is lost, tone mapping moves to a final pass and the sky picture gets tone mapped twice, the sparing of sunlit surfaces has to get the baked light's brightness another way (a second render target output, say), and every pixel pays for an off-screen target and a copy to the canvas. Two things would change that judgement:
+
+- **A large environment**, where drawing the geometry twice shows in the frame rate.
+- **A later effect that needs a full-size depth texture anyway.** The off-screen scene target would then be paid for once and shared, and edge-aware upscaling would come almost free, as its full-size depth is the expensive part today.
+
+Both were reasoned from source and from frame rates seen while tuning; neither route's cost was measured against the other. **(judgement)**
+
 ## Candidate 1: MXAO
 
 There are two different shaders with this name.
@@ -302,7 +319,7 @@ N8AO handles the second and third points itself: "transparent objects with depth
 - **`renderer.setEffects` with `GTAOPass`** was read, not run. Same for whether the sky's double tone mapping is visible enough to matter under `NeutralToneMapping`.
 - **Whether the `GTAOPass` external-depth defect is fixed upstream** after 0.186.1 was not checked.
 - **Half-float render target support and `WEBGL_multisampled_render_to_texture` availability on old phones** were not checked against a primary source.
-- **N8AO's real bundle cost**, including how much of the `postprocessing` peer dependency is pulled in.
+- **N8AO's real bundle cost**, including how much of the `postprocessing` peer dependency is pulled in. Since measured; see "Outcome and an option kept open".
 - **qUINT MXAO's default algorithm** is not attributed to a paper by its author; "obscurance-style" is my description.
 - **Whether Pascal Gilcher would grant permission** for a port. The licence invites asking; nobody has asked.
 - **Whether a denser bake is enough.** Recommendation 2 is untested; it needs a side-by-side at two lightmap resolutions.
@@ -381,3 +398,5 @@ N8AO handles the second and third points itself: "transparent objects with depth
 [adr2]: ../adr/0002-bake-light-with-scripted-blender.md
 [env]: ../../src/environment.ts
 [main]: ../../src/main.ts
+[occlusion]: ../../src/occlusion.ts
+[n8-ours]: ../../src/n8.ts

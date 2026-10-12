@@ -188,7 +188,7 @@ export class AmbientOcclusion {
   private readonly renderer: WebGLRenderer;
   private gtao: OcclusionWorkings | null = null;
   private n8ao: OcclusionWorkings | null = null;
-  private fetching = false;
+  private fetched: Promise<void> | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
   private readonly glass: Mesh[] = [];
@@ -251,12 +251,22 @@ export class AmbientOcclusion {
   /** The way the settings ask for, or nothing while it is still on its way. */
   private workings(scene: Scene, camera: PerspectiveCamera): OcclusionWorkings | null {
     if (this.settings.method !== "n8ao") return (this.gtao ??= new Gtao(scene, camera));
-    if (!this.n8ao && !this.fetching) {
-      this.fetching = true;
-      // Only those who try it out download it.
-      import("./n8").then(({ N8 }) => (this.n8ao = new N8(scene, camera)));
-    }
+    if (!this.n8ao) void this.fetch(scene, camera);
     return this.n8ao;
+  }
+
+  private fetch(scene: Scene, camera: PerspectiveCamera): Promise<void> {
+    return (this.fetched ??= import("./n8").then(({ N8 }) => {
+      this.n8ao = new N8(scene, camera);
+    }));
+  }
+
+  /**
+   * Fetch what the settings' method needs, so that the first frame drawn
+   * already has ambient occlusion. If it cannot be had, frames go without.
+   */
+  async ready(scene: Scene, camera: PerspectiveCamera): Promise<void> {
+    if (this.settings.method === "n8ao") await this.fetch(scene, camera).catch(() => {});
   }
 
   /** Draw the scene to the canvas with ambient occlusion over it. */

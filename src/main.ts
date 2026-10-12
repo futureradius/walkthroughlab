@@ -102,6 +102,9 @@ async function enterTestEnvironment(): Promise<Place> {
     Object.assign(document.createElement("div"), { className: "loading__bar" }),
   );
   try {
+    // Started now, so what ambient occlusion usually needs arrives alongside
+    // the environment rather than after it.
+    void occlusion?.ready(scene, camera);
     const environment = await loadEnvironment(
       TEST_ENVIRONMENT.files,
       renderer,
@@ -122,6 +125,8 @@ async function enterTestEnvironment(): Promise<Place> {
       if (refused.length > 0) {
         console.warn(`The settings file's ${refused.join(", ")} could not be used.`);
       }
+      // The loading bar stays until ambient occlusion can be in the first frame.
+      await occlusion.ready(scene, camera);
     }
     const { terrain, floorAt } = collisionMesh(environment.collision);
     const { x, z, heading } = TEST_ENVIRONMENT.start;
