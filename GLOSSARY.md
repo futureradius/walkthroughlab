@@ -47,3 +47,9 @@ _Avoid_: Gamepad, controller, D-pad, thumbstick
 **Free look**:
 Turning the view, including up and down, by dragging anywhere outside the joystick.
 _Avoid_: Camera control, orbit, mouse look
+
+### Materials
+
+**Glass**:
+A surface of an environment that the viewer sees through, which dims and tints what lies beyond it by its own colour and reflects the sky.
+_Avoid_: Window, transparent material, transmission, see-through surface

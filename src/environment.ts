@@ -1,13 +1,19 @@
 import {
+  Color,
+  ConstantColorFactor,
+  CustomBlending,
   DoubleSide,
   EquirectangularReflectionMapping,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  OneFactor,
+  OneMinusDstColorFactor,
   PMREMGenerator,
   SRGBColorSpace,
   TextureLoader,
   Vector3,
+  ZeroFactor,
   type Material,
   type Object3D,
   type Texture,
@@ -86,6 +92,38 @@ function prepare(material: Material, anisotropy: number) {
 }
 
 /**
+ * Glass lets through the share of red, green and blue that its colour names,
+ * once for each of its surfaces the view crosses, and reflects the sky on top.
+ */
+function asGlass(material: MeshStandardMaterial) {
+  // The canvas holds colours encoded for display, where taking away a share
+  // of the light takes away a smaller share of the number.
+  const { r, g, b } = material.color;
+  material.blendColor = new Color(r ** (1 / 2.2), g ** (1 / 2.2), b ** (1 / 2.2));
+  // Leaves the reflection as all the glass itself has to show.
+  material.color.setScalar(0);
+  material.opacity = 1;
+  // What is behind is multiplied by the colour; the reflection fills in what
+  // is left of white, so that it shows most over the dark.
+  material.blending = CustomBlending;
+  material.blendSrc = OneMinusDstColorFactor;
+  material.blendDst = ConstantColorFactor;
+  material.blendSrcAlpha = ZeroFactor;
+  material.blendDstAlpha = OneFactor;
+  material.onBeforeCompile = (shader) => {
+    // Light adds up before it is encoded for display, and the canvas can only
+    // add after. Over a mid-grey that would make a faint reflection several
+    // times too bright, which this holds back.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <colorspace_fragment>",
+      /* glsl */ `
+      #include <colorspace_fragment>
+      gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.25));`,
+    );
+  };
+}
+
+/**
  * A surface whose light was baked only has to show its own colour times that
  * light, which is the cheapest thing a phone can draw.
  */
@@ -158,10 +196,15 @@ export async function loadEnvironment(
     bakedLight.channel = 1;
   }
   const baked = new Map<Material, Material>();
+  const glass = new Set<Material>();
   gltf.scene.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const material: Material = object.material;
     prepare(material, anisotropy);
+    if (material.transparent && material instanceof MeshStandardMaterial && !glass.has(material)) {
+      glass.add(material);
+      asGlass(material);
+    }
     // Only surfaces the bake painted carry the second set of coordinates.
     if (
       bakedLight &&

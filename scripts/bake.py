@@ -56,6 +56,25 @@ links.new(panorama.outputs["Color"], background.inputs["Color"])
 links.new(background.outputs["Background"], world_output.inputs["Surface"])
 
 
+# Glass lets light through multiplied by its colour, once for each of its
+# surfaces the light crosses, as the walkthrough shows what is behind it.
+glass = 0
+for material in bpy.data.materials:
+    if material.surface_render_method != "BLENDED":
+        continue
+    tree = material.node_tree
+    colour = tuple(tree.nodes["Principled BSDF"].inputs["Base Color"].default_value)
+    tree.nodes.clear()
+    see_through = tree.nodes.new("ShaderNodeBsdfTransparent")
+    see_through.inputs["Color"].default_value = colour
+    surface = tree.nodes.new("ShaderNodeOutputMaterial")
+    tree.links.new(see_through.outputs["BSDF"], surface.inputs["Surface"])
+    glass += 1
+print(f"bake: {glass} glass materials let tinted light through")
+# Enough for light to cross a row of panes, each a slab with two surfaces.
+scene.cycles.transparent_max_bounces = 32
+
+
 def in_collision_layer(thing):
     while thing is not None:
         if thing.name.startswith(COLLISION_LAYER):

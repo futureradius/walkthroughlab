@@ -26,7 +26,8 @@ const MAX_TEXTURE_SIZE = 1024;
 const JPEG_QUALITY = 80;
 /** Materials that let more light through than this are shown as glass. */
 const GLASS_TRANSMISSION = 0.5;
-const GLASS_OPACITY = 0.25;
+/** How strongly a material reflects, which the walkthrough honours on glass. */
+const KEPT_ON_GLASS = ["KHR_materials_ior", "KHR_materials_specular"];
 /** Rhino exports these on every material; phones pay for them and gain nothing. */
 const DROPPED_EXTENSIONS = [
   "KHR_materials_transmission",
@@ -46,23 +47,33 @@ const SKY_LIGHT_WIDTH = 1024;
 /** Brightens or darkens a sky, both as seen and as a light source. */
 const SKY_EXPOSURE = 1;
 
-/** Glass becomes a see-through tint; everything else becomes solid. */
+/**
+ * Glass keeps its colour, which the walkthrough and the bake take as the share
+ * of light each of its surfaces lets through; everything else becomes solid.
+ */
 function simplifyMaterials(document) {
+  let anyGlass = false;
   for (const material of document.getRoot().listMaterials()) {
     const transmission = material.getExtension("KHR_materials_transmission");
     const isGlass =
       transmission !== null &&
       transmission.getTransmissionFactor() > GLASS_TRANSMISSION;
-    for (const name of DROPPED_EXTENSIONS) material.setExtension(name, null);
+    anyGlass ||= isGlass;
+    for (const name of DROPPED_EXTENSIONS) {
+      if (!(isGlass && KEPT_ON_GLASS.includes(name))) material.setExtension(name, null);
+    }
 
     const [red, green, blue] = material.getBaseColorFactor();
+    // BLEND is what marks a material as glass from here on.
     material.setAlphaMode(isGlass ? "BLEND" : "OPAQUE");
-    material.setBaseColorFactor([red, green, blue, isGlass ? GLASS_OPACITY : 1]);
+    material.setBaseColorFactor([red, green, blue, 1]);
     // Rhino asks for no mipmaps, which makes distant textures shimmer.
     material.getBaseColorTextureInfo()?.setMinFilter(LINEAR_MIPMAP_LINEAR);
   }
   for (const extension of document.getRoot().listExtensionsUsed()) {
-    if (DROPPED_EXTENSIONS.includes(extension.extensionName)) extension.dispose();
+    const name = extension.extensionName;
+    if (!DROPPED_EXTENSIONS.includes(name)) continue;
+    if (!(anyGlass && KEPT_ON_GLASS.includes(name))) extension.dispose();
   }
 }
 
