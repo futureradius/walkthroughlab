@@ -50,13 +50,21 @@ function slider(
 }
 
 /**
- * Add a panel that changes ambient occlusion's settings while walking, to
+ * Add the panel that changes settings while walking. It starts empty; each
+ * section added to it starts folded shut, to leave the view free.
+ */
+export function addTuning(parent: HTMLElement): HTMLElement {
+  return parent.appendChild(element("div", { className: "tuning" }));
+}
+
+/**
+ * Add a section that changes ambient occlusion's settings while walking, to
  * find by feel and by frame rate which of them suit an environment and which
  * a device can afford. Its button copies them as the environment's settings
  * file lists them.
  */
 export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSettings) {
-  const panel = element("details", { className: "tuning", open: true });
+  const panel = element("details", {});
   panel.append(
     element("summary", { textContent: "Ambient occlusion" }),
     tick("On", settings.on, (value) => (settings.on = value)),

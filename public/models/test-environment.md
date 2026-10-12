@@ -10,9 +10,9 @@ console.
 
 ## Ambient occlusion
 
-Add `?ao` to the walkthrough's address for a panel that changes these while
-walking. Its "Copy for the settings file" button copies this list with the
-panel's values, ready to paste over the one below.
+Add `?config` to the walkthrough's address for a panel that changes these
+while walking. Its "Copy for the settings file" button copies this list with
+the panel's values, ready to paste over the one below.
 
 - on: yes
 - method: n8ao

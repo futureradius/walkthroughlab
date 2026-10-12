@@ -13,14 +13,11 @@ import { AmbientOcclusion } from "./occlusion";
 import { FreeLook } from "./freelook";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
-import { advance, withinLimits, type Terrain, type Viewpoint } from "./motion";
-import { buildRoom, ROOM } from "./room";
+import { advance, type Terrain, type Viewpoint } from "./motion";
 import { applySettings } from "./settings";
-import { addOcclusionTuning } from "./tuning";
+import { addOcclusionTuning, addTuning } from "./tuning";
 
 const EYE_HEIGHT = 1.6;
-/** How close the viewpoint may get to a wall of the white room, in metres. */
-const WALL_MARGIN = 0.4;
 /** Vertical field of view in degrees: wide in portrait to offset the narrow screen. */
 const PORTRAIT_FOV = 90;
 const LANDSCAPE_FOV = 60;
@@ -32,7 +29,6 @@ const MAX_STEP_SECONDS = 0.1;
 const EYE_CATCH_UP = 12;
 /** Farthest distance drawn, in metres. */
 const VIEW_DISTANCE = 300;
-const ROOM_BACKDROP = 0xffffff;
 /** Shown behind the loading bar until the sky arrives. */
 const LOADING_BACKDROP = 0xdde8f0;
 
@@ -78,18 +74,6 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
-
-function enterWhiteRoom(): Place {
-  scene.background = new Color(ROOM_BACKDROP);
-  scene.add(buildRoom(Math.min(4, renderer.capabilities.getMaxAnisotropy())));
-  return {
-    terrain: withinLimits({
-      halfWidth: ROOM.width / 2 - WALL_MARGIN,
-      halfDepth: ROOM.depth / 2 - WALL_MARGIN,
-    }),
-    start: { x: 0, z: 0, floor: 0, heading: 0, pitch: 0 },
-  };
-}
 
 async function enterTestEnvironment(): Promise<Place> {
   scene.background = new Color(LOADING_BACKDROP);
@@ -150,22 +134,20 @@ const fps = params.has("fps")
     )
   : null;
 
-// Ambient occlusion is on wherever the device can work it out. The white room
-// stays as plain as it was unless ?ao asks for the panel below.
-const occlusion =
-  (params.has("ao") || !params.has("room")) && AmbientOcclusion.supported(renderer)
-    ? new AmbientOcclusion(renderer)
-    : null;
+// Ambient occlusion is on wherever the device can work it out.
+const occlusion = AmbientOcclusion.supported(renderer)
+  ? new AmbientOcclusion(renderer)
+  : null;
 
 addAbout(document.body);
 
-// Add ?room to the address to walk the gridded white room instead.
-const place = params.has("room") ? enterWhiteRoom() : await enterTestEnvironment();
+const place = await enterTestEnvironment();
 
-// Add ?ao to the address for a panel that changes ambient occlusion's settings
-// while walking, starting from those the environment's settings file gave.
-if (occlusion && params.has("ao")) {
-  addOcclusionTuning(document.body, occlusion.settings);
+// Add ?config to the address for a panel that changes settings while walking.
+// Ambient occlusion's start from those the environment's settings file gave.
+if (params.has("config")) {
+  const tuning = addTuning(document.body);
+  if (occlusion) addOcclusionTuning(tuning, occlusion.settings);
 }
 
 const joystick = new Joystick(document.body);
