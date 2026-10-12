@@ -52,6 +52,10 @@ _Avoid_: Camera control, orbit, mouse look
 The view carrying on turning after a free-look drag is let go, slowing to a stop unless the viewer catches it by touching the view.
 _Avoid_: Inertia, momentum, fling, kinetic scrolling
 
+**Scatter**:
+Many copies of one small thing, such as a grass tuft, a pebble or a fallen leaf, spread over a surface by the author.
+_Avoid_: Instancing, foliage, particles, scattered texture
+
 ### Movement
 
 **Moving part**:
