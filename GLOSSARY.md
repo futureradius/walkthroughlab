@@ -79,3 +79,17 @@ _Avoid_: NPCs, vehicles, agents, crowd
 **Glass**:
 A surface of an environment that the viewer sees through, which dims and tints what lies beyond it by its own colour and reflects the sky.
 _Avoid_: Window, transparent material, transmission, see-through surface
+
+### Sound
+
+**Ambient sound**:
+The one continuous sound an author chooses for an environment, which the viewer hears everywhere in it.
+_Avoid_: Background sound, ambience, soundscape, atmosphere
+
+**Placed sound**:
+A continuous sound an author attaches to a spot in an environment, such as a fountain or a humming machine, which grows fainter as the viewpoint moves away.
+_Avoid_: Audio source, emitter, 3D sound, positional audio
+
+**Footsteps**:
+The sound of the viewer walking, heard only while the viewpoint travels on foot.
+_Avoid_: Step sounds, walking sound, foley
