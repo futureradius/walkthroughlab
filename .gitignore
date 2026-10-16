@@ -4,3 +4,4 @@ dist
 .claude/skills/
 .claude/settings.local.json
 models-source/
+.claude/worktrees/
