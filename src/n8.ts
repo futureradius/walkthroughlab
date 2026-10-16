@@ -113,6 +113,7 @@ export class N8 implements OcclusionWorkings {
     return {
       occlusion: (this.enlarging ? enlarged : pass.accumulationRenderTarget).texture,
       brightness: this.depths.texture,
+      depths: this.depths.depthTexture!,
     };
   }
 }

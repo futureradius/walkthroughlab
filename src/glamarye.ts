@@ -48,7 +48,8 @@ import type { OcclusionSettings, OcclusionWorkings } from "./occlusion";
  * a circle around each pixel, a fixed share of the screen across, joined into
  * a fuzzy ring rather than counted one by one. Pixels alternate between a
  * wide and a narrow circle in a checkerboard, so the eye blends two circles'
- * worth of samples, and nothing is smoothed afterwards.
+ * worth of samples, and nothing is smoothed afterwards unless `blur` asks
+ * for it; see blur.ts.
  *
  * Only the ambient occlusion is ported, as without the original's Fake GI.
  * Left out, because they need the picture's colours and this works before
@@ -257,6 +258,10 @@ export class Glamarye implements OcclusionWorkings {
     scene.overrideMaterial = override;
     renderer.setRenderTarget(output);
     this.quad.render(renderer);
-    return { occlusion: output.texture, brightness: depths.texture };
+    return {
+      occlusion: output.texture,
+      brightness: depths.texture,
+      depths: depths.depthTexture!,
+    };
   }
 }

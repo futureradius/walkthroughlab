@@ -23,6 +23,7 @@ the panel's values, ready to paste over the one below.
 - samples: 12
 - detail: 0.5
 - smooth: yes
+- blur: off
 - falloff: 3
 - edges: no
 
@@ -43,6 +44,11 @@ What they mean:
 - `detail`: the share of the screen's width and height the darkening is
   worked out at. 0.5 is a quarter of the pixels; 1 is sharpest and slowest.
 - `smooth`: whether the speckle that few samples leave is smoothed away.
+- `blur`: with any method, how the darkening is blurred once worked out.
+  `off` leaves it as it is; `box2` washes out a pattern that repeats every
+  2 by 2 pixels, such as the checkerboard `glamarye` leaves; `box4` reaches
+  twice as far and costs four times as much; `depth4` is `box4` that keeps
+  the darkening from smearing over the edges of things, and costs the most.
 - `falloff`: with `n8ao` only. Smaller leaves less of a dark outline around
   whatever stands in front of a wall, and less darkening altogether.
 - `edges`: with `n8ao` only, and a `detail` of 0.5 or less. `yes` enlarges

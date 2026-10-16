@@ -1,3 +1,4 @@
+import { BLURS } from "./blur";
 import type { CoastingSettings } from "./coasting";
 import type { OcclusionSettings } from "./occlusion";
 import { writeSettings } from "./settings";
@@ -114,6 +115,7 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
       (value) => (settings.detail = value),
     ),
     tick("Smoothing (not glamarye)", settings.smooth, (value) => (settings.smooth = value)),
+    choice("Blur", BLURS, settings.blur, (value) => (settings.blur = value)),
     slider(
       "Falloff (n8ao)",
       { min: 0.1, max: 5, step: 0.1 },

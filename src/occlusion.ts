@@ -16,6 +16,7 @@ import {
 } from "three";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
+import { BLURS, Blur } from "./blur";
 import { Glamarye } from "./glamarye";
 
 /** What can be changed about ambient occlusion while it runs; see tuning.ts. */
@@ -46,6 +47,14 @@ export interface OcclusionSettings {
   detail: number;
   /** Whether the speckle left by so few samples is smoothed away. Not with `glamarye`, which never smooths. */
   smooth: boolean;
+  /**
+   * How the darkening is blurred once worked out, with any method, to wash
+   * out the pattern of neighbouring pixels checking different spots:
+   * `off`; `box2`, an average of 2 by 2 pixels; `box4`, of 4 by 4; or
+   * `depth4`, the 4 by 4 that leaves out neighbours much nearer or farther.
+   * See blur.ts.
+   */
+  blur: string;
   /**
    * With `n8ao` only: how much nearer than a spot a neighbour may be and
    * still shade it fully, in fifths of the reach. Smaller leaves less of an
@@ -93,7 +102,8 @@ export interface OcclusionWorkings {
   /**
    * Work the darkening out for the scene as it now shows, at this size. The
    * first picture holds it in red; the second holds, in alpha, how brightly
-   * baked light falls on each surface.
+   * baked light falls on each surface; the third is the depths the darkening
+   * was worked out from, at the first's size.
    */
   work(
     renderer: WebGLRenderer,
@@ -101,7 +111,7 @@ export interface OcclusionWorkings {
     height: number,
     settings: OcclusionSettings,
     bakedLight: Texture | null,
-  ): { occlusion: Texture; brightness: Texture };
+  ): { occlusion: Texture; brightness: Texture; depths: Texture };
 }
 
 /** The pass keeps the step that draws each of its stages to itself. */
@@ -193,6 +203,7 @@ class Gtao implements OcclusionWorkings {
     return {
       occlusion: (settings.smooth ? pass.pdRenderTarget : pass.gtaoRenderTarget).texture,
       brightness: this.internals.normalRenderTarget.texture,
+      depths: pass.depthTexture,
     };
   }
 }
@@ -213,6 +224,7 @@ export class AmbientOcclusion {
     samples: 12,
     detail: 0.5,
     smooth: true,
+    blur: "off",
     falloff: 3,
     edges: false,
     shade: 0.6,
@@ -232,6 +244,7 @@ export class AmbientOcclusion {
   private gtao: OcclusionWorkings | null = null;
   private n8ao: OcclusionWorkings | null = null;
   private glamarye: OcclusionWorkings | null = null;
+  private blur: Blur | null = null;
   private fetched: Promise<void> | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
@@ -257,6 +270,7 @@ export class AmbientOcclusion {
           spare: { value: this.settings.spare },
           sunlit: { value: this.settings.sunlit },
           headroom: { value: 1 },
+          shift: { value: new Vector2() },
         },
         vertexShader: /* glsl */ `
           varying vec2 vUv;
@@ -272,10 +286,11 @@ export class AmbientOcclusion {
           uniform float spare;
           uniform float sunlit;
           uniform float headroom;
+          uniform vec2 shift;
           varying vec2 vUv;
 
           void main() {
-            float light = pow(texture2D(occlusion, vUv).r, strength);
+            float light = pow(texture2D(occlusion, vUv - shift).r, strength);
             // Ambient occlusion only dims light from all around, and a
             // surface in the sun gets nearly all its light from one place.
             float inSun = smoothstep(sunlit - 0.05, sunlit + 0.05, texture2D(brightness, vUv).a);
@@ -342,7 +357,7 @@ export class AmbientOcclusion {
     show(this.glass, false);
     const background = scene.background;
     scene.background = null;
-    const { occlusion, brightness } = workings.work(
+    const { occlusion, brightness, depths } = workings.work(
       renderer,
       width,
       height,
@@ -351,7 +366,14 @@ export class AmbientOcclusion {
     );
     scene.background = background;
     const { uniforms } = this.darken.material as ShaderMaterial;
-    uniforms.occlusion.value = occlusion;
+    if (settings.blur !== "off" && BLURS.includes(settings.blur)) {
+      const blur = (this.blur ??= new Blur());
+      uniforms.occlusion.value = blur.blur(renderer, settings.blur, occlusion, depths, camera);
+      uniforms.shift.value.copy(blur.shift);
+    } else {
+      uniforms.occlusion.value = occlusion;
+      uniforms.shift.value.set(0, 0);
+    }
     uniforms.brightness.value = brightness;
     // Glamarye presses its darkening by `shade` as it works it out.
     const glamarye = settings.method === "glamarye";
