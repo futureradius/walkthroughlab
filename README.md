@@ -26,7 +26,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 - Add `?config` for a panel that changes settings while walking; its sections start folded shut.
 - Ambient occlusion is on wherever the device can work it out. The panel's "Ambient occlusion" section changes its settings, switches it off, or shows only the darkening it adds; combine it with `?fps` to see what each setting costs.
 - The panel's "Coasting" section changes how hard a thrown view is braked: "Glide" is the brake that is always on, "Grip" the one that grows with speed. It can switch coasting off and behave as with reduced motion. What suits goes into `src/coasting.ts` by hand.
-- The "Ambient occlusion" section's "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, and three.js's own ambient occlusion (`gtao`).
+- The "Ambient occlusion" section's "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, three.js's own ambient occlusion (`gtao`), and the fast ambient occlusion from [Glamarye Fast Effects for ReShade](https://github.com/rj200/Glamarye_Fast_Effects_for_ReShade) (`glamarye`). Rows marked "(glamarye)" tune only that one, under its own names and usual values; those marked "(not glamarye)" leave it alone.
 
 ## Settings for an environment
 

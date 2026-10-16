@@ -22,6 +22,7 @@ Test environment prepared in Rhino. Sources and licences of its textures and of 
 
 - [Three.js](https://threejs.org/), [MIT licence](https://github.com/mrdoob/three.js/blob/dev/LICENSE)
 - [Marked](https://marked.js.org/), [MIT licence](https://github.com/markedjs/marked/blob/master/LICENSE.md)
+- Ambient occlusion option ported from [Glamarye Fast Effects for ReShade](https://github.com/rj200/Glamarye_Fast_Effects_for_ReShade) by Robert Jessop ([rj200](https://github.com/rj200)), Copyright (c) 2021 Robert Jessop, [MIT licence](https://github.com/rj200/Glamarye_Fast_Effects_for_ReShade/blob/main/LICENSE)
 - Light baked with [Blender](https://www.blender.org/)
 
 Source code: [github.com/futureradius/walkthroughlab](https://github.com/futureradius/walkthroughlab)

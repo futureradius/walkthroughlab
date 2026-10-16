@@ -4,6 +4,7 @@ import {
   DstColorFactor,
   Mesh,
   ShaderMaterial,
+  SrcColorFactor,
   Vector2,
   ZeroFactor,
   type Material,
@@ -15,6 +16,7 @@ import {
 } from "three";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
+import { Glamarye } from "./glamarye";
 
 /** What can be changed about ambient occlusion while it runs; see tuning.ts. */
 export interface OcclusionSettings {
@@ -22,21 +24,27 @@ export interface OcclusionSettings {
   on: boolean;
   /** Show the darkening alone, on white, to judge it while tuning. */
   alone: boolean;
-  /** How the darkening is worked out: `n8ao` is N8AO, `gtao` is three.js's own way. */
+  /**
+   * How the darkening is worked out: `n8ao` is N8AO, `gtao` is three.js's own
+   * way, `glamarye` is the one in Glamarye Fast Effects for ReShade.
+   */
   method: string;
-  /** How far a surface looks for neighbours that shade it, in metres. */
+  /** How far a surface looks for neighbours that shade it, in metres. Not with `glamarye`. */
   reach: number;
-  /** How hard the darkening is pressed: 0 leaves the picture alone, 1 is as worked out, more is darker. */
+  /**
+   * How hard the darkening is pressed: 0 leaves the picture alone, 1 is as
+   * worked out, more is darker. Not with `glamarye`, which has `shade`.
+   */
   strength: number;
   /** How much of the darkening sunlit surfaces are let off: 0 is none, 1 is all. */
   spare: number;
   /** How bright baked light must be for a surface to count as sunlit, from 0 to 1 of what the picture holds. */
   sunlit: number;
-  /** How many spots around each pixel are checked for neighbours. */
+  /** How many spots around each pixel are checked for neighbours. Not with `glamarye`, which has `points`. */
   samples: number;
   /** The share of the canvas's width and height the darkening is worked out at. */
   detail: number;
-  /** Whether the speckle left by so few samples is smoothed away. */
+  /** Whether the speckle left by so few samples is smoothed away. Not with `glamarye`, which never smooths. */
   smooth: boolean;
   /**
    * With `n8ao` only: how much nearer than a spot a neighbour may be and
@@ -51,6 +59,33 @@ export interface OcclusionSettings {
    * edges. The depths it goes by are drawn at twice the detail.
    */
   edges: boolean;
+  /**
+   * The rest are for `glamarye` only, named after its own settings with the
+   * same usual values. `shade` is its "AO strength": how deep hollows are
+   * shaded, from 0 to 1 and more.
+   */
+  shade: number;
+  /** "AO shine": how much bumps facing the viewpoint are brightened, from 0. */
+  shine: number;
+  /**
+   * "AO radius": how far around each pixel it looks, as a share of the screen
+   * rather than in metres. 1 is a hundredth of its diagonal.
+   */
+  radius: number;
+  /** FAST_AO_POINTS: how many spots on a circle around each pixel are checked, from 2 to 16. */
+  points: number;
+  /** "AO shape modifier": how deep a hollow must be before it is shaded, from 1 to 4000. */
+  shape: number;
+  /**
+   * "AO max depth diff": how much nearer or farther a spot may be and still
+   * count, in hundredths of the depth. Smaller leaves less of a dark outline
+   * around whatever stands in front of a wall.
+   */
+  gap: number;
+  /** "AO max distance": the depth at which the darkening has faded out; 0.5 is about 100 m. */
+  fade: number;
+  /** "AO bigger dither": four sizes of circle in a pattern of 2 by 4 pixels instead of two in a checkerboard. */
+  dither: boolean;
 }
 
 /** A way of working the darkening out. */
@@ -180,6 +215,14 @@ export class AmbientOcclusion {
     smooth: true,
     falloff: 3,
     edges: false,
+    shade: 0.6,
+    shine: 0.3,
+    radius: 1,
+    points: 6,
+    shape: 1000,
+    gap: 0.5,
+    fade: 0.5,
+    dither: false,
   };
 
   /** The environment's baked light, which tells sunlit surfaces from shaded ones. */
@@ -188,6 +231,7 @@ export class AmbientOcclusion {
   private readonly renderer: WebGLRenderer;
   private gtao: OcclusionWorkings | null = null;
   private n8ao: OcclusionWorkings | null = null;
+  private glamarye: OcclusionWorkings | null = null;
   private fetched: Promise<void> | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
@@ -212,6 +256,7 @@ export class AmbientOcclusion {
           brightness: { value: null },
           spare: { value: this.settings.spare },
           sunlit: { value: this.settings.sunlit },
+          headroom: { value: 1 },
         },
         vertexShader: /* glsl */ `
           varying vec2 vUv;
@@ -226,6 +271,7 @@ export class AmbientOcclusion {
           uniform sampler2D brightness;
           uniform float spare;
           uniform float sunlit;
+          uniform float headroom;
           varying vec2 vUv;
 
           void main() {
@@ -236,7 +282,7 @@ export class AmbientOcclusion {
             light = mix(light, 1.0, spare * inSun);
             // The canvas holds colours encoded for display, where taking away
             // a share of the light takes away a smaller share of the number.
-            gl_FragColor = vec4(vec3(pow(light, 1.0 / 2.2)), 1.0);
+            gl_FragColor = vec4(vec3(pow(light, 1.0 / 2.2) / headroom), 1.0);
           }`,
         // Multiplies what is already on the canvas.
         blending: CustomBlending,
@@ -250,9 +296,15 @@ export class AmbientOcclusion {
 
   /** The way the settings ask for, or nothing while it is still on its way. */
   private workings(scene: Scene, camera: PerspectiveCamera): OcclusionWorkings | null {
-    if (this.settings.method !== "n8ao") return (this.gtao ??= new Gtao(scene, camera));
-    if (!this.n8ao) void this.fetch(scene, camera);
-    return this.n8ao;
+    switch (this.settings.method) {
+      case "n8ao":
+        if (!this.n8ao) void this.fetch(scene, camera);
+        return this.n8ao;
+      case "glamarye":
+        return (this.glamarye ??= new Glamarye(scene, camera));
+      default:
+        return (this.gtao ??= new Gtao(scene, camera));
+    }
   }
 
   private fetch(scene: Scene, camera: PerspectiveCamera): Promise<void> {
@@ -301,7 +353,14 @@ export class AmbientOcclusion {
     const { uniforms } = this.darken.material as ShaderMaterial;
     uniforms.occlusion.value = occlusion;
     uniforms.brightness.value = brightness;
-    uniforms.strength.value = settings.strength;
+    // Glamarye presses its darkening by `shade` as it works it out.
+    const glamarye = settings.method === "glamarye";
+    uniforms.strength.value = glamarye ? 1 : settings.strength;
+    // Its shine brightens, which a colour cannot hold. Halved, the colour is
+    // added twice, at the cost of coarser steps in the darkening.
+    const brighten = glamarye && settings.shine > 0;
+    uniforms.headroom.value = brighten ? 2 : 1;
+    this.darken.material.blendDst = brighten ? SrcColorFactor : ZeroFactor;
     uniforms.spare.value = settings.spare;
     uniforms.sunlit.value = settings.sunlit;
 
