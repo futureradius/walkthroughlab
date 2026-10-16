@@ -18,7 +18,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 - A drag let go of while moving throws the view: it coasts on, slowing to a stop, and the next touch on the view catches it. A finger that rests before lifting leaves the view where it is. With the device's reduced-motion setting on, it settles almost at once.
 - On a keyboard, W/S or the up/down arrows walk, A/D sidestep, and the left/right arrows turn.
 - A view tilted up or down returns to level once the viewer sets off, unless a drag is being held.
-- Two fingers on the view zoom: spreading them zooms in towards the spot between them, which stays under the fingers, and moving them together drags the view as one finger does. On a computer the mouse wheel, or pinching on a trackpad, zooms towards the pointer. Zoom goes from 1× to 4×, stays while the viewer stands still or holds the view, and wears off as they walk, together with the view levelling out. Zoomed in, the joystick and the arrow keys turn more slowly.
+- Two fingers on the view zoom: spreading them zooms in towards the spot between them, which stays under the fingers, and moving them together drags the view as one finger does. On a computer the mouse wheel, or pinching on a trackpad, zooms towards the pointer. Zoom goes from 1× to 2.5×, stays while the viewer stands still or holds the view, and wears off as they walk, together with the view levelling out. Zoomed in, the joystick and the arrow keys turn more slowly.
 
 ## Running it
 

@@ -23,15 +23,23 @@ the panel's values, ready to paste over the one below.
 - samples: 12
 - detail: 0.5
 - smooth: yes
-- blur: off
+- blur: box2
 - falloff: 3
 - edges: no
+- shade: 1.65
+- shine: 0.5
+- radius: 0.6
+- points: 4
+- shape: 1432
+- gap: 1.04
+- fade: 0.25
+- dither: no
 
 What they mean:
 
 - `on`: `no` leaves ambient occlusion out altogether.
 - `method`: how the darkening is worked out. `n8ao` is N8AO; `gtao` is the
-  one three.js brings.
+  one three.js brings; `glamarye` is the one from Glamarye Fast Effects.
 - `reach`: how far a surface looks for neighbours that shade it, in metres.
 - `strength`: how hard the darkening is pressed. 0 is none, 1 is as worked
   out, more is darker.
@@ -54,3 +62,21 @@ What they mean:
 - `edges`: with `n8ao` only, and a `detail` of 0.5 or less. `yes` enlarges
   the darkening with an eye on where surfaces end, so it stays within their
   edges. It costs more: the depths it goes by are drawn at twice the detail.
+- `shade`: with `glamarye` only, in place of `strength`. How deep hollows
+  are shaded, from 0 to 1 and more.
+- `shine`: with `glamarye` only. How much bumps facing the viewpoint are
+  brightened, from 0.
+- `radius`: with `glamarye` only, in place of `reach`. How far around each
+  pixel it looks, as a share of the screen: 1 is a hundredth of its diagonal.
+- `points`: with `glamarye` only, in place of `samples`. How many spots on a
+  circle around each pixel are checked, from 2 to 16.
+- `shape`: with `glamarye` only. How deep a hollow must be before it is
+  shaded, from 1 to 4000.
+- `gap`: with `glamarye` only. How much nearer or farther a spot may be and
+  still count, in hundredths of the depth. Smaller leaves less of a dark
+  outline around whatever stands in front of a wall.
+- `fade`: with `glamarye` only. The depth at which the darkening has faded
+  out; 0.5 is about 100 m.
+- `dither`: with `glamarye` only. `yes` uses four sizes of circle in a
+  pattern of 2 by 4 pixels instead of two in a checkerboard; `box4` blurs it
+  away, `box2` does not.

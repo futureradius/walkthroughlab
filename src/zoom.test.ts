@@ -183,18 +183,18 @@ describe("zoom", () => {
 
   it("stays while the view keeps its tilt", () => {
     const zoom = new Zoom();
-    zoom.pinch(MIDDLE, 3);
+    zoom.pinch(MIDDLE, 2);
     zoom.step(start, FRAME, 1, UPRIGHT);
     for (let frames = 0; frames < 600; frames++) zoom.step(start, FRAME, 1, UPRIGHT);
-    expect(zoom.level).toBeCloseTo(3);
+    expect(zoom.level).toBeCloseTo(2);
   });
 
   it("wears off by the share the view levels out by, without turning", () => {
     const zoom = new Zoom();
-    zoom.pinch(MIDDLE, 3);
+    zoom.pinch(MIDDLE, 2);
     zoom.step(start, FRAME, 1, UPRIGHT);
     expect(zoom.step(start, FRAME, 0.5, UPRIGHT)).toEqual(start);
-    expect(zoom.level).toBeCloseTo(Math.sqrt(3));
+    expect(zoom.level).toBeCloseTo(Math.sqrt(2));
     for (let frames = 0; frames < 30; frames++) zoom.step(start, FRAME, 0.5, UPRIGHT);
     expect(zoom.level).toBeCloseTo(1);
   });

@@ -18,7 +18,7 @@ export interface ZoomSettings {
 }
 
 export const ZOOM: ZoomSettings = {
-  max: 4,
+  max: 2.5,
   upright: 90,
   sideways: 60,
   pinch: 1,
