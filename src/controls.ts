@@ -1,3 +1,4 @@
+import { COASTING, glideOf, type CoastingSettings } from "./coasting";
 import { IDLE, type Intent } from "./motion";
 
 /** Joystick deflection, each axis in [-1, 1]. */
@@ -22,6 +23,8 @@ export interface Keys {
 export interface Look {
   /** Whether a drag is being held. */
   held: boolean;
+  /** Whether the view is coasting after a drag. */
+  coasting: boolean;
   /** Radians the view turned to the right. */
   right: number;
   /** Radians the view tilted up. */
@@ -30,27 +33,39 @@ export interface Look {
 
 const unit = (value: number) => Math.max(-1, Math.min(1, value));
 
+/** Share of a sideways push below which the joystick has eased back to turning. */
+const TURNING = 0.01;
+
 /**
  * Combines the joystick, the keyboard and free look into what the viewer is
- * asking for. On its own a sideways joystick turns; during free look it
- * sidesteps instead, as with two thumbs in a phone game. Zoomed in, the
- * joystick and the keys turn the view more slowly, by as much as it is
- * zoomed in, so the scene crosses the screen no faster than without zoom.
+ * asking for. On its own a sideways joystick turns; during free look and
+ * while the view coasts after it, it sidesteps instead, as with two thumbs in
+ * a phone game. Zoomed in, the joystick and the keys turn the view more
+ * slowly, by as much as it is zoomed in, so the scene crosses the screen no
+ * faster than without zoom.
  */
 export class Controls {
-  private sidestepping = false;
+  /** The share of a sideways push that sidesteps; the rest turns. */
+  private sidestepping = 0;
 
-  read(stick: Stick, keys: Keys, look: Look, zoom = 1): Intent {
-    // Sidestepping starts with a look drag but outlasts it until the joystick
-    // is let go, so lifting the look thumb never turns a sidestep into a spin.
-    if (look.held) this.sidestepping = true;
-    else if (stick.x === 0 && stick.y === 0) this.sidestepping = false;
+  constructor(private readonly coasting: CoastingSettings = { ...COASTING }) {}
+
+  /** What the viewer asks for this frame, `seconds` after the last. */
+  read(stick: Stick, keys: Keys, look: Look, seconds: number, zoom = 1): Intent {
+    // Once the view rests, a joystick still pushed sideways eases from
+    // sidestepping to turning as softly as coasting glides, so a viewer who
+    // keeps hold of it is never stuck sidestepping, nor flung into a spin.
+    // Let go, it is back to turning at once.
+    if (look.held || look.coasting) this.sidestepping = 1;
+    else if (stick.x === 0 && stick.y === 0) this.sidestepping = 0;
+    else this.sidestepping *= Math.exp(-glideOf(this.coasting) * seconds);
+    if (this.sidestepping < TURNING) this.sidestepping = 0;
 
     return {
       ...IDLE,
       walk: unit(stick.y + keys.walk),
-      sidestep: unit((this.sidestepping ? stick.x : 0) + keys.sidestep),
-      turn: unit((this.sidestepping ? 0 : stick.x) + keys.turn) / zoom,
+      sidestep: unit(stick.x * this.sidestepping + keys.sidestep),
+      turn: unit(stick.x * (1 - this.sidestepping) + keys.turn) / zoom,
       lookRight: look.right,
       lookUp: look.up,
       looking: look.held,

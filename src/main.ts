@@ -179,7 +179,7 @@ const joystick = new Joystick(document.body);
 const keyboard = new Keyboard();
 const freeLook = new FreeLook(canvas, coasting, zoom);
 zoom.listen(canvas);
-const controls = new Controls();
+const controls = new Controls(coasting.settings);
 let viewpoint = place.start;
 let eyes = viewpoint.floor + EYE_HEIGHT;
 let frames = 0;
@@ -199,6 +199,7 @@ renderer.setAnimationLoop((now) => {
       joystick.stick,
       keyboard.keys,
       freeLook.take(radiansPerPixel, seconds),
+      seconds,
       zoom.level,
     ),
     forwardSpeed: running.step(joystick, keyboard.running, seconds),

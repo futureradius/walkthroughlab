@@ -41,7 +41,7 @@ The position and direction of the viewer's eyes within the space.
 _Avoid_: Camera, player, character
 
 **Joystick**:
-The single on-screen control that moves the viewpoint through a walkthrough: pushing it forward or back walks, and pushing it sideways turns on the spot. During free look, pushing it sideways sidesteps instead.
+The single on-screen control that moves the viewpoint through a walkthrough: pushing it forward or back walks, and pushing it sideways turns on the spot. During free look, and while the view coasts after it, pushing it sideways sidesteps instead; once the view comes to rest, it eases back to turning.
 _Avoid_: Gamepad, controller, D-pad, thumbstick
 
 **Running**:

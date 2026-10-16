@@ -132,6 +132,7 @@ export class FreeLook {
     const coasted = this.coasting.step(seconds);
     const look = {
       held: this.fingers.size > 0,
+      coasting: this.coasting.moving,
       right: -this.draggedX * radiansPerPixel + coasted.right,
       up: this.draggedY * radiansPerPixel + coasted.up,
     };

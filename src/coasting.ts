@@ -27,6 +27,11 @@ export const COASTING: CoastingSettings = {
   reducedGrip: 3.5,
 };
 
+/** The brake that is always on, per second, as reduced motion picks it. */
+export function glideOf(settings: CoastingSettings): number {
+  return settings.reduced ? settings.reducedGlide : settings.glide;
+}
+
 /** How long before letting go a drag still counts towards the throw, in milliseconds. */
 export const THROW_WINDOW = 100;
 /** Slowest release that throws the view, in radians per second. */
@@ -66,6 +71,11 @@ export class Coasting {
 
   constructor(readonly settings: CoastingSettings = { ...COASTING }) {}
 
+  /** Whether the view is still carrying on. */
+  get moving(): boolean {
+    return this.speed > 0 && this.settings.on;
+  }
+
   /** Let go of the view while it turns at these radians per second. */
   throw(right: number, up: number) {
     const speed = Math.hypot(right, up);
@@ -86,9 +96,8 @@ export class Coasting {
       this.speed = 0;
       return { right: 0, up: 0 };
     }
-    const { reduced } = this.settings;
-    const glide = reduced ? this.settings.reducedGlide : this.settings.glide;
-    const grip = reduced ? this.settings.reducedGrip : this.settings.grip;
+    const glide = glideOf(this.settings);
+    const grip = this.settings.reduced ? this.settings.reducedGrip : this.settings.grip;
 
     // Slowing by glide × speed + grip × speed², worked out exactly so the
     // view ends up in the same place whatever the frame rate.
