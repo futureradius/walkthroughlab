@@ -9,15 +9,17 @@ const DEAD_ZONE = 0.12;
  */
 export class Joystick {
   readonly stick: Stick = { x: 0, y: 0 };
+  /** Where the knob sits, as a share of its reach, before the dead zone. */
+  readonly knob: Stick = { x: 0, y: 0 };
 
   private readonly base = document.createElement("div");
-  private readonly knob = document.createElement("div");
+  private readonly handle = document.createElement("div");
   private pointerId: number | null = null;
 
   constructor(parent: HTMLElement) {
     this.base.className = "joystick";
-    this.knob.className = "joystick__knob";
-    this.base.append(this.knob);
+    this.handle.className = "joystick__knob";
+    this.base.append(this.handle);
     parent.append(this.base);
 
     this.base.addEventListener("pointerdown", (event) => {
@@ -40,7 +42,7 @@ export class Joystick {
   private follow(event: PointerEvent) {
     event.preventDefault();
     const rect = this.base.getBoundingClientRect();
-    const travel = (rect.width - this.knob.offsetWidth) / 2;
+    const travel = (rect.width - this.handle.offsetWidth) / 2;
     let x = (event.clientX - (rect.left + rect.width / 2)) / travel;
     let y = (event.clientY - (rect.top + rect.height / 2)) / travel;
     const length = Math.hypot(x, y);
@@ -48,7 +50,9 @@ export class Joystick {
       x /= length;
       y /= length;
     }
-    this.knob.style.transform = `translate(${x * travel}px, ${y * travel}px)`;
+    this.handle.style.transform = `translate(${x * travel}px, ${y * travel}px)`;
+    this.knob.x = x;
+    this.knob.y = -y;
 
     // Rescale so speed ramps up smoothly from the edge of the dead zone.
     const reach = Math.min(length, 1);
@@ -62,6 +66,8 @@ export class Joystick {
     this.pointerId = null;
     this.stick.x = 0;
     this.stick.y = 0;
-    this.knob.style.transform = "";
+    this.knob.x = 0;
+    this.knob.y = 0;
+    this.handle.style.transform = "";
   }
 }

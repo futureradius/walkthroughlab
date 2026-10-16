@@ -9,6 +9,7 @@ import {
   WALK_SPEED,
   WALKING_TURN_SPEED,
   withinLimits,
+  type Intent,
   type Viewpoint,
 } from "./motion";
 
@@ -96,6 +97,29 @@ describe("advance", () => {
   it("is no faster walking diagonally than straight", () => {
     const next = advance(start, { ...IDLE, walk: 1, sidestep: 1 }, 1, room);
     expect(Math.hypot(next.x, next.z)).toBeCloseTo(WALK_SPEED);
+  });
+
+  describe("running", () => {
+    const run = (intent: Partial<Intent>) => ({ ...IDLE, forwardSpeed: 3.5, ...intent });
+
+    it("goes forward at the running speed", () => {
+      const next = advance(start, run({ walk: 1 }), 1, room);
+      expect(next.z).toBeCloseTo(-3.5);
+    });
+
+    it("walks backward and sidesteps at walking pace", () => {
+      expect(advance(start, run({ walk: -1 }), 1, room).z).toBeCloseTo(WALK_SPEED);
+      expect(advance(start, run({ sidestep: 1 }), 1, room).x).toBeCloseTo(WALK_SPEED);
+    });
+
+    it("turns slower than walking, by the same rule", () => {
+      const next = advance(start, run({ walk: 1, turn: 1 }), 0.1, room);
+      const pace = 3.5 / WALK_SPEED;
+      const expected =
+        STANDING_TURN_SPEED + (WALKING_TURN_SPEED - STANDING_TURN_SPEED) * pace;
+      expect(next.heading).toBeCloseTo(expected * 0.1);
+      expect(expected).toBeCloseTo(Math.PI / 4);
+    });
   });
 
   it("turns and tilts the view by a free look drag", () => {

@@ -4,6 +4,7 @@ import type { Keys } from "./controls";
 const WALK = { KeyW: 1, ArrowUp: 1, KeyS: -1, ArrowDown: -1 };
 const SIDESTEP = { KeyD: 1, KeyA: -1 };
 const TURN = { ArrowRight: 1, ArrowLeft: -1 };
+const RUN = { ShiftLeft: 1, ShiftRight: 1 };
 
 /** Tracks which movement keys are held. */
 export class Keyboard {
@@ -31,8 +32,13 @@ export class Keyboard {
     };
   }
 
+  /** Whether Shift is held while a key walks forward. */
+  get running(): boolean {
+    return this.axis(RUN) > 0 && this.axis(WALK) > 0;
+  }
+
   private moves(code: string): boolean {
-    return code in WALK || code in SIDESTEP || code in TURN;
+    return code in WALK || code in SIDESTEP || code in TURN || code in RUN;
   }
 
   private axis(codes: Record<string, number>): number {

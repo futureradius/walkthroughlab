@@ -15,8 +15,15 @@ import { FreeLook } from "./freelook";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
 import { advance, levelling, type Terrain, type Viewpoint } from "./motion";
+import { Running } from "./running";
 import { applySettings } from "./settings";
-import { addCoastingTuning, addOcclusionTuning, addTuning, addZoomTuning } from "./tuning";
+import {
+  addCoastingTuning,
+  addOcclusionTuning,
+  addRunningTuning,
+  addTuning,
+  addZoomTuning,
+} from "./tuning";
 import { Zoom } from "./zoom";
 
 const EYE_HEIGHT = 1.6;
@@ -154,10 +161,12 @@ const place = await enterTestEnvironment();
 // With reduced motion a thrown view is braked much harder.
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const coasting = new Coasting({ ...COASTING, reduced: reducedMotion.matches });
+const running = new Running();
 if (params.has("config")) {
   const tuning = addTuning(document.body);
   if (occlusion) addOcclusionTuning(tuning, occlusion.settings);
   addCoastingTuning(tuning, coasting.settings);
+  addRunningTuning(tuning, running.settings);
   addZoomTuning(tuning, zoom.settings);
 } else {
   // The panel has a switch for this instead, to try both brakes on one device.
@@ -185,12 +194,15 @@ renderer.setAnimationLoop((now) => {
   // One pixel covers this angle at the present zoom, so a dragged spot stays
   // under the finger.
   const radiansPerPixel = (camera.fov * Math.PI) / 180 / window.innerHeight;
-  const intent = controls.read(
-    joystick.stick,
-    keyboard.keys,
-    freeLook.take(radiansPerPixel, seconds),
-    zoom.level,
-  );
+  const intent = {
+    ...controls.read(
+      joystick.stick,
+      keyboard.keys,
+      freeLook.take(radiansPerPixel, seconds),
+      zoom.level,
+    ),
+    forwardSpeed: running.step(joystick, keyboard.running, seconds),
+  };
   viewpoint = advance(viewpoint, intent, seconds, place.terrain);
   viewpoint = zoom.step(viewpoint, seconds, levelling(intent, seconds), screenSize());
   camera.fov = zoom.fov(screenSize());

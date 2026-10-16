@@ -1,6 +1,7 @@
 import { BLURS } from "./blur";
 import type { CoastingSettings } from "./coasting";
 import type { OcclusionSettings } from "./occlusion";
+import type { RunningSettings } from "./running";
 import { writeSettings } from "./settings";
 import type { ZoomSettings } from "./zoom";
 
@@ -236,6 +237,57 @@ export function addCoastingTuning(parent: HTMLElement, settings: CoastingSetting
       settings.reducedGrip,
       perRadian,
       (value) => (settings.reducedGrip = value),
+    ),
+  );
+  parent.append(panel);
+}
+
+/**
+ * Add a section that changes how fast running goes and how readily the
+ * joystick starts it, to find by feel what neither starts it by chance nor
+ * takes practice. What suits goes into running.ts by hand: it is the same for
+ * every environment.
+ */
+export function addRunningTuning(parent: HTMLElement, settings: RunningSettings) {
+  const panel = element("details", {});
+  const share = (value: number) => `${Math.round(value * 100)} %`;
+  const seconds = (value: number) => `${value.toFixed(2)} s`;
+  panel.append(
+    element("summary", { textContent: "Running" }),
+    slider(
+      "Speed",
+      { min: 1.4, max: 5, step: 0.1 },
+      settings.speed,
+      (value) => `${value.toFixed(1)} m/s`,
+      (value) => (settings.speed = value),
+    ),
+    slider(
+      "Push past",
+      { min: 0.3, max: 1, step: 0.05 },
+      settings.push,
+      share,
+      (value) => (settings.push = value),
+    ),
+    slider(
+      "Dip inside",
+      { min: 0.1, max: 0.9, step: 0.05 },
+      settings.dip,
+      share,
+      (value) => (settings.dip = value),
+    ),
+    slider(
+      "Time for push and dip",
+      { min: 0.1, max: 1, step: 0.05 },
+      settings.time,
+      seconds,
+      (value) => (settings.time = value),
+    ),
+    slider(
+      "Ease",
+      { min: 0, max: 1, step: 0.05 },
+      settings.ease,
+      seconds,
+      (value) => (settings.ease = value),
     ),
   );
   parent.append(panel);

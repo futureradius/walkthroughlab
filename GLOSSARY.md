@@ -44,6 +44,10 @@ _Avoid_: Camera, player, character
 The single on-screen control that moves the viewpoint through a walkthrough: pushing it forward or back walks, and pushing it sideways turns on the spot. During free look, pushing it sideways sidesteps instead.
 _Avoid_: Gamepad, controller, D-pad, thumbstick
 
+**Running**:
+Moving the viewpoint forward faster than walking pace. On the joystick the viewer starts it by pushing forward, back towards the middle and forward again, each quickly, and it lasts until they slow to walking pace; on a keyboard, they hold Shift.
+_Avoid_: Sprint, dash, boost, fast travel
+
 **Free look**:
 Turning the view, including up and down, by dragging one or two fingers anywhere outside the joystick. A drag let go of while moving ends in coasting.
 _Avoid_: Camera control, orbit, mouse look
