@@ -2,6 +2,7 @@ import { BLURS } from "./blur";
 import type { CoastingSettings } from "./coasting";
 import type { OcclusionSettings } from "./occlusion";
 import { writeSettings } from "./settings";
+import type { ZoomSettings } from "./zoom";
 
 const element = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -237,5 +238,68 @@ export function addCoastingTuning(parent: HTMLElement, settings: CoastingSetting
       (value) => (settings.reducedGrip = value),
     ),
   );
+  parent.append(panel);
+}
+
+/**
+ * Add a section that changes how far and how readily the view zooms, and the
+ * field of view it zooms from. Its button copies the settings as the
+ * environment's settings file lists them.
+ */
+export function addZoomTuning(parent: HTMLElement, settings: ZoomSettings) {
+  const panel = element("details", {});
+  const degrees = (value: number) => `${value}°`;
+  panel.append(
+    element("summary", { textContent: "Zoom" }),
+    slider(
+      "Max zoom",
+      { min: 1, max: 10, step: 0.5 },
+      settings.max,
+      (value) => `${value}×`,
+      (value) => (settings.max = value),
+    ),
+    slider(
+      "Field of view, upright",
+      { min: 30, max: 120, step: 1 },
+      settings.upright,
+      degrees,
+      (value) => (settings.upright = value),
+    ),
+    slider(
+      "Field of view, sideways",
+      { min: 30, max: 120, step: 1 },
+      settings.sideways,
+      degrees,
+      (value) => (settings.sideways = value),
+    ),
+    slider(
+      "Pinch strength",
+      { min: 0.25, max: 3, step: 0.05 },
+      settings.pinch,
+      (value) => value.toFixed(2),
+      (value) => (settings.pinch = value),
+    ),
+    slider(
+      "Scroll strength",
+      { min: 1.05, max: 2, step: 0.05 },
+      settings.scroll,
+      (value) => `${value.toFixed(2)}×`,
+      (value) => (settings.scroll = value),
+    ),
+  );
+  const copy = element("button", {
+    className: "tuning__copy",
+    type: "button",
+    textContent: "Copy for the settings file",
+  });
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(writeSettings("Zoom", { ...settings }));
+      copy.textContent = "Copied";
+    } catch {
+      copy.textContent = "Could not copy";
+    }
+  });
+  panel.append(copy);
   parent.append(panel);
 }

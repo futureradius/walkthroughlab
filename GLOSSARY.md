@@ -45,12 +45,16 @@ The single on-screen control that moves the viewpoint through a walkthrough: pus
 _Avoid_: Gamepad, controller, D-pad, thumbstick
 
 **Free look**:
-Turning the view, including up and down, by dragging anywhere outside the joystick. A drag let go of while moving ends in coasting.
+Turning the view, including up and down, by dragging one or two fingers anywhere outside the joystick. A drag let go of while moving ends in coasting.
 _Avoid_: Camera control, orbit, mouse look
 
 **Coasting**:
 The view carrying on turning after a free-look drag is let go, slowing to a stop unless the viewer catches it by touching the view.
 _Avoid_: Inertia, momentum, fling, kinetic scrolling
+
+**Zoom**:
+Narrowing the view to bring distant detail closer, without the viewpoint moving. The viewer pinches or scrolls towards a spot, which stays under their fingers or pointer. It stays while they stand still or hold the view, and wears off as they walk, like the view levelling out.
+_Avoid_: Field of view, FOV, dolly, magnify
 
 **Scatter**:
 Many copies of one small thing, such as a grass tuft, a pebble or a fallen leaf, spread over a surface by the author.

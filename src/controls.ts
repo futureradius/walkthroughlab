@@ -33,12 +33,14 @@ const unit = (value: number) => Math.max(-1, Math.min(1, value));
 /**
  * Combines the joystick, the keyboard and free look into what the viewer is
  * asking for. On its own a sideways joystick turns; during free look it
- * sidesteps instead, as with two thumbs in a phone game.
+ * sidesteps instead, as with two thumbs in a phone game. Zoomed in, the
+ * joystick and the keys turn the view more slowly, by as much as it is
+ * zoomed in, so the scene crosses the screen no faster than without zoom.
  */
 export class Controls {
   private sidestepping = false;
 
-  read(stick: Stick, keys: Keys, look: Look): Intent {
+  read(stick: Stick, keys: Keys, look: Look, zoom = 1): Intent {
     // Sidestepping starts with a look drag but outlasts it until the joystick
     // is let go, so lifting the look thumb never turns a sidestep into a spin.
     if (look.held) this.sidestepping = true;
@@ -48,7 +50,7 @@ export class Controls {
       ...IDLE,
       walk: unit(stick.y + keys.walk),
       sidestep: unit((this.sidestepping ? stick.x : 0) + keys.sidestep),
-      turn: unit((this.sidestepping ? 0 : stick.x) + keys.turn),
+      turn: unit((this.sidestepping ? 0 : stick.x) + keys.turn) / zoom,
       lookRight: look.right,
       lookUp: look.up,
       looking: look.held,

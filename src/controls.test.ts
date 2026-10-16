@@ -53,6 +53,14 @@ describe("controls", () => {
     expect(intent.walk).toBe(1);
   });
 
+  it("turns more slowly, by as much as the view is zoomed, but walks as fast", () => {
+    const pushed = { x: 1, y: 1 };
+    const keys: Keys = { walk: 0, sidestep: 0, turn: -1 };
+    expect(new Controls().read(pushed, noKeys, notLooking, 4).turn).toBe(0.25);
+    expect(new Controls().read(pushed, noKeys, notLooking, 4).walk).toBe(1);
+    expect(new Controls().read(centred, keys, notLooking, 2).turn).toBe(-0.5);
+  });
+
   it("passes on how far free look turned the view", () => {
     const intent = new Controls().read(centred, noKeys, { held: true, right: 0.2, up: -0.1 });
     expect(intent.lookRight).toBe(0.2);

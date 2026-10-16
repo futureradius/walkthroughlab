@@ -67,6 +67,16 @@ export const LEVELLING_RATE = 4;
 const clamp = (value: number, limit: number) =>
   Math.max(-limit, Math.min(limit, value));
 
+/**
+ * The share of its tilt the view keeps this frame: all of it unless the
+ * viewer moves without holding a free look drag. Zoom wears off by the same
+ * share.
+ */
+export function levelling(intent: Intent, seconds: number): number {
+  const moving = intent.walk !== 0 || intent.sidestep !== 0;
+  return moving && !intent.looking ? Math.exp(-LEVELLING_RATE * seconds) : 1;
+}
+
 /** A flat floor at height zero, walled in by a rectangle. */
 export function withinLimits(limits: Limits): Terrain {
   return (_from, x, z) => ({
@@ -98,10 +108,7 @@ export function advance(
     STANDING_TURN_SPEED + (WALKING_TURN_SPEED - STANDING_TURN_SPEED) * pace;
   const heading =
     from.heading + intent.turn * turnSpeed * seconds + intent.lookRight;
-  let pitch = clamp(from.pitch + intent.lookUp, MAX_PITCH);
-  if (pace > 0 && !intent.looking) {
-    pitch *= Math.exp(-LEVELLING_RATE * seconds);
-  }
+  const pitch = clamp(from.pitch + intent.lookUp, MAX_PITCH) * levelling(intent, seconds);
 
   const forward = walk * WALK_SPEED * seconds;
   const right = sidestep * WALK_SPEED * seconds;

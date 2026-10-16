@@ -3,6 +3,7 @@ import {
   advance,
   IDLE,
   LEVELLING_RATE,
+  levelling,
   MAX_PITCH,
   STANDING_TURN_SPEED,
   WALK_SPEED,
@@ -141,6 +142,16 @@ describe("advance", () => {
     it("keeps the tilt while walking with a free look drag held", () => {
       const next = advance(tilted, { ...IDLE, walk: 1, looking: true }, 1, room);
       expect(next.pitch).toBe(0.8);
+    });
+
+    it("says what share of the tilt is kept, for zoom to wear off by", () => {
+      expect(levelling(IDLE, 1)).toBe(1);
+      expect(levelling(push(1, 0), 1)).toBe(1);
+      expect(levelling({ ...IDLE, walk: 1, looking: true }, 1)).toBe(1);
+      expect(levelling(push(0, 1), 1)).toBeCloseTo(Math.exp(-LEVELLING_RATE));
+      expect(levelling({ ...IDLE, sidestep: -1 }, 0.5)).toBeCloseTo(
+        Math.exp(-LEVELLING_RATE / 2),
+      );
     });
   });
 });

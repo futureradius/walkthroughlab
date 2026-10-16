@@ -18,6 +18,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 - A drag let go of while moving throws the view: it coasts on, slowing to a stop, and the next touch on the view catches it. A finger that rests before lifting leaves the view where it is. With the device's reduced-motion setting on, it settles almost at once.
 - On a keyboard, W/S or the up/down arrows walk, A/D sidestep, and the left/right arrows turn.
 - A view tilted up or down returns to level once the viewer sets off, unless a drag is being held.
+- Two fingers on the view zoom: spreading them zooms in towards the spot between them, which stays under the fingers, and moving them together drags the view as one finger does. On a computer the mouse wheel, or pinching on a trackpad, zooms towards the pointer. Zoom goes from 1× to 4×, stays while the viewer stands still or holds the view, and wears off as they walk, together with the view levelling out. Zoomed in, the joystick and the arrow keys turn more slowly.
 
 ## Running it
 
@@ -28,6 +29,7 @@ Walk through an architectural space in the browser: https://futureradius.github.
 - The panel's "Coasting" section changes how hard a thrown view is braked: "Glide" is the brake that is always on, "Grip" the one that grows with speed. It can switch coasting off and behave as with reduced motion. What suits goes into `src/coasting.ts` by hand.
 - The "Ambient occlusion" section's "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, three.js's own ambient occlusion (`gtao`), and the fast ambient occlusion from [Glamarye Fast Effects for ReShade](https://github.com/rj200/Glamarye_Fast_Effects_for_ReShade) (`glamarye`). Rows marked "(glamarye)" tune only that one, under its own names and usual values; those marked "(not glamarye)" leave it alone.
 - The section's "Blur" (`blur` in the settings file) blurs the darkening a little once any method has worked it out, before it goes on the picture. It is `off` unless chosen. `box2` averages 2 by 2 of the darkening's pixels in one texture read, which washes out the checkerboard `glamarye` leaves; `box4` averages 4 by 4 in four reads, which also washes out its "Bigger dither"; `depth4` reads the same as `box4` plus four depths, and leaves out what lies much nearer or farther, so the darkening is not smeared over the edges of things. It works at the darkening's own size: at a "Detail" of 50 %, one of its pixels covers 2 by 2 of the screen's. It comes on top of "Smoothing", which `n8ao` and `gtao` still do first.
+- The panel's "Zoom" section changes "Max zoom", the field of view zoom counts from with the screen upright and sideways, how hard a pinch zooms ("Pinch strength", 1 follows the fingers exactly) and how far one step of the mouse wheel zooms ("Scroll strength"). Its "Copy for the settings file" button copies them as a `## Zoom` section, named `max`, `upright`, `sideways`, `pinch` and `scroll`.
 
 ## Settings for an environment
 

@@ -19,6 +19,8 @@ body {
   height: 100%;
   display: block;
   cursor: grab;
+  /* Pinching zooms the view, never the page. */
+  touch-action: none;
 }
 
 .joystick {

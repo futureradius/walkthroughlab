@@ -14,14 +14,12 @@ import { AmbientOcclusion } from "./occlusion";
 import { FreeLook } from "./freelook";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
-import { advance, type Terrain, type Viewpoint } from "./motion";
+import { advance, levelling, type Terrain, type Viewpoint } from "./motion";
 import { applySettings } from "./settings";
-import { addCoastingTuning, addOcclusionTuning, addTuning } from "./tuning";
+import { addCoastingTuning, addOcclusionTuning, addTuning, addZoomTuning } from "./tuning";
+import { Zoom } from "./zoom";
 
 const EYE_HEIGHT = 1.6;
-/** Vertical field of view in degrees: wide in portrait to offset the narrow screen. */
-const PORTRAIT_FOV = 90;
-const LANDSCAPE_FOV = 60;
 /** Old phones report pixel ratios of 3 or more; rendering that many pixels is the main cost. */
 const MAX_PIXEL_RATIO = 2;
 /** Longest step simulated in one frame, so a stalled tab doesn't teleport the viewer. */
@@ -61,16 +59,19 @@ const renderer = new WebGLRenderer({
 });
 
 const scene = new Scene();
-const camera = new PerspectiveCamera(PORTRAIT_FOV, 1, 0.1, VIEW_DISTANCE);
+// Turning the screen keeps the zoom, counted from the field of view for its
+// new shape.
+const zoom = new Zoom();
+const screenSize = () => ({ width: window.innerWidth, height: window.innerHeight });
+const camera = new PerspectiveCamera(zoom.fov(screenSize()), 1, 0.1, VIEW_DISTANCE);
 camera.rotation.order = "YXZ";
 
 function resize() {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const { width, height } = screenSize();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
-  camera.fov = camera.aspect < 1 ? PORTRAIT_FOV : LANDSCAPE_FOV;
+  camera.fov = zoom.fov(screenSize());
   camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
@@ -101,6 +102,10 @@ async function enterTestEnvironment(): Promise<Place> {
     scene.add(environment.visible);
     scene.background = environment.skyPicture;
     scene.environment = environment.skyLight;
+    const zoomRefused = applySettings(zoom.settings, environment.settings.zoom);
+    if (zoomRefused.length > 0) {
+      console.warn(`The settings file's ${zoomRefused.join(", ")} under Zoom could not be used.`);
+    }
     if (occlusion) {
       occlusion.bakedLight = environment.bakedLight ?? null;
       const refused = applySettings(
@@ -153,6 +158,7 @@ if (params.has("config")) {
   const tuning = addTuning(document.body);
   if (occlusion) addOcclusionTuning(tuning, occlusion.settings);
   addCoastingTuning(tuning, coasting.settings);
+  addZoomTuning(tuning, zoom.settings);
 } else {
   // The panel has a switch for this instead, to try both brakes on one device.
   reducedMotion.addEventListener("change", () => {
@@ -162,7 +168,8 @@ if (params.has("config")) {
 
 const joystick = new Joystick(document.body);
 const keyboard = new Keyboard();
-const freeLook = new FreeLook(canvas, coasting);
+const freeLook = new FreeLook(canvas, coasting, zoom);
+zoom.listen(canvas);
 const controls = new Controls();
 let viewpoint = place.start;
 let eyes = viewpoint.floor + EYE_HEIGHT;
@@ -175,14 +182,19 @@ renderer.setAnimationLoop((now) => {
   const seconds = Math.min((now - previous) / 1000, MAX_STEP_SECONDS);
   previous = now;
 
-  // One pixel covers this angle, so a dragged spot stays under the finger.
+  // One pixel covers this angle at the present zoom, so a dragged spot stays
+  // under the finger.
   const radiansPerPixel = (camera.fov * Math.PI) / 180 / window.innerHeight;
   const intent = controls.read(
     joystick.stick,
     keyboard.keys,
     freeLook.take(radiansPerPixel, seconds),
+    zoom.level,
   );
   viewpoint = advance(viewpoint, intent, seconds, place.terrain);
+  viewpoint = zoom.step(viewpoint, seconds, levelling(intent, seconds), screenSize());
+  camera.fov = zoom.fov(screenSize());
+  camera.updateProjectionMatrix();
   eyes +=
     (viewpoint.floor + EYE_HEIGHT - eyes) * Math.min(1, seconds * EYE_CATCH_UP);
   camera.position.set(viewpoint.x, eyes, viewpoint.z);
