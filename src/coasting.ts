@@ -6,6 +6,11 @@ export interface CoastingSettings {
   glide: number;
   /** The brake that grows with speed and tames a fierce throw, per radian. */
   grip: number;
+  /**
+   * Radians per second, as seen on screen, below which a coasting view starts
+   * handing a sideways joystick back from sidestepping to turning.
+   */
+  handover: number;
   /** Whether the device asks for reduced motion, which swaps in the two below. */
   reduced: boolean;
   reducedGlide: number;
@@ -16,12 +21,15 @@ export interface CoastingSettings {
  * The usual brakes, tuned by hand on a phone. An ordinary throw carries
  * about a fifth of a turn and the hardest over half of one, at rest in about
  * a second and a half. With reduced motion the view settles within a few
- * degrees and a third of a second.
+ * degrees and a third of a second. The joystick's handover starts where the
+ * slowest throw does, so it is well under way by the time the view looks
+ * still.
  */
 export const COASTING: CoastingSettings = {
   on: true,
   glide: 3.5,
   grip: 0.1,
+  handover: 0.3,
   reduced: false,
   reducedGlide: 14,
   reducedGrip: 3.5,
@@ -71,9 +79,9 @@ export class Coasting {
 
   constructor(readonly settings: CoastingSettings = { ...COASTING }) {}
 
-  /** Whether the view is still carrying on. */
-  get moving(): boolean {
-    return this.speed > 0 && this.settings.on;
+  /** Radians per second the view carries on at; zero once it rests. */
+  get turning(): number {
+    return this.settings.on ? this.speed : 0;
   }
 
   /** Let go of the view while it turns at these radians per second. */

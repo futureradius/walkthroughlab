@@ -45,7 +45,7 @@ describe("free look", () => {
     expect(dragged.held).toBe(false);
     const coasted = look.take(RADIANS_PER_PIXEL, FRAME);
     expect(coasted.held).toBe(false);
-    expect(coasted.coasting).toBe(true);
+    expect(coasted.coasting).toBeGreaterThan(0);
     expect(coasted.right).toBeGreaterThan(0);
     expect(coasted.right).toBeLessThan(2000 * RADIANS_PER_PIXEL * FRAME);
   });
@@ -56,7 +56,7 @@ describe("free look", () => {
     look.take(RADIANS_PER_PIXEL, FRAME);
     const rested = look.take(RADIANS_PER_PIXEL, FRAME);
     expect(rested.right).toBe(0);
-    expect(rested.coasting).toBe(false);
+    expect(rested.coasting).toBe(0);
   });
 
   it("is caught by the next touch", () => {

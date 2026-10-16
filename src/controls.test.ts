@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { COASTING } from "./coasting";
+import { COASTING, Coasting } from "./coasting";
 import { Controls, type Keys, type Look } from "./controls";
 
 const noKeys: Keys = { walk: 0, sidestep: 0, turn: 0 };
-const notLooking: Look = { held: false, coasting: false, right: 0, up: 0 };
-const looking: Look = { held: true, coasting: false, right: 0, up: 0 };
-const coasting: Look = { held: false, coasting: true, right: 0, up: 0 };
+const notLooking: Look = { held: false, coasting: 0, right: 0, up: 0 };
+const looking: Look = { held: true, coasting: 0, right: 0, up: 0 };
+const coasting: Look = { held: false, coasting: 1, right: 0, up: 0 };
 const centred = { x: 0, y: 0 };
 const pushedRight = { x: 1, y: 0 };
 const frame = 1 / 60;
@@ -32,7 +32,7 @@ describe("controls", () => {
     expect(intent.turn).toBe(0);
   });
 
-  it("sidesteps while the view coasts, even pushed afresh", () => {
+  it("sidesteps while the view coasts fast, even pushed afresh", () => {
     const controls = new Controls();
     controls.read(pushedRight, noKeys, looking, frame);
     controls.read(centred, noKeys, coasting, frame);
@@ -51,6 +51,36 @@ describe("controls", () => {
     const later = holdRight(controls, 2);
     expect(later.sidestep).toBe(0);
     expect(later.turn).toBe(1);
+  });
+
+  it("hands over as a thrown view slows, well before it rests", () => {
+    const view = new Coasting();
+    const controls = new Controls(view.settings);
+    controls.read(pushedRight, noKeys, looking, frame);
+    view.throw(4.4, 0);
+    let share = 1;
+    let rested = false;
+    for (let at = 0; at < 3 && !rested; at += frame) {
+      view.step(frame);
+      const look = { held: false, coasting: view.turning, right: 0, up: 0 };
+      share = controls.read(pushedRight, noKeys, look, frame).sidestep;
+      if (view.turning > COASTING.handover) expect(share).toBe(1);
+      if (view.turning > 0 && view.turning < 0.1) expect(share).toBeLessThan(0.4);
+      rested = view.turning === 0;
+    }
+    expect(share).toBeLessThan(0.15);
+    expect(holdRight(controls, 1).turn).toBe(1);
+  });
+
+  it("waits for the coast to look as slow when the view is zoomed in", () => {
+    const slow: Look = { held: false, coasting: 0.15, right: 0, up: 0 };
+    const share = (zoom: number) => {
+      const controls = new Controls();
+      controls.read(centred, noKeys, slow, frame, zoom);
+      return controls.read(pushedRight, noKeys, slow, frame, zoom).sidestep;
+    };
+    expect(share(1)).toBeCloseTo(0.5);
+    expect(share(2)).toBe(1);
   });
 
   it("eases as softly as coasting glides, following its settings", () => {
@@ -119,7 +149,7 @@ describe("controls", () => {
     const intent = new Controls().read(
       centred,
       noKeys,
-      { held: true, coasting: false, right: 0.2, up: -0.1 },
+      { held: true, coasting: 0, right: 0.2, up: -0.1 },
       frame,
     );
     expect(intent.lookRight).toBe(0.2);

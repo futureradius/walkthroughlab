@@ -223,6 +223,13 @@ export function addCoastingTuning(parent: HTMLElement, settings: CoastingSetting
       perRadian,
       (value) => (settings.grip = value),
     ),
+    slider(
+      "Handover",
+      { min: 0.05, max: 2, step: 0.05 },
+      settings.handover,
+      (value) => `${value.toFixed(2)} rad/s`,
+      (value) => (settings.handover = value),
+    ),
     tick("As with reduced motion", settings.reduced, (value) => (settings.reduced = value)),
     slider(
       "Glide (reduced)",

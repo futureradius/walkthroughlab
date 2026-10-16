@@ -23,8 +23,8 @@ export interface Keys {
 export interface Look {
   /** Whether a drag is being held. */
   held: boolean;
-  /** Whether the view is coasting after a drag. */
-  coasting: boolean;
+  /** Radians per second the view coasts at after a drag; zero once it rests. */
+  coasting: number;
   /** Radians the view turned to the right. */
   right: number;
   /** Radians the view tilted up. */
@@ -52,13 +52,19 @@ export class Controls {
 
   /** What the viewer asks for this frame, `seconds` after the last. */
   read(stick: Stick, keys: Keys, look: Look, seconds: number, zoom = 1): Intent {
-    // Once the view rests, a joystick still pushed sideways eases from
-    // sidestepping to turning as softly as coasting glides, so a viewer who
-    // keeps hold of it is never stuck sidestepping, nor flung into a spin.
-    // Let go, it is back to turning at once.
-    if (look.held || look.coasting) this.sidestepping = 1;
-    else if (stick.x === 0 && stick.y === 0) this.sidestepping = 0;
-    else this.sidestepping *= Math.exp(-glideOf(this.coasting) * seconds);
+    // As the view slows to rest, a joystick still pushed sideways eases from
+    // sidestepping to turning, so a viewer who keeps hold of it is never
+    // stuck sidestepping, nor flung into a spin. Below the handover speed the
+    // share follows the coast down, and it fades no faster than coasting
+    // glides, also after the view rests or when no throw came at all. Let go,
+    // the joystick turns at once, or follows a coast still under way.
+    const coast = Math.min(1, (look.coasting * zoom) / this.coasting.handover);
+    if (look.held) this.sidestepping = 1;
+    else if (stick.x === 0 && stick.y === 0) this.sidestepping = coast;
+    else {
+      const faded = this.sidestepping * Math.exp(-glideOf(this.coasting) * seconds);
+      this.sidestepping = Math.max(coast, faded);
+    }
     if (this.sidestepping < TURNING) this.sidestepping = 0;
 
     return {
