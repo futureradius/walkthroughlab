@@ -1,10 +1,4 @@
-import { BLURS } from "./blur";
-import type { CoastingSettings } from "./coasting";
-import type { WalkingSettings } from "./motion";
-import type { OcclusionSettings } from "./occlusion";
-import type { RunningSettings } from "./running";
-import { writeSettings } from "./settings";
-import type { ZoomSettings } from "./zoom";
+import { shown, writeConfig, type Description, type Section, type SettingValue } from "./settings";
 
 const element = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -21,7 +15,7 @@ function tick(label: string, value: boolean, set: (value: boolean) => void) {
   return row;
 }
 
-function choice(label: string, options: string[], value: string, set: (value: string) => void) {
+function choice(label: string, options: readonly string[], value: string, set: (value: string) => void) {
   const row = element("label", { className: "tuning__row" });
   const select = document.createElement("select");
   for (const option of options) select.append(element("option", { textContent: option }));
@@ -54,370 +48,69 @@ function slider(
   return row;
 }
 
-/**
- * Add the panel that changes settings while walking. It starts empty; each
- * section added to it starts folded shut, to leave the view free.
- */
-export function addTuning(parent: HTMLElement): HTMLElement {
-  return parent.appendChild(element("div", { className: "tuning" }));
+/** The control that changes one setting, as its description says. */
+function control(description: Description, value: SettingValue, set: (value: SettingValue) => void) {
+  switch (description.kind) {
+    case "toggle":
+      return tick(description.label, value as boolean, set);
+    case "number":
+      return slider(description.label, description, value as number, description.show, set);
+    case "choice":
+      return choice(description.label, description.words, value as string, set);
+  }
 }
 
-/**
- * Add a section that changes ambient occlusion's settings while walking, to
- * find by feel and by frame rate which of them suit an environment and which
- * a device can afford. Its button copies them as the environment's settings
- * file lists them.
- */
-export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSettings) {
+/** A section of the panel, folded shut to leave the view free. */
+function addSection(parent: HTMLElement, section: Section) {
   const panel = element("details", {});
-  panel.append(
-    element("summary", { textContent: "Ambient occlusion" }),
-    tick("On", settings.on, (value) => (settings.on = value)),
-    tick("Only the darkening", settings.alone, (value) => (settings.alone = value)),
-    choice("Method", ["gtao", "n8ao", "glamarye"], settings.method, (value) => (settings.method = value)),
-    slider(
-      "Reach (not glamarye)",
-      { min: 0.05, max: 2, step: 0.05 },
-      settings.reach,
-      (value) => `${value.toFixed(2)} m`,
-      (value) => (settings.reach = value),
-    ),
-    slider(
-      "Strength (not glamarye)",
-      { min: 0, max: 8, step: 0.1 },
-      settings.strength,
-      (value) => value.toFixed(1),
-      (value) => (settings.strength = value),
-    ),
-    slider(
-      "Spare sunlit",
-      { min: 0, max: 1, step: 0.05 },
-      settings.spare,
-      (value) => `${Math.round(value * 100)} %`,
-      (value) => (settings.spare = value),
-    ),
-    slider(
-      "Sunlit above",
-      { min: 0.05, max: 0.4, step: 0.01 },
-      settings.sunlit,
-      (value) => value.toFixed(2),
-      (value) => (settings.sunlit = value),
-    ),
-    slider(
-      "Samples (not glamarye)",
-      { min: 4, max: 32, step: 4 },
-      settings.samples,
-      String,
-      (value) => (settings.samples = value),
-    ),
-    slider(
-      "Detail",
-      { min: 0.25, max: 1, step: 0.25 },
-      settings.detail,
-      (value) => `${value * 100} %`,
-      (value) => (settings.detail = value),
-    ),
-    tick("Smoothing (not glamarye)", settings.smooth, (value) => (settings.smooth = value)),
-    choice("Blur", BLURS, settings.blur, (value) => (settings.blur = value)),
-    slider(
-      "Falloff (n8ao)",
-      { min: 0.1, max: 5, step: 0.1 },
-      settings.falloff,
-      (value) => value.toFixed(1),
-      (value) => (settings.falloff = value),
-    ),
-    tick("Edge-aware (n8ao)", settings.edges, (value) => (settings.edges = value)),
-    slider(
-      "Shade (glamarye)",
-      { min: 0, max: 2, step: 0.05 },
-      settings.shade,
-      (value) => value.toFixed(2),
-      (value) => (settings.shade = value),
-    ),
-    slider(
-      "Shine (glamarye)",
-      { min: 0, max: 1, step: 0.05 },
-      settings.shine,
-      (value) => value.toFixed(2),
-      (value) => (settings.shine = value),
-    ),
-    slider(
-      "Radius (glamarye)",
-      { min: 0.1, max: 4, step: 0.05 },
-      settings.radius,
-      (value) => `${value.toFixed(2)} %`,
-      (value) => (settings.radius = value),
-    ),
-    slider(
-      "Points (glamarye)",
-      { min: 2, max: 16, step: 1 },
-      settings.points,
-      String,
-      (value) => (settings.points = value),
-    ),
-    slider(
-      "Shape (glamarye)",
-      { min: 1, max: 4000, step: 1 },
-      settings.shape,
-      String,
-      (value) => (settings.shape = value),
-    ),
-    slider(
-      "Gap (glamarye)",
-      { min: 0, max: 2, step: 0.01 },
-      settings.gap,
-      (value) => value.toFixed(2),
-      (value) => (settings.gap = value),
-    ),
-    slider(
-      "Fade (glamarye)",
-      { min: 0.05, max: 2, step: 0.05 },
-      settings.fade,
-      (value) => value.toFixed(2),
-      (value) => (settings.fade = value),
-    ),
-    tick("Bigger dither (glamarye)", settings.dither, (value) => (settings.dither = value)),
-  );
-  const copy = element("button", {
-    className: "tuning__copy",
-    type: "button",
-    textContent: "Copy for the settings file",
-  });
-  copy.addEventListener("click", async () => {
-    // Showing only the darkening is for judging it, not for viewers.
-    const { alone: _, ...kept } = settings;
-    try {
-      await navigator.clipboard.writeText(writeSettings("Ambient occlusion", kept));
-      copy.textContent = "Copied";
-    } catch {
-      copy.textContent = "Could not copy";
-    }
-  });
-  panel.append(copy);
+  panel.append(element("summary", { textContent: section.heading }));
+  const settings = new Map<string, HTMLElement>();
+  // Some settings only matter while others hold certain words, such as an
+  // ambient occlusion method's own; the rest are hidden meanwhile.
+  const showOnly = () => {
+    const names = shown(section);
+    for (const [name, setting] of settings) setting.hidden = !names.includes(name);
+  };
+  for (const [name, description] of Object.entries(section.described)) {
+    const setting = element("div", { className: "tuning__setting" });
+    setting.append(
+      control(description, section.settings[name], (value) => {
+        section.settings[name] = value;
+        showOnly();
+      }),
+      element("p", { className: "tuning__about", textContent: description.about }),
+    );
+    settings.set(name, setting);
+    panel.append(setting);
+  }
+  showOnly();
+  if (section.inFile) {
+    const copy = element("button", {
+      className: "tuning__copy",
+      type: "button",
+      textContent: "Copy for the config file",
+    });
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(writeConfig(section));
+        copy.textContent = "Copied";
+      } catch {
+        copy.textContent = "Could not copy";
+      }
+    });
+    panel.append(copy);
+  }
   parent.append(panel);
 }
 
 /**
- * Add a section that changes the movements every other one builds on: how
- * fast the viewer walks and turns, how soon the view levels out, and where
- * the eyes are. What suits goes into motion.ts by hand: it is the same for
- * every environment.
+ * Add the panel that changes settings while walking, to find by feel and by
+ * frame rate what suits an environment and what a device can afford. A
+ * section a config file may set has a button that copies it as the config
+ * file lists it; what suits the others goes into their defaults by hand, as
+ * it is the same for every environment.
  */
-export function addWalkingTuning(parent: HTMLElement, settings: WalkingSettings) {
-  const panel = element("details", {});
-  const perTurn = (value: number) => `${value.toFixed(2)} s a turn`;
-  const perSecond = (value: number) => `${value.toFixed(1)} /s`;
-  panel.append(
-    element("summary", { textContent: "Walking" }),
-    slider(
-      "Speed",
-      { min: 0.5, max: 3, step: 0.1 },
-      settings.speed,
-      (value) => `${value.toFixed(1)} m/s`,
-      (value) => (settings.speed = value),
-    ),
-    slider(
-      "Turning, standing",
-      { min: 1, max: 8, step: 0.25 },
-      settings.standingTurn,
-      perTurn,
-      (value) => (settings.standingTurn = value),
-    ),
-    slider(
-      "Turning, walking",
-      { min: 1, max: 10, step: 0.25 },
-      settings.walkingTurn,
-      perTurn,
-      (value) => (settings.walkingTurn = value),
-    ),
-    slider(
-      "Levelling",
-      { min: 0, max: 12, step: 0.5 },
-      settings.levelling,
-      perSecond,
-      (value) => (settings.levelling = value),
-    ),
-    slider(
-      "Eye height",
-      { min: 1, max: 2, step: 0.05 },
-      settings.eyeHeight,
-      (value) => `${value.toFixed(2)} m`,
-      (value) => (settings.eyeHeight = value),
-    ),
-    slider(
-      "Eyes catching up",
-      { min: 1, max: 30, step: 1 },
-      settings.eyeCatchUp,
-      perSecond,
-      (value) => (settings.eyeCatchUp = value),
-    ),
-  );
-  parent.append(panel);
-}
-
-/**
- * Add a section that changes how a thrown view is braked, to find by feel
- * how far and how long it should coast, usually and with reduced motion.
- * What suits goes into coasting.ts by hand: it is the same for every
- * environment.
- */
-export function addCoastingTuning(parent: HTMLElement, settings: CoastingSettings) {
-  const panel = element("details", {});
-  const perSecond = (value: number) => `${value.toFixed(1)} /s`;
-  const perRadian = (value: number) => value.toFixed(2);
-  panel.append(
-    element("summary", { textContent: "Coasting" }),
-    tick("On", settings.on, (value) => (settings.on = value)),
-    slider(
-      "Glide",
-      { min: 0.5, max: 10, step: 0.1 },
-      settings.glide,
-      perSecond,
-      (value) => (settings.glide = value),
-    ),
-    slider(
-      "Grip",
-      { min: 0, max: 2, step: 0.01 },
-      settings.grip,
-      perRadian,
-      (value) => (settings.grip = value),
-    ),
-    slider(
-      "Handover",
-      { min: 0.05, max: 2, step: 0.05 },
-      settings.handover,
-      (value) => `${value.toFixed(2)} rad/s`,
-      (value) => (settings.handover = value),
-    ),
-    tick("As with reduced motion", settings.reduced, (value) => (settings.reduced = value)),
-    slider(
-      "Glide (reduced)",
-      { min: 2, max: 40, step: 0.5 },
-      settings.reducedGlide,
-      perSecond,
-      (value) => (settings.reducedGlide = value),
-    ),
-    slider(
-      "Grip (reduced)",
-      { min: 0, max: 10, step: 0.1 },
-      settings.reducedGrip,
-      perRadian,
-      (value) => (settings.reducedGrip = value),
-    ),
-  );
-  parent.append(panel);
-}
-
-/**
- * Add a section that changes how fast running goes and how readily the
- * joystick starts it, to find by feel what neither starts it by chance nor
- * takes practice. What suits goes into running.ts by hand: it is the same for
- * every environment.
- */
-export function addRunningTuning(parent: HTMLElement, settings: RunningSettings) {
-  const panel = element("details", {});
-  const share = (value: number) => `${Math.round(value * 100)} %`;
-  const seconds = (value: number) => `${value.toFixed(2)} s`;
-  panel.append(
-    element("summary", { textContent: "Running" }),
-    slider(
-      "Speed",
-      { min: 1.4, max: 5, step: 0.1 },
-      settings.speed,
-      (value) => `${value.toFixed(1)} m/s`,
-      (value) => (settings.speed = value),
-    ),
-    slider(
-      "Push past",
-      { min: 0.3, max: 1, step: 0.05 },
-      settings.push,
-      share,
-      (value) => (settings.push = value),
-    ),
-    slider(
-      "Dip inside",
-      { min: 0.1, max: 0.9, step: 0.05 },
-      settings.dip,
-      share,
-      (value) => (settings.dip = value),
-    ),
-    slider(
-      "Time for push and dip",
-      { min: 0.1, max: 1, step: 0.05 },
-      settings.time,
-      seconds,
-      (value) => (settings.time = value),
-    ),
-    slider(
-      "Ease",
-      { min: 0, max: 1, step: 0.05 },
-      settings.ease,
-      seconds,
-      (value) => (settings.ease = value),
-    ),
-  );
-  parent.append(panel);
-}
-
-/**
- * Add a section that changes how far and how readily the view zooms, and the
- * field of view it zooms from. Its button copies the settings as the
- * environment's settings file lists them.
- */
-export function addZoomTuning(parent: HTMLElement, settings: ZoomSettings) {
-  const panel = element("details", {});
-  const degrees = (value: number) => `${value}°`;
-  panel.append(
-    element("summary", { textContent: "Zoom" }),
-    slider(
-      "Max zoom",
-      { min: 1, max: 10, step: 0.5 },
-      settings.max,
-      (value) => `${value}×`,
-      (value) => (settings.max = value),
-    ),
-    slider(
-      "Field of view, upright",
-      { min: 30, max: 120, step: 1 },
-      settings.upright,
-      degrees,
-      (value) => (settings.upright = value),
-    ),
-    slider(
-      "Field of view, sideways",
-      { min: 30, max: 120, step: 1 },
-      settings.sideways,
-      degrees,
-      (value) => (settings.sideways = value),
-    ),
-    slider(
-      "Pinch strength",
-      { min: 0.25, max: 3, step: 0.05 },
-      settings.pinch,
-      (value) => value.toFixed(2),
-      (value) => (settings.pinch = value),
-    ),
-    slider(
-      "Scroll strength",
-      { min: 1.05, max: 2, step: 0.05 },
-      settings.scroll,
-      (value) => `${value.toFixed(2)}×`,
-      (value) => (settings.scroll = value),
-    ),
-  );
-  const copy = element("button", {
-    className: "tuning__copy",
-    type: "button",
-    textContent: "Copy for the settings file",
-  });
-  copy.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(writeSettings("Zoom", { ...settings }));
-      copy.textContent = "Copied";
-    } catch {
-      copy.textContent = "Could not copy";
-    }
-  });
-  panel.append(copy);
-  parent.append(panel);
+export function addTuning(parent: HTMLElement, sections: Section[]) {
+  const panel = parent.appendChild(element("div", { className: "tuning" }));
+  for (const section of sections) addSection(panel, section);
 }

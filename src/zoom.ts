@@ -1,6 +1,7 @@
 import { MAX_PITCH, type Viewpoint } from "./motion";
+import { fixed, number, type Described } from "./settings";
 
-/** What can be changed about zoom; see tuning.ts and the settings file. */
+/** What can be changed about zoom, in the ?config panel and an environment's config file. */
 export interface ZoomSettings {
   /** Max zoom: how far the view zooms in, as a multiple of how big things look at 1×. */
   max: number;
@@ -23,6 +24,51 @@ export const ZOOM: ZoomSettings = {
   sideways: 60,
   pinch: 1,
   scroll: 1.25,
+};
+
+const degrees = (value: number) => `${value}°`;
+
+export const ZOOM_DESCRIBED: Described<ZoomSettings> = {
+  max: number({
+    label: "Max zoom",
+    min: 1,
+    max: 10,
+    step: 0.5,
+    show: (value) => `${value}×`,
+    about: "How far the view zooms in, as a multiple of how big things look unzoomed.",
+  }),
+  upright: number({
+    label: "Field of view, upright",
+    min: 30,
+    max: 120,
+    step: 1,
+    show: degrees,
+    about: "How tall a slice of the scene shows with the screen upright, wide to make up for its narrowness.",
+  }),
+  sideways: number({
+    label: "Field of view, sideways",
+    min: 30,
+    max: 120,
+    step: 1,
+    show: degrees,
+    about: "How tall a slice of the scene shows with the screen sideways.",
+  }),
+  pinch: number({
+    label: "Pinch strength",
+    min: 0.25,
+    max: 3,
+    step: 0.05,
+    show: fixed(2),
+    about: "How hard a pinch zooms: 1 follows the fingers exactly.",
+  }),
+  scroll: number({
+    label: "Scroll strength",
+    min: 1.05,
+    max: 2,
+    step: 0.05,
+    show: fixed(2, "×"),
+    about: "How far one step of a mouse wheel zooms in.",
+  }),
 };
 
 /** How quickly a scrolled zoom catches up with the wheel, per second. */

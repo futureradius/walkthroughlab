@@ -100,7 +100,7 @@ export class N8 implements OcclusionWorkings {
     if (this.enlarging) enlarged.setSize(width * scale, height * scale);
     pass.configuration.aoRadius = settings.reach;
     pass.configuration.distanceFalloff = settings.falloff;
-    pass.configuration.aoSamples = Math.max(1, Math.round(settings.samples));
+    pass.configuration.aoSamples = settings.samples;
     pass.configuration.denoiseIterations = settings.smooth ? 2 : 0;
     this.light.value = bakedLight;
 

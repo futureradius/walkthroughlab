@@ -233,7 +233,7 @@ export class Glamarye implements OcclusionWorkings {
     }
     // The number of points and the dither shape the loops, so changing
     // either builds the shader anew.
-    const points = Math.min(16, Math.max(2, Math.round(settings.points)));
+    const { points } = settings;
     const dither = settings.dither ? 1 : 0;
     if (material.defines.POINTS !== points || material.defines.BIG_DITHER !== dither) {
       material.defines.POINTS = points;

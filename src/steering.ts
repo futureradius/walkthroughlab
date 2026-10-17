@@ -1,15 +1,17 @@
-import { COASTING, Coasting, glideOf, type CoastingSettings } from "./coasting";
+import { COASTING, COASTING_DESCRIBED, Coasting, glideOf, type CoastingSettings } from "./coasting";
 import {
   advance,
   levelling,
   WALKING,
+  WALKING_DESCRIBED,
   type Intent,
   type Terrain,
   type Viewpoint,
   type WalkingSettings,
 } from "./motion";
-import { RUNNING, Running, type RunningSettings } from "./running";
-import { Zoom, ZOOM, type Screen, type Spot, type ZoomSettings } from "./zoom";
+import { RUNNING, RUNNING_DESCRIBED, Running, type RunningSettings } from "./running";
+import { fixed, number, percent, type Described } from "./settings";
+import { Zoom, ZOOM, ZOOM_DESCRIBED, type Screen, type Spot, type ZoomSettings } from "./zoom";
 
 /** Where the joystick's knob sits, each axis as a share of its reach in [-1, 1]. */
 export interface Stick {
@@ -43,13 +45,62 @@ export interface Place {
   start: Viewpoint;
 }
 
-/** What can be changed about steering while walking; see tuning.ts. */
+/** What can be changed about how the joystick reads, in the ?config panel. */
+export interface JoystickSettings {
+  /** Share of the joystick's reach a push must go past to count at all. */
+  deadZone: number;
+  /**
+   * Radians per second, as seen on screen, below which a coasting view starts
+   * handing a sideways joystick back from sidestepping to turning.
+   */
+  handover: number;
+}
+
+/**
+ * The usual settings. The handover starts where the slowest throw does, so
+ * it is well under way by the time the view looks still.
+ */
+export const JOYSTICK: JoystickSettings = {
+  deadZone: 0.12,
+  handover: 0.3,
+};
+
+export const JOYSTICK_DESCRIBED: Described<JoystickSettings> = {
+  deadZone: number({
+    label: "Dead zone",
+    min: 0,
+    max: 0.4,
+    step: 0.01,
+    show: percent,
+    about: "How far from the middle a push must go to count, so a resting thumb stays still.",
+  }),
+  handover: number({
+    label: "Handover",
+    min: 0.05,
+    max: 2,
+    step: 0.05,
+    show: fixed(2, " rad/s"),
+    about: "How slow a coasting view must turn before a sideways push eases from sidestepping back to turning.",
+  }),
+};
+
+/** What can be changed about steering while walking, in the ?config panel. */
 export interface SteeringSettings {
   walking: WalkingSettings;
   running: RunningSettings;
   coasting: CoastingSettings;
+  joystick: JoystickSettings;
   zoom: ZoomSettings;
 }
+
+/** What each of steering's settings is and what it may be. */
+export const STEERING_DESCRIBED: { [K in keyof SteeringSettings]: Described<SteeringSettings[K]> } = {
+  walking: WALKING_DESCRIBED,
+  running: RUNNING_DESCRIBED,
+  coasting: COASTING_DESCRIBED,
+  joystick: JOYSTICK_DESCRIBED,
+  zoom: ZOOM_DESCRIBED,
+};
 
 /** Where the eyes are, which way they look, and how wide they see. */
 export interface View {
@@ -67,17 +118,15 @@ export interface View {
   fov: number;
 }
 
-/** Deflection below this share of the joystick's reach counts as centred. */
-const DEAD_ZONE = 0.12;
 /** Share of a sideways push below which the joystick has eased back to turning. */
 const TURNING = 0.01;
 
 const unit = (value: number) => Math.max(-1, Math.min(1, value));
 
 /** How hard the knob pushes, rising smoothly from the edge of the dead zone. */
-function pushOf(knob: Stick): Stick {
+function pushOf(knob: Stick, deadZone: number): Stick {
   const reach = Math.min(Math.hypot(knob.x, knob.y), 1);
-  const scale = reach < DEAD_ZONE ? 0 : (reach - DEAD_ZONE) / (1 - DEAD_ZONE) / reach;
+  const scale = reach <= deadZone ? 0 : (reach - deadZone) / (1 - deadZone) / reach;
   return { x: knob.x * scale, y: knob.y * scale };
 }
 
@@ -97,6 +146,7 @@ export class Steering {
     walking: { ...WALKING },
     running: { ...RUNNING },
     coasting: { ...COASTING },
+    joystick: { ...JOYSTICK },
     zoom: { ...ZOOM },
   };
   private readonly coasting = new Coasting(this.settings.coasting);
@@ -150,9 +200,9 @@ export class Steering {
 
   /** Move the viewpoint for one frame, `seconds` after the last, on a screen this size. */
   step(readings: Readings, seconds: number, screen: Screen): View {
-    const { walking } = this.settings;
+    const { walking, joystick } = this.settings;
     const { knob, keys } = readings;
-    const stick = pushOf(knob);
+    const stick = pushOf(knob, joystick.deadZone);
 
     // One pixel covers this angle at the present zoom, so a dragged spot
     // stays under the finger.
@@ -195,8 +245,8 @@ export class Steering {
    * joystick turns at once, or follows a coast still under way.
    */
   private handOver(stick: Stick, seconds: number) {
-    const { coasting } = this.settings;
-    const coast = Math.min(1, (this.coasting.turning * this.zoom.level) / coasting.handover);
+    const { coasting, joystick } = this.settings;
+    const coast = Math.min(1, (this.coasting.turning * this.zoom.level) / joystick.handover);
     if (this.held) this.sidestepping = 1;
     else if (stick.x === 0 && stick.y === 0) this.sidestepping = coast;
     else {

@@ -36,6 +36,10 @@ _Avoid_: Player, user, visitor, player controller
 The person who prepares a walkthrough from their own architectural model and publishes it for viewers.
 _Avoid_: Admin, creator, uploader
 
+**Config file**:
+The file an author writes beside an environment to change how ambient occlusion and zoom work in it, overriding their usual values. Adding `?config` to a walkthrough's address opens a panel that changes the same values while walking and copies them for the config file.
+_Avoid_: Settings file, preferences, options file
+
 **Viewpoint**:
 The position and direction of the viewer's eyes within the space.
 _Avoid_: Camera, player, character

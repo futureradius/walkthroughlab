@@ -9,19 +9,12 @@ import { addAbout } from "./about";
 import { collisionMesh } from "./collision";
 import { loadEnvironment } from "./environment";
 import { Gestures } from "./gestures";
-import { AmbientOcclusion } from "./occlusion";
+import { AmbientOcclusion, OCCLUSION_DESCRIBED } from "./occlusion";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
-import { applySettings } from "./settings";
-import { Steering } from "./steering";
-import {
-  addCoastingTuning,
-  addOcclusionTuning,
-  addRunningTuning,
-  addTuning,
-  addWalkingTuning,
-  addZoomTuning,
-} from "./tuning";
+import { applyConfig, section, type Section } from "./settings";
+import { Steering, STEERING_DESCRIBED } from "./steering";
+import { addTuning } from "./tuning";
 
 /** Old phones report pixel ratios of 3 or more; rendering that many pixels is the main cost. */
 const MAX_PIXEL_RATIO = 2;
@@ -39,7 +32,7 @@ const TEST_ENVIRONMENT = {
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
     bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
-    settings: `${import.meta.env.BASE_URL}models/test-environment.md`,
+    config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
   },
   // At the foot of the stairs, looking up them.
   start: { x: -13.4, z: 13, heading: 0 },
@@ -69,8 +62,27 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
+/**
+ * Every setting the ?config panel changes while walking. A config file may
+ * set those of ambient occlusion and zoom, which differ between environments.
+ */
+function sectionsOf(steering: Steering): Section[] {
+  const { walking, running, coasting, joystick, zoom } = steering.settings;
+  const described = STEERING_DESCRIBED;
+  return [
+    ...(occlusion
+      ? [section("Ambient occlusion", occlusion.settings, OCCLUSION_DESCRIBED, true)]
+      : []),
+    section("Walking", walking, described.walking),
+    section("Running", running, described.running),
+    section("Coasting", coasting, described.coasting),
+    section("Joystick", joystick, described.joystick),
+    section("Zoom", zoom, described.zoom, true),
+  ];
+}
+
 /** Load the test environment and steer through it from its starting spot. */
-async function enterTestEnvironment(): Promise<Steering> {
+async function enterTestEnvironment(): Promise<{ steering: Steering; sections: Section[] }> {
   scene.background = new Color(LOADING_BACKDROP);
   // Must match the tone mapping baked into sky pictures by `npm run optimize`.
   renderer.toneMapping = NeutralToneMapping;
@@ -95,18 +107,6 @@ async function enterTestEnvironment(): Promise<Steering> {
     scene.add(environment.visible);
     scene.background = environment.skyPicture;
     scene.environment = environment.skyLight;
-    if (occlusion) {
-      occlusion.bakedLight = environment.bakedLight ?? null;
-      const refused = applySettings(
-        occlusion.settings,
-        environment.settings["ambient occlusion"],
-      );
-      if (refused.length > 0) {
-        console.warn(`The settings file's ${refused.join(", ")} could not be used.`);
-      }
-      // The loading bar stays until ambient occlusion can be in the first frame.
-      await occlusion.ready(scene, camera);
-    }
     const { terrain, floorAt } = collisionMesh(environment.collision);
     const { x, z, heading } = TEST_ENVIRONMENT.start;
     const floor = floorAt(x, z, 0);
@@ -114,12 +114,20 @@ async function enterTestEnvironment(): Promise<Steering> {
       throw new Error("The starting spot is not on the collision mesh.");
     }
     const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
-    const zoomRefused = applySettings(steering.settings.zoom, environment.settings.zoom);
-    if (zoomRefused.length > 0) {
-      console.warn(`The settings file's ${zoomRefused.join(", ")} under Zoom could not be used.`);
+    const sections = sectionsOf(steering);
+    for (const section of sections.filter(({ inFile }) => inFile)) {
+      const refused = applyConfig(section, environment.config[section.heading.toLowerCase()]);
+      if (refused.length > 0) {
+        console.warn(`The config file's ${section.heading} section could not use ${refused.join("; ")}.`);
+      }
+    }
+    if (occlusion) {
+      occlusion.bakedLight = environment.bakedLight ?? null;
+      // The loading bar stays until ambient occlusion can be in the first frame.
+      await occlusion.ready(scene, camera);
     }
     loading.remove();
-    return steering;
+    return { steering, sections };
   } catch (error) {
     loading.className = "loading loading--failed";
     loading.textContent = "This walkthrough could not be loaded.";
@@ -141,21 +149,16 @@ const occlusion = AmbientOcclusion.supported(renderer)
 
 addAbout(document.body);
 
-const steering = await enterTestEnvironment();
+const { steering, sections } = await enterTestEnvironment();
 
 // Add ?config to the address for a panel that changes settings while walking.
-// Ambient occlusion's and zoom's start from those the environment's settings
+// Ambient occlusion's and zoom's start from those the environment's config
 // file gave. With reduced motion a thrown view is braked much harder.
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-const { walking, running, coasting, zoom } = steering.settings;
+const { coasting } = steering.settings;
 coasting.reduced = reducedMotion.matches;
 if (params.has("config")) {
-  const tuning = addTuning(document.body);
-  if (occlusion) addOcclusionTuning(tuning, occlusion.settings);
-  addWalkingTuning(tuning, walking);
-  addCoastingTuning(tuning, coasting);
-  addRunningTuning(tuning, running);
-  addZoomTuning(tuning, zoom);
+  addTuning(document.body, sections);
 } else {
   // The panel has a switch for this instead, to try both brakes on one device.
   reducedMotion.addEventListener("change", () => {

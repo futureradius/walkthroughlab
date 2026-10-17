@@ -1,3 +1,5 @@
+import { fixed, number, type Described } from "./settings";
+
 /** A spot on the floor plan and the height of the floor there. */
 export interface Footing {
   /** Metres east of the origin. */
@@ -46,7 +48,7 @@ export interface Limits {
   halfDepth: number;
 }
 
-/** What can be changed about walking while it runs; see tuning.ts. */
+/** What can be changed about walking while it runs, in the ?config panel. */
 export interface WalkingSettings {
   /** Metres per second at full push, unless running forward. */
   speed: number;
@@ -76,6 +78,60 @@ export const WALKING: WalkingSettings = {
   levelling: 4,
   eyeHeight: 1.6,
   eyeCatchUp: 12,
+};
+
+const perTurn = fixed(2, " s a turn");
+const perSecond = fixed(1, " /s");
+
+export const WALKING_DESCRIBED: Described<WalkingSettings> = {
+  speed: number({
+    label: "Speed",
+    min: 0.5,
+    max: 3,
+    step: 0.1,
+    show: fixed(1, " m/s"),
+    about: "How fast the viewer walks at a full push, and backs and sidesteps even while running.",
+  }),
+  standingTurn: number({
+    label: "Turning, standing",
+    min: 1,
+    max: 8,
+    step: 0.25,
+    show: perTurn,
+    about: "How long a full turn takes at a full sideways push while standing still.",
+  }),
+  walkingTurn: number({
+    label: "Turning, walking",
+    min: 1,
+    max: 10,
+    step: 0.25,
+    show: perTurn,
+    about: "How long a full turn takes while walking at full speed, so curves stay gentle.",
+  }),
+  levelling: number({
+    label: "Levelling",
+    min: 0,
+    max: 12,
+    step: 0.5,
+    show: perSecond,
+    about: "How quickly a tilted view returns to level, and zoom wears off, once the viewer sets off.",
+  }),
+  eyeHeight: number({
+    label: "Eye height",
+    min: 1,
+    max: 2,
+    step: 0.05,
+    show: fixed(2, " m"),
+    about: "How far above the floor the eyes are.",
+  }),
+  eyeCatchUp: number({
+    label: "Eyes catching up",
+    min: 1,
+    max: 30,
+    step: 1,
+    show: perSecond,
+    about: "How quickly the eyes follow the floor up or down a step, so the view never jolts.",
+  }),
 };
 
 /** Farthest the view tilts up or down: just short of straight up. */

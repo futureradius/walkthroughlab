@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WALKING, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { RUNNING } from "./running";
-import { Steering, type Keys, type Stick, type View } from "./steering";
+import { JOYSTICK, Steering, type Keys, type Stick, type View } from "./steering";
 import { ZOOM } from "./zoom";
 
 const UPRIGHT = { width: 400, height: 800 };
@@ -75,7 +75,8 @@ describe("steering", () => {
   it("leaves a push inside the dead zone out, and picks up smoothly from its edge", () => {
     const { frame } = walkthrough();
     expect(frame({ x: 0, y: 0.1 }).moved).toBe(0);
-    expect(frame({ x: 0, y: 0.12 + 0.88 / 2 }).moved).toBeCloseTo((WALKING.speed * FRAME) / 2);
+    const halfway = JOYSTICK.deadZone + (1 - JOYSTICK.deadZone) / 2;
+    expect(frame({ x: 0, y: halfway }).moved).toBeCloseTo((WALKING.speed * FRAME) / 2);
     expect(frame({ x: 0, y: 1 }).moved).toBeCloseTo(WALKING.speed * FRAME);
   });
 

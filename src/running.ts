@@ -1,7 +1,8 @@
 import { WALKING, type WalkingSettings } from "./motion";
+import { fixed, number, percent, type Described } from "./settings";
 import type { Stick } from "./steering";
 
-/** What can be changed about running while walking; see tuning.ts. */
+/** What can be changed about running while walking, in the ?config panel. */
 export interface RunningSettings {
   /** Metres per second at full push forward while running. */
   speed: number;
@@ -25,6 +26,51 @@ export const RUNNING: RunningSettings = {
   dip: 0.5,
   time: 0.4,
   ease: 0.3,
+};
+
+const seconds = fixed(2, " s");
+
+export const RUNNING_DESCRIBED: Described<RunningSettings> = {
+  speed: number({
+    label: "Speed",
+    min: 1.4,
+    max: 5,
+    step: 0.1,
+    show: fixed(1, " m/s"),
+    about: "How fast the viewer runs at a full push forward.",
+  }),
+  push: number({
+    label: "Push past",
+    min: 0.3,
+    max: 1,
+    step: 0.05,
+    show: percent,
+    about: "How far out each push on the joystick must go to count towards starting a run.",
+  }),
+  dip: number({
+    label: "Dip inside",
+    min: 0.1,
+    max: 0.9,
+    step: 0.05,
+    show: percent,
+    about: "How far back towards the middle the joystick must come between the two pushes.",
+  }),
+  time: number({
+    label: "Time for push and dip",
+    min: 0.1,
+    max: 1,
+    step: 0.05,
+    show: seconds,
+    about: "How quick the first push and the dip must each be, so nobody starts a run by chance.",
+  }),
+  ease: number({
+    label: "Ease",
+    min: 0,
+    max: 1,
+    step: 0.05,
+    show: seconds,
+    about: "How long the pace takes to pick up from walking to running, or drop back.",
+  }),
 };
 
 /** Where the joystick is this frame. */

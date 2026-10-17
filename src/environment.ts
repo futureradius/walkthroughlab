@@ -21,7 +21,7 @@ import {
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
-import { readSettings, type Settings } from "./settings";
+import { readConfig, type Config } from "./settings";
 
 /** The Rhino layer whose contents are the collision mesh rather than something to see. */
 const COLLISION_LAYER = "Collision Mesh";
@@ -35,8 +35,8 @@ export interface EnvironmentFiles {
   skyLight: string;
   /** Written by `npm run bake`; without it the sky lights the surfaces live. */
   bakedLight?: string;
-  /** Written by hand; without it everything keeps its usual settings. */
-  settings?: string;
+  /** The config file, written by hand; without it everything keeps its usual settings. */
+  config?: string;
 }
 
 export interface Environment {
@@ -50,11 +50,11 @@ export interface Environment {
   skyLight: Texture;
   /** The baked light picture, if the environment has one. */
   bakedLight?: Texture;
-  /** What the environment's settings file asks for, by heading. */
-  settings: Settings;
+  /** What the environment's config file asks for, by heading. */
+  config: Config;
 }
 
-/** A missing settings file is the same as an empty one. */
+/** A missing config file is the same as an empty one. */
 async function textOf(address: string): Promise<string> {
   const response = await fetch(address);
   return response.ok ? response.text() : "";
@@ -168,12 +168,12 @@ export async function loadEnvironment(
         : undefined,
     );
   };
-  const [gltf, light, skyPicture, bakedLight, settings] = await Promise.all([
+  const [gltf, light, skyPicture, bakedLight, config] = await Promise.all([
     new GLTFLoader().loadAsync(files.model, track(downloads[0])),
     new HDRLoader().loadAsync(files.skyLight, track(downloads[1])),
     new TextureLoader().loadAsync(files.skyPicture),
     files.bakedLight ? new TextureLoader().loadAsync(files.bakedLight) : undefined,
-    files.settings ? textOf(files.settings) : "",
+    files.config ? textOf(files.config) : "",
   ]);
 
   // The loader rewrites names; the one written in Rhino is kept in userData.
@@ -231,6 +231,6 @@ export async function loadEnvironment(
     skyPicture,
     skyLight,
     bakedLight,
-    settings: readSettings(settings),
+    config: readConfig(config),
   };
 }

@@ -18,8 +18,9 @@ import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
 import { BLURS, Blur } from "./blur";
 import { Glamarye } from "./glamarye";
+import { choice, fixed, number, percent, toggle, type Described } from "./settings";
 
-/** What can be changed about ambient occlusion while it runs; see tuning.ts. */
+/** What can be changed about ambient occlusion, in the ?config panel and an environment's config file. */
 export interface OcclusionSettings {
   /** Off draws the scene as if there were no ambient occlusion. */
   on: boolean;
@@ -96,6 +97,192 @@ export interface OcclusionSettings {
   /** "AO bigger dither": four sizes of circle in a pattern of 2 by 4 pixels instead of two in a checkerboard. */
   dither: boolean;
 }
+
+/** The usual settings, unless an environment's config file says otherwise. */
+export const OCCLUSION: OcclusionSettings = {
+  on: true,
+  alone: false,
+  method: "n8ao",
+  reach: 0.2,
+  strength: 4,
+  spare: 1,
+  sunlit: 0.2,
+  samples: 12,
+  detail: 0.5,
+  smooth: true,
+  blur: "off",
+  falloff: 3,
+  edges: false,
+  shade: 0.6,
+  shine: 0.3,
+  radius: 1,
+  points: 6,
+  shape: 1000,
+  gap: 0.5,
+  fade: 0.5,
+  dither: false,
+};
+
+const N8AO = { method: ["n8ao"] };
+const GLAMARYE = { method: ["glamarye"] };
+const NOT_GLAMARYE = { method: ["gtao", "n8ao"] };
+
+export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
+  on: toggle({ label: "On", about: "Off leaves ambient occlusion out altogether." }),
+  alone: toggle({
+    label: "Only the darkening",
+    about: "Shows the darkening alone, on white, to judge it while tuning.",
+    panelOnly: true,
+  }),
+  method: choice({
+    label: "Method",
+    words: ["gtao", "n8ao", "glamarye"],
+    about: "How the darkening is worked out: three.js's own GTAO, N8AO, or Glamarye Fast Effects'.",
+  }),
+  reach: number({
+    label: "Reach",
+    min: 0.05,
+    max: 2,
+    step: 0.05,
+    show: fixed(2, " m"),
+    about: "How far a surface looks for neighbours that shade it.",
+    when: NOT_GLAMARYE,
+  }),
+  strength: number({
+    label: "Strength",
+    min: 0,
+    max: 8,
+    step: 0.1,
+    show: fixed(1),
+    about: "How hard the darkening is pressed: 0 is none, 1 is as worked out, more is darker.",
+    when: NOT_GLAMARYE,
+  }),
+  spare: number({
+    label: "Spare sunlit",
+    min: 0,
+    max: 1,
+    step: 0.05,
+    show: percent,
+    about: "How much of the darkening sunlit surfaces are let off.",
+  }),
+  sunlit: number({
+    label: "Sunlit above",
+    min: 0.05,
+    max: 0.4,
+    step: 0.01,
+    show: fixed(2),
+    about: "How bright the baked light must be for a surface to count as sunlit; lower spares more.",
+  }),
+  samples: number({
+    label: "Samples",
+    min: 1,
+    max: 32,
+    step: 1,
+    show: String,
+    about: "How many spots around each pixel are checked: more is smoother and slower.",
+    when: NOT_GLAMARYE,
+  }),
+  detail: number({
+    label: "Detail",
+    min: 0.25,
+    max: 1,
+    step: 0.25,
+    show: percent,
+    about: "The share of the screen's width and height the darkening is worked out at: 50 % is a quarter of the pixels.",
+  }),
+  smooth: toggle({
+    label: "Smoothing",
+    about: "Smooths away the speckle that few samples leave.",
+    when: NOT_GLAMARYE,
+  }),
+  blur: choice({
+    label: "Blur",
+    words: BLURS,
+    about: "How the darkening is blurred once worked out: box2 washes out a 2 by 2 pattern, box4 reaches twice as far, depth4 keeps to the edges of things.",
+  }),
+  falloff: number({
+    label: "Falloff",
+    min: 0.1,
+    max: 5,
+    step: 0.1,
+    show: fixed(1),
+    about: "Smaller leaves less of a dark outline around whatever stands in front of a wall, and less darkening altogether.",
+    when: N8AO,
+  }),
+  edges: toggle({
+    label: "Edge-aware",
+    about: "At a detail of 50 % or less, keeps the darkening within the edges of surfaces, at twice the cost of the depths.",
+    when: N8AO,
+  }),
+  shade: number({
+    label: "Shade",
+    min: 0,
+    max: 2,
+    step: 0.05,
+    show: fixed(2),
+    about: "How deep hollows are shaded, in place of strength.",
+    when: GLAMARYE,
+  }),
+  shine: number({
+    label: "Shine",
+    min: 0,
+    max: 1,
+    step: 0.05,
+    show: fixed(2),
+    about: "How much bumps facing the viewpoint are brightened.",
+    when: GLAMARYE,
+  }),
+  radius: number({
+    label: "Radius",
+    min: 0.1,
+    max: 4,
+    step: 0.05,
+    show: fixed(2, " %"),
+    about: "How far around each pixel it looks, in place of reach: 1 is a hundredth of the screen's diagonal.",
+    when: GLAMARYE,
+  }),
+  points: number({
+    label: "Points",
+    min: 2,
+    max: 16,
+    step: 1,
+    show: String,
+    about: "How many spots on a circle around each pixel are checked, in place of samples.",
+    when: GLAMARYE,
+  }),
+  shape: number({
+    label: "Shape",
+    min: 1,
+    max: 4000,
+    step: 1,
+    show: String,
+    about: "How deep a hollow must be before it is shaded.",
+    when: GLAMARYE,
+  }),
+  gap: number({
+    label: "Gap",
+    min: 0,
+    max: 2,
+    step: 0.01,
+    show: fixed(2),
+    about: "How much nearer or farther a spot may be and still count, in hundredths of the depth; smaller leaves less of an outline.",
+    when: GLAMARYE,
+  }),
+  fade: number({
+    label: "Fade",
+    min: 0.05,
+    max: 2,
+    step: 0.05,
+    show: fixed(2),
+    about: "The depth at which the darkening has faded out: 0.5 is about 100 m.",
+    when: GLAMARYE,
+  }),
+  dither: toggle({
+    label: "Bigger dither",
+    about: "Uses four sizes of circle in a 2 by 4 pattern instead of two in a checkerboard; box4 blurs it away.",
+    when: GLAMARYE,
+  }),
+};
 
 /** A way of working the darkening out. */
 export interface OcclusionWorkings {
@@ -194,7 +381,7 @@ class Gtao implements OcclusionWorkings {
       // Nothing farther in front than the reach may shade a surface, or a
       // column draws an outline on whatever stands a little way behind it.
       thickness: settings.reach,
-      samples: Math.max(1, Math.round(settings.samples)),
+      samples: settings.samples,
     });
     this.smooth = settings.smooth;
     this.light.value = bakedLight;
@@ -213,29 +400,7 @@ class Gtao implements OcclusionWorkings {
  * drawn without it, then darkens the picture where surfaces come close.
  */
 export class AmbientOcclusion {
-  readonly settings: OcclusionSettings = {
-    on: true,
-    alone: false,
-    method: "n8ao",
-    reach: 0.2,
-    strength: 4,
-    spare: 1,
-    sunlit: 0.2,
-    samples: 12,
-    detail: 0.5,
-    smooth: true,
-    blur: "off",
-    falloff: 3,
-    edges: false,
-    shade: 0.6,
-    shine: 0.3,
-    radius: 1,
-    points: 6,
-    shape: 1000,
-    gap: 0.5,
-    fade: 0.5,
-    dither: false,
-  };
+  readonly settings: OcclusionSettings = { ...OCCLUSION };
 
   /** The environment's baked light, which tells sunlit surfaces from shaded ones. */
   bakedLight: Texture | null = null;
@@ -366,7 +531,7 @@ export class AmbientOcclusion {
     );
     scene.background = background;
     const { uniforms } = this.darken.material as ShaderMaterial;
-    if (settings.blur !== "off" && BLURS.includes(settings.blur)) {
+    if (settings.blur !== "off") {
       const blur = (this.blur ??= new Blur());
       uniforms.occlusion.value = blur.blur(renderer, settings.blur, occlusion, depths, camera);
       uniforms.shift.value.copy(blur.shift);

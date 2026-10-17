@@ -49,7 +49,7 @@ The cost of leaving is small in code and large in tuning. The app is about 1,860
 
 ## The editor the project needs is a week or two of tooling
 
-ADR 0001 names "fine-tuning environments in an editor" as the one reason to revisit the engine choice (`docs/adr/0001-threejs-static-page-over-godot.md`), so the wish is legitimate. It can be met without changing the runtime, because the gap is narrow: the per-environment settings file and `?config` panel already handle scalar tuning, and what they cannot express is spatial data such as positions, boxes and placed instances (`src/settings.ts`, `src/tuning.ts`).
+ADR 0001 names "fine-tuning environments in an editor" as the one reason to revisit the engine choice (`docs/adr/0001-threejs-static-page-over-godot.md`), so the wish is legitimate. It can be met without changing the runtime, because the gap is narrow: the per-environment config file and `?config` panel already handle scalar tuning, and what they cannot express is spatial data such as positions, boxes and placed instances (`src/settings.ts`, `src/tuning.ts`).
 
 Blender, already a scripted dependency, covers most of that through its documented glTF exporter: custom properties export as `extras`, lights export through `KHR_lights_punctual`, "GPU Instances" writes `EXT_mesh_gpu_instancing`, and named vertex colour layers survive export for wind stiffness ([Blender manual](https://docs.blender.org/manual/en/5.0/addons/import_export/scene_gltf2.html)). three.js loads those instances as `InstancedMesh`, and glTF-Transform, which the project already runs, can create them after export with `instance()` ([three.js forum](https://discourse.threejs.org/t/blender-export-instancedmesh-directly/73769); [glTF-Transform](https://gltf-transform.dev/modules/functions/functions/instance)). Since the scene is baked, placed lights are most useful as inputs to the Blender bake rather than as runtime lights. For lighting things that are not lightmapped, such as instanced plants, three.js gained an official diffuse probe volume, `LightProbeGrid`, in r184 in April 2026 with a WebGL version ([three.js docs](https://threejs.org/docs/pages/LightProbeGrid.html)); it is young and its API changed three times by September. Specular reflection probes remain custom work: three.js has no built-in box projection or probe blending, the official example was removed in r132, and the best reference is a React-only helper whose shader would need porting ([three.js forum](https://discourse.threejs.org/t/parallax-correction-from-environment-maps/32692); [drei docs](https://drei.docs.pmnd.rs/misc/use-box-projected-env)).
 
@@ -59,7 +59,7 @@ The researchers' own effort estimates, for one developer with an AI assistant an
 
 | Layer | Estimate | What it gives |
 |---|---|---|
-| Extend settings file and panel (wind, scatter density), dev-only save endpoint | 1 to 3 days | Non-spatial tuning without copy and paste |
+| Extend config file and panel (wind, scatter density), dev-only save endpoint | 1 to 3 days | Non-spatial tuning without copy and paste |
 | Sidecar scene file with schema (probes, wind zones, scatter rules, lights) | 3 to 5 days | Diffable spatial data an assistant can edit |
 | Blender-extras convention with validation in `npm run optimize` | 3 to 7 days | Placement in a real 3D editor |
 | In-app edit mode with `TransformControls`, writing the sidecar file | 1 to 2 weeks | Placement in the real renderer |

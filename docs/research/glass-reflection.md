@@ -183,7 +183,7 @@ Why it fits here:
 What it needs:
 
 - **Box projection is not built in for `WebGLRenderer`.** r186 ships it only as a node function for the WebGPU renderer (`src/nodes/functions/material/getParallaxCorrectNormal.js`; the examples folder at tag `r186` has `webgpu_materials_envmaps_bpcem.html` and no WebGL counterpart, checked by listing it). Here it would be a small patch to the reflection lookup through `onBeforeCompile`, the same mechanism `asGlass` already uses. The physical shader has no world position unless transmission is on (`src/renderers/shaders/ShaderChunk/transmission_pars_fragment.glsl.js:30`), so the patch must pass one through.
-- **A capture point and box per room**, which only the author knows. The settings file per environment (`public/models/test-environment.md`) is the natural place **(judgement)**.
+- **A capture point and box per room**, which only the author knows. The config file per environment (`public/models/test-environment-config.md`) is the natural place **(judgement)**.
 - **A rule for which picture a pane uses.** A pane between inside and outside should reflect the room when seen from inside and the sky when seen from outside. Choosing by whether the viewpoint is inside the room's box is the simplest rule **(judgement)**.
 - **Care with brightness during capture.** Drawing into an off-screen picture skips tone mapping (`src/renderers/WebGLRenderer.js:2387-2393`), so baked surfaces are captured with their true brightness, which is what is wanted. But the sky seen through the room's windows would be captured from the ordinary sky picture and so no brighter than white. Glass should be hidden during capture, as its blend assumes a display-encoded canvas.
 
@@ -244,7 +244,7 @@ Cheapest step first. Each stage ends with a look and a measurement, and the next
 
 **Stage 0: fix the comparison.** Before changing anything, record the `?fps` reading (current and lowest) on the oldest phone available, with ambient occlusion on, at three fixed viewpoints: head-on to a window from inside with sky behind it; along a glazed wall at a shallow angle; from outside toward a window with a dark interior behind it. Take a screenshot at each. These are the three cases the two principles are about.
 
-**Stage 1: let glass reflect its room (option C).** One capture per room at load, a box per room in the environment's settings file, a patched reflection lookup, and a rule for inside versus outside.
+**Stage 1: let glass reflect its room (option C).** One capture per room at load, a box per room in the environment's config file, a patched reflection lookup, and a rule for inside versus outside.
 *Measure:* frame rate at the three viewpoints, expected unchanged since the per-pixel work is nearly the same **(judgement)**; time added to loading, which ADR 0001 names explicitly; and whether the capture is created on the oldest phone at all, since it needs the same half-float support ambient occlusion already checks for (`src/occlusion.ts:198-203`).
 *Look for:* interior panes no longer glowing with sky; reflected walls roughly where they belong along the glazed wall.
 
@@ -254,7 +254,7 @@ Cheapest step first. Each stage ends with a look and a measurement, and the next
 
 **Stage 3, only if the imitation still falls short: the shared off-screen picture (option G), not option F.** F adds a third scene drawing and fights the ambient occlusion ordering; G removes a drawing and settles both. This is where trading comes in. In rough order of how much each frees **(judgement)**:
 
-- *Ambient occlusion.* It costs a second scene drawing at half size plus its sampling and smoothing passes every frame. Its `detail` and `samples` settings scale it down and `on: no` removes it (`public/models/test-environment.md`). Under option G its scene drawing disappears anyway.
+- *Ambient occlusion.* It costs a second scene drawing at half size plus its sampling and smoothing passes every frame. Its `detail` and `samples` settings scale it down and `on: no` removes it (`public/models/test-environment-config.md`). Under option G its scene drawing disappears anyway.
 - *Pixel ratio.* The cap of 2 (`src/main.ts:28`) sets how many pixels everything is computed for. Lowering it for phones cuts every per-pixel cost at once, at the price of sharpness.
 - *Antialiasing.* Canvas antialiasing would be given up under option G in any case; what replaces it is a choice between cost and edge quality.
 - *Edge-aware upscaling* is already off because it was "judged too costly" ([ao-note][ao-note]); under option G it comes nearly free.

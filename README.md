@@ -25,17 +25,13 @@ Walk through an architectural space in the browser: https://futureradius.github.
 
 - `npm run dev` serves the walkthrough on your network, for testing on a phone.
 - Add `?fps` to the address to show the frame rate.
-- Add `?config` for a panel that changes settings while walking; its sections start folded shut.
-- Ambient occlusion is on wherever the device can work it out. The panel's "Ambient occlusion" section changes its settings, switches it off, or shows only the darkening it adds; combine it with `?fps` to see what each setting costs.
-- The panel's "Coasting" section changes how hard a thrown view is braked: "Glide" is the brake that is always on, "Grip" the one that grows with speed. It can switch coasting off and behave as with reduced motion. What suits goes into `src/coasting.ts` by hand.
-- The "Ambient occlusion" section's "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, three.js's own ambient occlusion (`gtao`), and the fast ambient occlusion from [Glamarye Fast Effects for ReShade](https://github.com/rj200/Glamarye_Fast_Effects_for_ReShade) (`glamarye`). Rows marked "(glamarye)" tune only that one, under its own names and usual values; those marked "(not glamarye)" leave it alone.
-- The section's "Blur" (`blur` in the settings file) blurs the darkening a little once any method has worked it out, before it goes on the picture. It is `off` unless chosen. `box2` averages 2 by 2 of the darkening's pixels in one texture read, which washes out the checkerboard `glamarye` leaves; `box4` averages 4 by 4 in four reads, which also washes out its "Bigger dither"; `depth4` reads the same as `box4` plus four depths, and leaves out what lies much nearer or farther, so the darkening is not smeared over the edges of things. It works at the darkening's own size: at a "Detail" of 50 %, one of its pixels covers 2 by 2 of the screen's. It comes on top of "Smoothing", which `n8ao` and `gtao` still do first.
-- The panel's "Running" section changes the running "Speed", how far each push must go ("Push past") and the dip must come back ("Dip inside"), as shares of the joystick's reach, how long the first push and the dip may each take ("Time for push and dip"), and how long the pace takes to pick up and drop back ("Ease"). What suits goes into `src/running.ts` by hand.
-- The panel's "Zoom" section changes "Max zoom", the field of view zoom counts from with the screen upright and sideways, how hard a pinch zooms ("Pinch strength", 1 follows the fingers exactly) and how far one step of the mouse wheel zooms ("Scroll strength"). Its "Copy for the settings file" button copies them as a `## Zoom` section, named `max`, `upright`, `sideways`, `pinch` and `scroll`.
+- Add `?config` for a panel that changes settings while walking, with a line under each saying what it does; its sections start folded shut. Combine it with `?fps` to see what ambient occlusion's settings cost.
+- Ambient occlusion is on wherever the device can work it out. Its "Method" switches between [N8AO](https://github.com/N8python/n8ao) (`n8ao`), which is the usual one, three.js's own ambient occlusion (`gtao`), and the fast ambient occlusion from [Glamarye Fast Effects for ReShade](https://github.com/rj200/Glamarye_Fast_Effects_for_ReShade) (`glamarye`). The panel shows only the settings the chosen method uses.
+- What suits Walking, Running, Coasting and the Joystick goes into their usual values by hand, since it is the same for every environment: in `src/motion.ts`, `src/running.ts`, `src/coasting.ts` and `src/steering.ts`. Each setting's range and what it does are written beside its usual value.
 
-## Settings for an environment
+## Config file for an environment
 
-`public/models/test-environment.md` holds the settings the walkthrough uses for the environment, with a note on each. Change a value there by hand, or tune in the `?config` panel and paste what its "Copy for the settings file" button copies.
+`public/models/test-environment-config.md` is the environment's config file, which sets its ambient occlusion and zoom. Change a value there by hand, or tune in the `?config` panel and paste what a section's "Copy for the config file" button copies. A value the walkthrough cannot use is reported in the browser's console.
 
 ## Information and credits
 
