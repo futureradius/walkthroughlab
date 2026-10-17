@@ -138,11 +138,25 @@ describe("steering", () => {
   });
 
   describe("free look", () => {
-    it("turns the view by its field of view for a drag the height of the screen", () => {
+    it("keeps a spot dragged in the middle of the screen under the finger", () => {
       const { steering, frame } = walkthrough();
       steering.touch();
-      steering.drag(-UPRIGHT.height, 0);
-      expect(frame().turned).toBeCloseTo((ZOOM.upright * Math.PI) / 180);
+      steering.drag(-1, 0);
+      // How far one pixel off the middle lies from straight ahead.
+      const distance = UPRIGHT.height / 2 / Math.tan((ZOOM.upright * Math.PI) / 360);
+      expect(frame().turned).toBeCloseTo(Math.atan(1 / distance), 7);
+    });
+
+    it("turns less for a drag zoomed in, by exactly as much as it is zoomed", () => {
+      const turnedBy = (zoom: number) => {
+        const { steering, frame } = walkthrough();
+        steering.pinch(MIDDLE, zoom);
+        frame();
+        steering.touch();
+        steering.drag(-10, 0);
+        return frame().turned;
+      };
+      expect(turnedBy(2)).toBeCloseTo(turnedBy(1) / 2, 7);
     });
 
     it("tilts the view up when dragged down", () => {
