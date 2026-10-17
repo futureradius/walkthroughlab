@@ -154,12 +154,9 @@ export class Steering {
     const { knob, keys } = readings;
     const stick = pushOf(knob);
 
-    // One pixel in the middle of the screen covers this angle at the present
-    // zoom, so a spot dragged there stays under the finger. Zoomed in twice
-    // as far it covers exactly half, as the joystick's turning and handover
-    // count it.
-    const fovRadians = (this.zoom.fov(screen) * Math.PI) / 180;
-    const radiansPerPixel = (2 * Math.tan(fovRadians / 2)) / screen.height;
+    // One pixel covers this angle at the present zoom, so a dragged spot
+    // stays under the finger.
+    const radiansPerPixel = (this.zoom.fov(screen) * Math.PI) / 180 / screen.height;
     if (this.thrown) {
       this.coasting.throw(-this.thrown.x * radiansPerPixel, this.thrown.y * radiansPerPixel);
       this.thrown = null;
