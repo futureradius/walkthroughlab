@@ -40,33 +40,10 @@ export function glideOf(settings: CoastingSettings): number {
   return settings.reduced ? settings.reducedGlide : settings.glide;
 }
 
-/** How long before letting go a drag still counts towards the throw, in milliseconds. */
-export const THROW_WINDOW = 100;
 /** Slowest release that throws the view, in radians per second. */
 export const SLOWEST_THROW = 0.3;
 /** Speed below which a coasting view is at rest, in radians per second. */
 const REST = 0.03;
-
-/** Where a drag was at a moment, in pixels and milliseconds. */
-export interface Sample {
-  at: number;
-  x: number;
-  y: number;
-}
-
-/**
- * How fast a drag was going when it was let go, in pixels per second, from
- * where it had been over the last moment. A finger that came to rest before
- * lifting was going nowhere.
- */
-export function releaseSpeed(samples: Sample[], releasedAt: number) {
-  const recent = samples.filter((sample) => releasedAt - sample.at <= THROW_WINDOW);
-  const first = recent[0];
-  const last = recent[recent.length - 1];
-  if (!first || releasedAt <= first.at) return { x: 0, y: 0 };
-  const seconds = (releasedAt - first.at) / 1000;
-  return { x: (last.x - first.x) / seconds, y: (last.y - first.y) / seconds };
-}
 
 /**
  * Coasting: the view carrying on the way it was thrown, braked harder the

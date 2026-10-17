@@ -1,4 +1,4 @@
-import type { Keys } from "./controls";
+import type { Keys } from "./steering";
 
 /** Keys by position on the keyboard, so W/A/S/D sit together on any layout. */
 const WALK = { KeyW: 1, ArrowUp: 1, KeyS: -1, ArrowDown: -1 };
@@ -29,12 +29,8 @@ export class Keyboard {
       walk: this.axis(WALK),
       sidestep: this.axis(SIDESTEP),
       turn: this.axis(TURN),
+      run: this.axis(RUN) > 0,
     };
-  }
-
-  /** Whether Shift is held while a key walks forward. */
-  get running(): boolean {
-    return this.axis(RUN) > 0 && this.axis(WALK) > 0;
   }
 
   private moves(code: string): boolean {

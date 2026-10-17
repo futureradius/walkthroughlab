@@ -1,5 +1,5 @@
-import type { Stick } from "./controls";
-import { WALK_SPEED } from "./motion";
+import { WALKING, type WalkingSettings } from "./motion";
+import type { Stick } from "./steering";
 
 /** What can be changed about running while walking; see tuning.ts. */
 export interface RunningSettings {
@@ -52,7 +52,10 @@ export class Running {
   private pushed = false;
   private dippedAt = -Infinity;
 
-  constructor(readonly settings: RunningSettings = { ...RUNNING }) {}
+  constructor(
+    readonly settings: RunningSettings = { ...RUNNING },
+    private readonly walking: WalkingSettings = WALKING,
+  ) {}
 
   /**
    * Follow the joystick, and whether Shift is held while a key walks forward,
@@ -85,11 +88,12 @@ export class Running {
       this.dippedAt = quick ? this.seconds : -Infinity;
     }
 
-    if (this.running && stick.y * speed < WALK_SPEED) this.running = false;
+    const walkSpeed = this.walking.speed;
+    if (this.running && stick.y * speed < walkSpeed) this.running = false;
 
     const target = this.running || shift ? 1 : 0;
     const change = ease > 0 ? seconds / ease : 1;
     this.level += Math.max(-change, Math.min(change, target - this.level));
-    return WALK_SPEED + (speed - WALK_SPEED) * this.level;
+    return walkSpeed + (speed - walkSpeed) * this.level;
   }
 }

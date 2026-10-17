@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   advance,
   IDLE,
-  LEVELLING_RATE,
   levelling,
   MAX_PITCH,
-  STANDING_TURN_SPEED,
-  WALK_SPEED,
-  WALKING_TURN_SPEED,
+  WALKING,
   withinLimits,
   type Intent,
   type Viewpoint,
 } from "./motion";
 
+/** Radians per second at full push, standing still and walking. */
+const STANDING_TURN_SPEED = (Math.PI * 2) / WALKING.standingTurn;
+const WALKING_TURN_SPEED = (Math.PI * 2) / WALKING.walkingTurn;
 const limits = { halfWidth: 5, halfDepth: 4 };
 const room = withinLimits(limits);
 const start: Viewpoint = { x: 0, z: 0, floor: 0, heading: 0, pitch: 0 };
@@ -23,13 +23,13 @@ describe("advance", () => {
   it("walks north when pushed forward from the start", () => {
     const next = advance(start, push(0, 1), 1, room);
     expect(next.x).toBeCloseTo(0);
-    expect(next.z).toBeCloseTo(-WALK_SPEED);
+    expect(next.z).toBeCloseTo(-WALKING.speed);
     expect(next.heading).toBe(0);
   });
 
   it("walks backward without turning when pulled back", () => {
     const next = advance(start, push(0, -1), 1, room);
-    expect(next.z).toBeCloseTo(WALK_SPEED);
+    expect(next.z).toBeCloseTo(WALKING.speed);
     expect(next.heading).toBe(0);
   });
 
@@ -43,7 +43,7 @@ describe("advance", () => {
   it("walks east after a quarter turn to the right", () => {
     const facingEast = advance(start, push(1, 0), 0.75, room);
     const next = advance(facingEast, push(0, 1), 1, room);
-    expect(next.x).toBeCloseTo(WALK_SPEED);
+    expect(next.x).toBeCloseTo(WALKING.speed);
     expect(next.z).toBeCloseTo(0);
   });
 
@@ -56,7 +56,7 @@ describe("advance", () => {
 
   it("scales speed with how far the stick is pushed", () => {
     const next = advance(start, push(0, 0.5), 1, room);
-    expect(next.z).toBeCloseTo(-WALK_SPEED / 2);
+    expect(next.z).toBeCloseTo(-WALKING.speed / 2);
   });
 
   it("turns fastest standing still and slowest at full walking speed", () => {
@@ -82,7 +82,7 @@ describe("advance", () => {
 
   it("sidesteps to the right without turning", () => {
     const next = advance(start, { ...IDLE, sidestep: 1 }, 1, room);
-    expect(next.x).toBeCloseTo(WALK_SPEED);
+    expect(next.x).toBeCloseTo(WALKING.speed);
     expect(next.z).toBeCloseTo(0);
     expect(next.heading).toBe(0);
   });
@@ -91,12 +91,12 @@ describe("advance", () => {
     const facingEast = { ...start, heading: Math.PI / 2 };
     const next = advance(facingEast, { ...IDLE, sidestep: 1 }, 1, room);
     expect(next.x).toBeCloseTo(0);
-    expect(next.z).toBeCloseTo(WALK_SPEED);
+    expect(next.z).toBeCloseTo(WALKING.speed);
   });
 
   it("is no faster walking diagonally than straight", () => {
     const next = advance(start, { ...IDLE, walk: 1, sidestep: 1 }, 1, room);
-    expect(Math.hypot(next.x, next.z)).toBeCloseTo(WALK_SPEED);
+    expect(Math.hypot(next.x, next.z)).toBeCloseTo(WALKING.speed);
   });
 
   describe("running", () => {
@@ -108,13 +108,13 @@ describe("advance", () => {
     });
 
     it("walks backward and sidesteps at walking pace", () => {
-      expect(advance(start, run({ walk: -1 }), 1, room).z).toBeCloseTo(WALK_SPEED);
-      expect(advance(start, run({ sidestep: 1 }), 1, room).x).toBeCloseTo(WALK_SPEED);
+      expect(advance(start, run({ walk: -1 }), 1, room).z).toBeCloseTo(WALKING.speed);
+      expect(advance(start, run({ sidestep: 1 }), 1, room).x).toBeCloseTo(WALKING.speed);
     });
 
     it("turns slower than walking, by the same rule", () => {
       const next = advance(start, run({ walk: 1, turn: 1 }), 0.1, room);
-      const pace = 3.5 / WALK_SPEED;
+      const pace = 3.5 / WALKING.speed;
       const expected =
         STANDING_TURN_SPEED + (WALKING_TURN_SPEED - STANDING_TURN_SPEED) * pace;
       expect(next.heading).toBeCloseTo(expected * 0.1);
@@ -130,7 +130,7 @@ describe("advance", () => {
 
   it("walks where free look has turned the view", () => {
     const next = advance(start, { ...IDLE, walk: 1, looking: true, lookRight: Math.PI / 2 }, 1, room);
-    expect(next.x).toBeCloseTo(WALK_SPEED);
+    expect(next.x).toBeCloseTo(WALKING.speed);
     expect(next.z).toBeCloseTo(0);
   });
 
@@ -146,7 +146,7 @@ describe("advance", () => {
 
     it("eases back to level while walking", () => {
       const next = advance(tilted, push(0, 1), 1, room);
-      expect(next.pitch).toBeCloseTo(0.8 * Math.exp(-LEVELLING_RATE));
+      expect(next.pitch).toBeCloseTo(0.8 * Math.exp(-WALKING.levelling));
       expect(next.pitch).toBeLessThan(0.02);
     });
 
@@ -172,9 +172,9 @@ describe("advance", () => {
       expect(levelling(IDLE, 1)).toBe(1);
       expect(levelling(push(1, 0), 1)).toBe(1);
       expect(levelling({ ...IDLE, walk: 1, looking: true }, 1)).toBe(1);
-      expect(levelling(push(0, 1), 1)).toBeCloseTo(Math.exp(-LEVELLING_RATE));
+      expect(levelling(push(0, 1), 1)).toBeCloseTo(Math.exp(-WALKING.levelling));
       expect(levelling({ ...IDLE, sidestep: -1 }, 0.5)).toBeCloseTo(
-        Math.exp(-LEVELLING_RATE / 2),
+        Math.exp(-WALKING.levelling / 2),
       );
     });
   });

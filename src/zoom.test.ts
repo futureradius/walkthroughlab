@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { MAX_PITCH, type Viewpoint } from "./motion";
 import {
   anchored,
-  fromWheel,
   sceneDirection,
   Zoom,
   ZOOM,
@@ -97,18 +96,6 @@ describe("anchored", () => {
     expect(facing.heading - turned.heading).toBeCloseTo(
       anchored(start, UPRIGHT, before, after).heading - start.heading,
     );
-  });
-});
-
-describe("from a wheel", () => {
-  it("counts a notch of a mouse wheel as a step, in pixels or lines", () => {
-    expect(fromWheel({ deltaY: -100, deltaMode: 0, ctrlKey: false })).toEqual({ steps: 1 });
-    expect(fromWheel({ deltaY: 3, deltaMode: 1, ctrlKey: false })).toEqual({ steps: -1 });
-  });
-
-  it("follows a trackpad pinch as a pinch", () => {
-    const pinch = fromWheel({ deltaY: -100 * Math.log(1.5), deltaMode: 0, ctrlKey: true });
-    expect("spread" in pinch && pinch.spread).toBeCloseTo(1.5);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WALK_SPEED } from "./motion";
+import { WALKING } from "./motion";
 import { RUNNING, Running } from "./running";
 
 const FRAME = 1 / 60;
@@ -31,7 +31,7 @@ const settled = (running: Running, joystick = forward) => hold(running, joystick
 describe("running", () => {
   it("walks when pushed forward once", () => {
     const running = new Running();
-    expect(settled(running)).toBe(WALK_SPEED);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("runs after a quick push forward, a dip and a second push", () => {
@@ -51,13 +51,13 @@ describe("running", () => {
   it("walks when the first push lasts too long", () => {
     const running = new Running();
     doublePush(running, RUNNING.time + 0.1);
-    expect(settled(running)).toBe(WALK_SPEED);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("walks when the dip lasts too long", () => {
     const running = new Running();
     doublePush(running, 0.1, RUNNING.time + 0.1);
-    expect(settled(running)).toBe(WALK_SPEED);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("walks when a push stops short of the push mark", () => {
@@ -66,7 +66,7 @@ describe("running", () => {
     hold(running, short, 0.1);
     hold(running, middle, 0.1);
     hold(running, forward);
-    expect(settled(running)).toBe(WALK_SPEED);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("walks when the dip stays outside the dip mark", () => {
@@ -74,7 +74,7 @@ describe("running", () => {
     hold(running, forward, 0.1);
     hold(running, at(0, RUNNING.dip + 0.05), 0.1);
     hold(running, forward);
-    expect(settled(running)).toBe(WALK_SPEED);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("counts a push more forward than sideways, but not one more sideways", () => {
@@ -84,7 +84,7 @@ describe("running", () => {
 
     const sideways = new Running();
     doublePush(sideways, 0.1, 0.1, at(0.8, 0.6));
-    expect(settled(sideways, at(0.8, 0.6))).toBe(WALK_SPEED);
+    expect(settled(sideways, at(0.8, 0.6))).toBe(WALKING.speed);
   });
 
   it("keeps running at a softer push while faster than walking", () => {
@@ -96,9 +96,9 @@ describe("running", () => {
   it("stops once the push slows to walking pace, until started again", () => {
     const running = new Running();
     doublePush(running);
-    const slow = at(0, (WALK_SPEED / RUNNING.speed) * 0.9);
-    expect(settled(running, slow)).toBe(WALK_SPEED);
-    expect(settled(running)).toBe(WALK_SPEED);
+    const slow = at(0, (WALKING.speed / RUNNING.speed) * 0.9);
+    expect(settled(running, slow)).toBe(WALKING.speed);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("stops when the joystick is let go", () => {
@@ -106,28 +106,28 @@ describe("running", () => {
     doublePush(running);
     settled(running);
     hold(running, middle, 1);
-    expect(settled(running)).toBe(WALK_SPEED);
+    expect(settled(running)).toBe(WALKING.speed);
   });
 
   it("picks up and drops back over the ease time, not at once", () => {
     const running = new Running();
     doublePush(running);
     const halfway = hold(running, forward, RUNNING.ease / 2);
-    expect(halfway).toBeGreaterThan(WALK_SPEED);
+    expect(halfway).toBeGreaterThan(WALKING.speed);
     expect(halfway).toBeLessThan(RUNNING.speed);
     settled(running);
 
     const slow = at(0, 0.2);
     const easing = hold(running, slow, RUNNING.ease / 2);
-    expect(easing).toBeGreaterThan(WALK_SPEED);
+    expect(easing).toBeGreaterThan(WALKING.speed);
     expect(easing).toBeLessThan(RUNNING.speed);
-    expect(hold(running, slow, RUNNING.ease)).toBe(WALK_SPEED);
+    expect(hold(running, slow, RUNNING.ease)).toBe(WALKING.speed);
   });
 
   it("runs while Shift is held, easing up and back", () => {
     const running = new Running();
     expect(hold(running, middle, 1, true)).toBeCloseTo(RUNNING.speed);
-    expect(hold(running, middle, RUNNING.ease / 2)).toBeGreaterThan(WALK_SPEED);
-    expect(hold(running, middle, RUNNING.ease)).toBe(WALK_SPEED);
+    expect(hold(running, middle, RUNNING.ease / 2)).toBeGreaterThan(WALKING.speed);
+    expect(hold(running, middle, RUNNING.ease)).toBe(WALKING.speed);
   });
 });

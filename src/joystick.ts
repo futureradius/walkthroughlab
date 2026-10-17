@@ -1,15 +1,11 @@
-import type { Stick } from "./controls";
-
-/** Deflection below this fraction of full travel counts as centred. */
-const DEAD_ZONE = 0.12;
+import type { Stick } from "./steering";
 
 /**
  * The on-screen joystick. It follows only the pointer that grabbed it, so
  * other fingers on the screen stay free for other gestures.
  */
 export class Joystick {
-  readonly stick: Stick = { x: 0, y: 0 };
-  /** Where the knob sits, as a share of its reach, before the dead zone. */
+  /** Where the knob sits, as a share of its reach. */
   readonly knob: Stick = { x: 0, y: 0 };
 
   private readonly base = document.createElement("div");
@@ -53,19 +49,10 @@ export class Joystick {
     this.handle.style.transform = `translate(${x * travel}px, ${y * travel}px)`;
     this.knob.x = x;
     this.knob.y = -y;
-
-    // Rescale so speed ramps up smoothly from the edge of the dead zone.
-    const reach = Math.min(length, 1);
-    const scale =
-      reach < DEAD_ZONE ? 0 : (reach - DEAD_ZONE) / (1 - DEAD_ZONE) / reach;
-    this.stick.x = x * scale;
-    this.stick.y = -y * scale;
   }
 
   private release() {
     this.pointerId = null;
-    this.stick.x = 0;
-    this.stick.y = 0;
     this.knob.x = 0;
     this.knob.y = 0;
     this.handle.style.transform = "";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COASTING, Coasting, releaseSpeed, SLOWEST_THROW } from "./coasting";
+import { COASTING, Coasting, SLOWEST_THROW } from "./coasting";
 
 /** Throw the view to the right and add up how far it carries, and for how long. */
 function carry(coasting: Coasting, speed: number, frame = 1 / 60) {
@@ -78,39 +78,5 @@ describe("coasting", () => {
     const coasting = new Coasting({ ...COASTING, on: false });
     coasting.throw(5, 0);
     expect(coasting.step(0.016)).toEqual({ right: 0, up: 0 });
-  });
-});
-
-describe("release speed", () => {
-  it("is the speed of the drag over the last moment", () => {
-    const samples = [
-      { at: 0, x: 0, y: 0 },
-      { at: 950, x: 100, y: 50 },
-      { at: 1000, x: 200, y: 30 },
-    ];
-    const speed = releaseSpeed(samples, 1000);
-    expect(speed.x).toBeCloseTo(2000);
-    expect(speed.y).toBeCloseTo(-400);
-  });
-
-  it("is nothing once the finger has come to rest", () => {
-    const samples = [
-      { at: 0, x: 0, y: 0 },
-      { at: 50, x: 300, y: 0 },
-    ];
-    expect(releaseSpeed(samples, 400)).toEqual({ x: 0, y: 0 });
-  });
-
-  it("drops the longer the finger lingers before lifting", () => {
-    const samples = [
-      { at: 0, x: 0, y: 0 },
-      { at: 20, x: 100, y: 0 },
-    ];
-    expect(releaseSpeed(samples, 80).x).toBeLessThan(releaseSpeed(samples, 20).x);
-  });
-
-  it("is nothing for a tap", () => {
-    expect(releaseSpeed([{ at: 10, x: 5, y: 5 }], 10)).toEqual({ x: 0, y: 0 });
-    expect(releaseSpeed([], 10)).toEqual({ x: 0, y: 0 });
   });
 });

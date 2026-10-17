@@ -29,8 +29,6 @@ export const ZOOM: ZoomSettings = {
 export const SCROLL_EASING = 18;
 /** A scrolled zoom this close to where it is going, as a logarithm, is there. */
 const SETTLED = 0.001;
-/** How far a wheel scrolls in one step, in pixels, lines or pages. */
-const STEP = [100, 3, 1];
 
 /** A spot on the screen, in pixels from its top left corner. */
 export interface Spot {
@@ -134,20 +132,6 @@ export function anchored(
   return { heading, pitch };
 }
 
-/**
- * How many steps of zoom a mouse wheel asks for, and which way: positive
- * zooms in. A trackpad pinch arrives as a wheel with the control key held;
- * it asks for a share to zoom in by instead, as a pinch does.
- */
-export function fromWheel(wheel: {
-  deltaY: number;
-  deltaMode: number;
-  ctrlKey: boolean;
-}): { steps: number } | { spread: number } {
-  // Browsers turn a pinch's spread into −100 × its logarithm, in pixels.
-  if (wheel.ctrlKey) return { spread: Math.exp(-wheel.deltaY / 100) };
-  return { steps: -wheel.deltaY / (STEP[wheel.deltaMode] ?? STEP[0]) };
-}
 
 /**
  * Zoom: narrowing the view to bring distant detail closer, without the
@@ -223,39 +207,6 @@ export class Zoom {
     this.level = this.limit(this.level ** kept);
     this.target = this.limit(this.target ** kept);
     return view;
-  }
-
-  /**
-   * Zoom with a mouse wheel or a trackpad pinch over `surface`, instead of
-   * scrolling or zooming the page. A wheel over a panel still scrolls it.
-   */
-  listen(surface: HTMLElement) {
-    surface.addEventListener(
-      "wheel",
-      (event) => {
-        event.preventDefault();
-        const spot = { x: event.clientX, y: event.clientY };
-        const asked = fromWheel(event);
-        if ("spread" in asked) this.pinch(spot, asked.spread);
-        else this.scroll(spot, asked.steps);
-      },
-      { passive: false },
-    );
-    // Safari reports pinches as gestures of its own, which would otherwise
-    // zoom the page. On a touch screen the fingers already pinch through
-    // free look; on a Mac's trackpad the gesture is the only sign of one.
-    let scale = 1;
-    const pinching = (event: Event) => {
-      event.preventDefault();
-      const gesture = event as Event & { scale?: number; clientX?: number; clientY?: number };
-      if (event.type === "gesturestart") scale = 1;
-      if (event.target !== surface || navigator.maxTouchPoints > 0 || !gesture.scale) return;
-      this.pinch({ x: gesture.clientX ?? 0, y: gesture.clientY ?? 0 }, gesture.scale / scale);
-      scale = gesture.scale;
-    };
-    for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
-      document.addEventListener(type, pinching, { passive: false });
-    }
   }
 
   private limit(level: number): number {

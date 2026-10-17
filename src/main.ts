@@ -6,33 +6,27 @@ import {
   WebGLRenderer,
 } from "three";
 import { addAbout } from "./about";
-import { COASTING, Coasting } from "./coasting";
 import { collisionMesh } from "./collision";
-import { Controls } from "./controls";
 import { loadEnvironment } from "./environment";
+import { Gestures } from "./gestures";
 import { AmbientOcclusion } from "./occlusion";
-import { FreeLook } from "./freelook";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
-import { advance, levelling, type Terrain, type Viewpoint } from "./motion";
-import { Running } from "./running";
 import { applySettings } from "./settings";
+import { Steering } from "./steering";
 import {
   addCoastingTuning,
   addOcclusionTuning,
   addRunningTuning,
   addTuning,
+  addWalkingTuning,
   addZoomTuning,
 } from "./tuning";
-import { Zoom } from "./zoom";
 
-const EYE_HEIGHT = 1.6;
 /** Old phones report pixel ratios of 3 or more; rendering that many pixels is the main cost. */
 const MAX_PIXEL_RATIO = 2;
 /** Longest step simulated in one frame, so a stalled tab doesn't teleport the viewer. */
 const MAX_STEP_SECONDS = 0.1;
-/** How quickly the eyes catch up with a sudden change in floor height, per second. */
-const EYE_CATCH_UP = 12;
 /** Farthest distance drawn, in metres. */
 const VIEW_DISTANCE = 300;
 /** Shown behind the loading bar until the sky arrives. */
@@ -51,12 +45,6 @@ const TEST_ENVIRONMENT = {
   start: { x: -13.4, z: 13, heading: 0 },
 };
 
-/** Somewhere to walk: what to draw, where steps may end, and where to begin. */
-interface Place {
-  terrain: Terrain;
-  start: Viewpoint;
-}
-
 const params = new URLSearchParams(location.search);
 const canvas = document.querySelector<HTMLCanvasElement>("#walkthrough")!;
 const renderer = new WebGLRenderer({
@@ -66,11 +54,9 @@ const renderer = new WebGLRenderer({
 });
 
 const scene = new Scene();
-// Turning the screen keeps the zoom, counted from the field of view for its
-// new shape.
-const zoom = new Zoom();
 const screenSize = () => ({ width: window.innerWidth, height: window.innerHeight });
-const camera = new PerspectiveCamera(zoom.fov(screenSize()), 1, 0.1, VIEW_DISTANCE);
+// Steering sets the field of view from the first frame on.
+const camera = new PerspectiveCamera(60, 1, 0.1, VIEW_DISTANCE);
 camera.rotation.order = "YXZ";
 
 function resize() {
@@ -78,13 +64,13 @@ function resize() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
-  camera.fov = zoom.fov(screenSize());
   camera.updateProjectionMatrix();
 }
 window.addEventListener("resize", resize);
 resize();
 
-async function enterTestEnvironment(): Promise<Place> {
+/** Load the test environment and steer through it from its starting spot. */
+async function enterTestEnvironment(): Promise<Steering> {
   scene.background = new Color(LOADING_BACKDROP);
   // Must match the tone mapping baked into sky pictures by `npm run optimize`.
   renderer.toneMapping = NeutralToneMapping;
@@ -109,10 +95,6 @@ async function enterTestEnvironment(): Promise<Place> {
     scene.add(environment.visible);
     scene.background = environment.skyPicture;
     scene.environment = environment.skyLight;
-    const zoomRefused = applySettings(zoom.settings, environment.settings.zoom);
-    if (zoomRefused.length > 0) {
-      console.warn(`The settings file's ${zoomRefused.join(", ")} under Zoom could not be used.`);
-    }
     if (occlusion) {
       occlusion.bakedLight = environment.bakedLight ?? null;
       const refused = applySettings(
@@ -131,8 +113,13 @@ async function enterTestEnvironment(): Promise<Place> {
     if (floor === undefined) {
       throw new Error("The starting spot is not on the collision mesh.");
     }
+    const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
+    const zoomRefused = applySettings(steering.settings.zoom, environment.settings.zoom);
+    if (zoomRefused.length > 0) {
+      console.warn(`The settings file's ${zoomRefused.join(", ")} under Zoom could not be used.`);
+    }
     loading.remove();
-    return { terrain, start: { x, z, floor, heading, pitch: 0 } };
+    return steering;
   } catch (error) {
     loading.className = "loading loading--failed";
     loading.textContent = "This walkthrough could not be loaded.";
@@ -154,34 +141,31 @@ const occlusion = AmbientOcclusion.supported(renderer)
 
 addAbout(document.body);
 
-const place = await enterTestEnvironment();
+const steering = await enterTestEnvironment();
 
 // Add ?config to the address for a panel that changes settings while walking.
-// Ambient occlusion's start from those the environment's settings file gave.
-// With reduced motion a thrown view is braked much harder.
+// Ambient occlusion's and zoom's start from those the environment's settings
+// file gave. With reduced motion a thrown view is braked much harder.
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-const coasting = new Coasting({ ...COASTING, reduced: reducedMotion.matches });
-const running = new Running();
+const { walking, running, coasting, zoom } = steering.settings;
+coasting.reduced = reducedMotion.matches;
 if (params.has("config")) {
   const tuning = addTuning(document.body);
   if (occlusion) addOcclusionTuning(tuning, occlusion.settings);
-  addCoastingTuning(tuning, coasting.settings);
-  addRunningTuning(tuning, running.settings);
-  addZoomTuning(tuning, zoom.settings);
+  addWalkingTuning(tuning, walking);
+  addCoastingTuning(tuning, coasting);
+  addRunningTuning(tuning, running);
+  addZoomTuning(tuning, zoom);
 } else {
   // The panel has a switch for this instead, to try both brakes on one device.
   reducedMotion.addEventListener("change", () => {
-    coasting.settings.reduced = reducedMotion.matches;
+    coasting.reduced = reducedMotion.matches;
   });
 }
 
 const joystick = new Joystick(document.body);
 const keyboard = new Keyboard();
-const freeLook = new FreeLook(canvas, coasting, zoom);
-zoom.listen(canvas);
-const controls = new Controls(coasting.settings);
-let viewpoint = place.start;
-let eyes = viewpoint.floor + EYE_HEIGHT;
+new Gestures(canvas, steering);
 let frames = 0;
 let lowest = Infinity;
 let windowStart = performance.now();
@@ -191,28 +175,13 @@ renderer.setAnimationLoop((now) => {
   const seconds = Math.min((now - previous) / 1000, MAX_STEP_SECONDS);
   previous = now;
 
-  // One pixel covers this angle at the present zoom, so a dragged spot stays
-  // under the finger.
-  const radiansPerPixel = (camera.fov * Math.PI) / 180 / window.innerHeight;
-  const intent = {
-    ...controls.read(
-      joystick.stick,
-      keyboard.keys,
-      freeLook.take(radiansPerPixel, seconds),
-      seconds,
-      zoom.level,
-    ),
-    forwardSpeed: running.step(joystick, keyboard.running, seconds),
-  };
-  viewpoint = advance(viewpoint, intent, seconds, place.terrain);
-  viewpoint = zoom.step(viewpoint, seconds, levelling(intent, seconds), screenSize());
-  camera.fov = zoom.fov(screenSize());
+  const readings = { knob: joystick.knob, keys: keyboard.keys };
+  const view = steering.step(readings, seconds, screenSize());
+  camera.position.set(view.x, view.y, view.z);
+  camera.rotation.y = -view.heading;
+  camera.rotation.x = view.pitch;
+  camera.fov = view.fov;
   camera.updateProjectionMatrix();
-  eyes +=
-    (viewpoint.floor + EYE_HEIGHT - eyes) * Math.min(1, seconds * EYE_CATCH_UP);
-  camera.position.set(viewpoint.x, eyes, viewpoint.z);
-  camera.rotation.y = -viewpoint.heading;
-  camera.rotation.x = viewpoint.pitch;
   if (occlusion) occlusion.render(scene, camera);
   else renderer.render(scene, camera);
 

@@ -40,6 +40,10 @@ _Avoid_: Admin, creator, uploader
 The position and direction of the viewer's eyes within the space.
 _Avoid_: Camera, player, character
 
+**Steering**:
+How the viewer's joystick, keys, free look and zoom move the viewpoint, frame by frame.
+_Avoid_: Player controller, camera controller, input handling
+
 **Joystick**:
 The single on-screen control that moves the viewpoint through a walkthrough: pushing it forward or back walks, and pushing it sideways turns on the spot. During free look, and while the view coasts after it, pushing it sideways sidesteps instead; as the view slows to rest, it eases back to turning.
 _Avoid_: Gamepad, controller, D-pad, thumbstick

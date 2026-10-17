@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BODY, collisionMesh } from "./collision";
-import { advance, IDLE, WALK_SPEED, type Viewpoint } from "./motion";
+import { advance, IDLE, WALKING, type Viewpoint } from "./motion";
 
 type Corner = [x: number, y: number, z: number];
 const quad = (a: Corner, b: Corner, c: Corner, d: Corner) => [
@@ -30,7 +30,7 @@ describe("collision mesh", () => {
   it("lets the viewer walk across level floor", () => {
     const { terrain } = collisionMesh(floor(-5, -5, 5, 5, 0));
     const next = walk(start, terrain, 1);
-    expect(next.z).toBeCloseTo(-WALK_SPEED);
+    expect(next.z).toBeCloseTo(-WALKING.speed);
     expect(next.floor).toBeCloseTo(0);
   });
 
@@ -41,8 +41,8 @@ describe("collision mesh", () => {
       ...quad([-5, 1, -5], [5, 1, -5], [5, 0, -1], [-5, 0, -1]),
     ]);
     const next = walk(start, terrain, 2);
-    expect(next.z).toBeCloseTo(-2 * WALK_SPEED);
-    expect(next.floor).toBeCloseTo((2 * WALK_SPEED - 1) / 4);
+    expect(next.z).toBeCloseTo(-2 * WALKING.speed);
+    expect(next.floor).toBeCloseTo((2 * WALKING.speed - 1) / 4);
   });
 
   it("refuses to walk off the edge of the floor", () => {
@@ -68,7 +68,7 @@ describe("collision mesh", () => {
       ...floor(-5, -9, 5, -2, 0.15),
     ]);
     const next = walk(start, terrain, 3);
-    expect(next.z).toBeCloseTo(-3 * WALK_SPEED);
+    expect(next.z).toBeCloseTo(-3 * WALKING.speed);
     expect(next.floor).toBeCloseTo(0.15);
   });
 
@@ -109,7 +109,7 @@ describe("collision mesh", () => {
       ...wall(-5, -3, 5, -3, 2.2, 3),
     ]);
     const next = walk(start, terrain, 3);
-    expect(next.z).toBeCloseTo(-3 * WALK_SPEED);
+    expect(next.z).toBeCloseTo(-3 * WALKING.speed);
   });
 
   it("picks the floor level closest to the viewer where levels overlap", () => {

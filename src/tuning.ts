@@ -1,5 +1,6 @@
 import { BLURS } from "./blur";
 import type { CoastingSettings } from "./coasting";
+import type { WalkingSettings } from "./motion";
 import type { OcclusionSettings } from "./occlusion";
 import type { RunningSettings } from "./running";
 import { writeSettings } from "./settings";
@@ -193,6 +194,64 @@ export function addOcclusionTuning(parent: HTMLElement, settings: OcclusionSetti
     }
   });
   panel.append(copy);
+  parent.append(panel);
+}
+
+/**
+ * Add a section that changes the movements every other one builds on: how
+ * fast the viewer walks and turns, how soon the view levels out, and where
+ * the eyes are. What suits goes into motion.ts by hand: it is the same for
+ * every environment.
+ */
+export function addWalkingTuning(parent: HTMLElement, settings: WalkingSettings) {
+  const panel = element("details", {});
+  const perTurn = (value: number) => `${value.toFixed(2)} s a turn`;
+  const perSecond = (value: number) => `${value.toFixed(1)} /s`;
+  panel.append(
+    element("summary", { textContent: "Walking" }),
+    slider(
+      "Speed",
+      { min: 0.5, max: 3, step: 0.1 },
+      settings.speed,
+      (value) => `${value.toFixed(1)} m/s`,
+      (value) => (settings.speed = value),
+    ),
+    slider(
+      "Turning, standing",
+      { min: 1, max: 8, step: 0.25 },
+      settings.standingTurn,
+      perTurn,
+      (value) => (settings.standingTurn = value),
+    ),
+    slider(
+      "Turning, walking",
+      { min: 1, max: 10, step: 0.25 },
+      settings.walkingTurn,
+      perTurn,
+      (value) => (settings.walkingTurn = value),
+    ),
+    slider(
+      "Levelling",
+      { min: 0, max: 12, step: 0.5 },
+      settings.levelling,
+      perSecond,
+      (value) => (settings.levelling = value),
+    ),
+    slider(
+      "Eye height",
+      { min: 1, max: 2, step: 0.05 },
+      settings.eyeHeight,
+      (value) => `${value.toFixed(2)} m`,
+      (value) => (settings.eyeHeight = value),
+    ),
+    slider(
+      "Eyes catching up",
+      { min: 1, max: 30, step: 1 },
+      settings.eyeCatchUp,
+      perSecond,
+      (value) => (settings.eyeCatchUp = value),
+    ),
+  );
   parent.append(panel);
 }
 

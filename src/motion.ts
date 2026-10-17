@@ -46,19 +46,40 @@ export interface Limits {
   halfDepth: number;
 }
 
-/** Metres per second at full stick, unless running forward. */
-export const WALK_SPEED = 1.4;
-/** Radians per second at full stick while standing still: a third of a turn. */
-export const STANDING_TURN_SPEED = (Math.PI * 2) / 3;
+/** What can be changed about walking while it runs; see tuning.ts. */
+export interface WalkingSettings {
+  /** Metres per second at full push, unless running forward. */
+  speed: number;
+  /** Seconds a full turn takes at full push while standing still. */
+  standingTurn: number;
+  /**
+   * Seconds a full turn takes at full push while walking at full speed.
+   * Running forward eases turning off further by the same rule.
+   */
+  walkingTurn: number;
+  /** How quickly the view returns to level once the viewer sets off, per second. */
+  levelling: number;
+  /** Metres the eyes are above the floor. */
+  eyeHeight: number;
+  /** How quickly the eyes catch up with a sudden change in floor height, per second. */
+  eyeCatchUp: number;
+}
+
 /**
- * Radians per second at full stick while walking at full speed: a quarter
- * turn. Running forward eases it off further by the same rule.
+ * The usual settings: an easy stroll, turning a third of a turn a second
+ * standing still and a quarter walking.
  */
-export const WALKING_TURN_SPEED = Math.PI / 2;
+export const WALKING: WalkingSettings = {
+  speed: 1.4,
+  standingTurn: 3,
+  walkingTurn: 4,
+  levelling: 4,
+  eyeHeight: 1.6,
+  eyeCatchUp: 12,
+};
+
 /** Farthest the view tilts up or down: just short of straight up. */
 export const MAX_PITCH = (85 * Math.PI) / 180;
-/** How quickly the view returns to level once the viewer sets off, per second. */
-export const LEVELLING_RATE = 4;
 
 export const IDLE: Intent = {
   walk: 0,
@@ -67,7 +88,7 @@ export const IDLE: Intent = {
   lookRight: 0,
   lookUp: 0,
   looking: false,
-  forwardSpeed: WALK_SPEED,
+  forwardSpeed: WALKING.speed,
 };
 
 const clamp = (value: number, limit: number) =>
@@ -78,9 +99,13 @@ const clamp = (value: number, limit: number) =>
  * viewer moves without holding a free look drag. Zoom wears off by the same
  * share.
  */
-export function levelling(intent: Intent, seconds: number): number {
+export function levelling(
+  intent: Intent,
+  seconds: number,
+  walking: WalkingSettings = WALKING,
+): number {
   const moving = intent.walk !== 0 || intent.sidestep !== 0;
-  return moving && !intent.looking ? Math.exp(-LEVELLING_RATE * seconds) : 1;
+  return moving && !intent.looking ? Math.exp(-walking.levelling * seconds) : 1;
 }
 
 /** A flat floor at height zero, walled in by a rectangle. */
@@ -103,25 +128,26 @@ export function advance(
   intent: Intent,
   seconds: number,
   terrain: Terrain,
+  walking: WalkingSettings = WALKING,
 ): Viewpoint {
   // A diagonal push is no faster than a straight one.
   const push = Math.max(1, Math.hypot(intent.walk, intent.sidestep));
   const walk = intent.walk / push;
   const sidestep = intent.sidestep / push;
   // Only forward is any faster for running.
-  const forwardSpeed = walk > 0 ? intent.forwardSpeed : WALK_SPEED;
-  const pace = Math.hypot(walk * forwardSpeed, sidestep * WALK_SPEED) / WALK_SPEED;
+  const forwardSpeed = walk > 0 ? intent.forwardSpeed : walking.speed;
+  const pace = Math.hypot(walk * forwardSpeed, sidestep * walking.speed) / walking.speed;
 
-  const turnSpeed = Math.max(
-    0,
-    STANDING_TURN_SPEED + (WALKING_TURN_SPEED - STANDING_TURN_SPEED) * pace,
-  );
+  const standing = (Math.PI * 2) / walking.standingTurn;
+  const moving = (Math.PI * 2) / walking.walkingTurn;
+  const turnSpeed = Math.max(0, standing + (moving - standing) * pace);
   const heading =
     from.heading + intent.turn * turnSpeed * seconds + intent.lookRight;
-  const pitch = clamp(from.pitch + intent.lookUp, MAX_PITCH) * levelling(intent, seconds);
+  const pitch =
+    clamp(from.pitch + intent.lookUp, MAX_PITCH) * levelling(intent, seconds, walking);
 
   const forward = walk * forwardSpeed * seconds;
-  const right = sidestep * WALK_SPEED * seconds;
+  const right = sidestep * walking.speed * seconds;
   const footing = terrain(
     from,
     from.x + Math.sin(heading) * forward + Math.cos(heading) * right,
