@@ -1,12 +1,10 @@
 import {
   CustomBlending,
   DstColorFactor,
-  Mesh,
   ShaderMaterial,
   SrcColorFactor,
   Vector2,
   ZeroFactor,
-  type Material,
   type PerspectiveCamera,
   type Scene,
   type Texture,
@@ -14,6 +12,7 @@ import {
 } from "three";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
 import { BLURS, Blur } from "./blur";
+import { LAYERS } from "./environment";
 import { choice, fixed, number, percent, toggle, type Described } from "./settings";
 import { LET_OFF } from "./sunlit";
 
@@ -325,14 +324,12 @@ for (const setting of Object.keys(OCCLUSION_DESCRIBED) as (keyof OcclusionSettin
   if (usedBy.length > 0) OCCLUSION_DESCRIBED[setting].when = { method: usedBy };
 }
 
-function seeThrough(mesh: Mesh): boolean {
-  const materials: Material[] = [mesh.material].flat();
-  return materials.some((material) => material.transparent);
-}
-
-function show(meshes: Mesh[], visible: boolean) {
-  for (const mesh of meshes) mesh.visible = visible;
-}
+/**
+ * The kinds of surface drawn over the darkening rather than under it: they
+ * neither shade what is near them nor hide what is behind them, and are not
+ * darkened themselves. Solid surfaces are drawn under it.
+ */
+const OVER_DARKENING = [LAYERS.glass];
 
 /**
  * Ambient occlusion: draws the scene to the canvas exactly as it would be
@@ -355,8 +352,6 @@ export class AmbientOcclusion {
   private blur: Blur | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
-  private readonly glass: Mesh[] = [];
-  private readonly solid: Mesh[] = [];
 
   /** Whether this device can work out ambient occlusion at all. */
   static supported(renderer: WebGLRenderer): boolean {
@@ -459,13 +454,10 @@ export class AmbientOcclusion {
     const width = Math.max(1, Math.round(this.size.x * settings.detail));
     const height = Math.max(1, Math.round(this.size.y * settings.detail));
 
-    // Glass neither shades what is near it nor hides what is behind it, and
-    // the sky is too far away to shade anything.
-    scene.traverse((object) => {
-      if (!object.visible || !(object instanceof Mesh)) return;
-      (seeThrough(object) ? this.glass : this.solid).push(object);
-    });
-    show(this.glass, false);
+    // Only solid surfaces shade what is near them, and the sky is too far
+    // away to shade anything.
+    const layers = camera.layers.mask;
+    camera.layers.set(LAYERS.solid);
     const background = scene.background;
     scene.background = null;
     const darkening = workings.work(renderer, width, height, settings, this.bakedLight);
@@ -501,18 +493,16 @@ export class AmbientOcclusion {
     const autoClear = renderer.autoClear;
     renderer.autoClear = false;
     this.darken.render(renderer);
-    show(this.glass, true);
     if (!settings.alone) {
       // Glass goes on last, so the darkening behind it is seen through it
       // like everything else there rather than lying on top of it.
-      show(this.solid, false);
+      camera.layers.disableAll();
+      for (const layer of OVER_DARKENING) camera.layers.enable(layer);
       scene.background = null;
       renderer.render(scene, camera);
       scene.background = background;
-      show(this.solid, true);
     }
+    camera.layers.mask = layers;
     renderer.autoClear = autoClear;
-    this.glass.length = 0;
-    this.solid.length = 0;
   }
 }

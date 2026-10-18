@@ -28,6 +28,19 @@ const COLLISION_LAYER = "Collision Mesh";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 const BAKED_LIGHT_RANGE = 4;
 
+/**
+ * The kinds of surface every mesh of an environment is sorted into when it
+ * loads. Each mesh stays on the usual layer 0 and is put on its kind's layer
+ * too, so whatever draws the environment picks kinds by `camera.layers`
+ * alone. Whatever lights the environment must be on every layer.
+ */
+export const LAYERS = {
+  /** Everything that is not of another kind, which hides what is behind it. */
+  solid: 1,
+  /** See GLOSSARY.md. */
+  glass: 2,
+} as const;
+
 /** The files `npm run optimize` writes for one environment and its sky. */
 export interface EnvironmentFiles {
   model: string;
@@ -84,11 +97,18 @@ function trianglesOf(root: Object3D): Float32Array {
 function prepare(material: Material, anisotropy: number) {
   // Rhino doesn't care which way a face points, so show both sides.
   material.side = DoubleSide;
-  // See-through surfaces must not hide what is drawn behind them.
-  material.depthWrite = !material.transparent;
   if (material instanceof MeshStandardMaterial && material.map) {
     material.map.anisotropy = anisotropy;
   }
+}
+
+/**
+ * Glass is marked in the file by the alpha mode BLEND, which `npm run optimize`
+ * gives materials that let through more than half the light and which the bake
+ * reads too. three.js loads it as `transparent`.
+ */
+function isGlass(material: Material): material is MeshStandardMaterial {
+  return material.transparent && material instanceof MeshStandardMaterial;
 }
 
 /**
@@ -96,6 +116,8 @@ function prepare(material: Material, anisotropy: number) {
  * once for each of its surfaces the view crosses, and reflects the sky on top.
  */
 function asGlass(material: MeshStandardMaterial) {
+  // Glass must not hide what is drawn behind it.
+  material.depthWrite = false;
   // The canvas holds colours encoded for display, where taking away a share
   // of the light takes away a smaller share of the number.
   const { r, g, b } = material.color;
@@ -142,8 +164,50 @@ function withBakedLight(material: MeshStandardMaterial, bakedLight: Texture) {
 }
 
 /**
- * Download an environment and its sky, and split the environment into what
- * the viewer sees and its collision mesh. `onProgress` gets the fraction
+ * Sort every mesh of a loaded model into its kind of surface, put it on that
+ * kind's layer, and give its material what the kind needs: glass blends with
+ * what is behind it, and a solid surface the bake painted shows baked light.
+ */
+export function prepareSurfaces(model: Object3D, bakedLight: Texture | undefined, anisotropy: number) {
+  const baked = new Map<Material, Material>();
+  const glass = new Set<Material>();
+  let bakedGlass = 0;
+  model.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const material: Material = object.material;
+    prepare(material, anisotropy);
+    // Glass is decided first, so it stays glass whatever coordinates it carries.
+    if (isGlass(material)) {
+      object.layers.enable(LAYERS.glass);
+      if (!glass.has(material)) {
+        glass.add(material);
+        asGlass(material);
+      }
+      if (object.geometry.hasAttribute("uv1")) bakedGlass++;
+      return;
+    }
+    object.layers.enable(LAYERS.solid);
+    // Only surfaces the bake painted carry the second set of coordinates.
+    if (
+      bakedLight &&
+      material instanceof MeshStandardMaterial &&
+      object.geometry.hasAttribute("uv1")
+    ) {
+      if (!baked.has(material)) baked.set(material, withBakedLight(material, bakedLight));
+      object.material = baked.get(material);
+    }
+  });
+  if (bakedGlass > 0) {
+    console.warn(
+      `${bakedGlass} glass meshes carry coordinates for baked light, which glass does not show yet (issue #20).`,
+    );
+  }
+}
+
+/**
+ * Download an environment and its sky, split the environment into what the
+ * viewer sees and its collision mesh, and sort what the viewer sees into
+ * kinds of surface; see LAYERS. `onProgress` gets the fraction
  * downloaded, or undefined while the server hasn't said how big the files are.
  */
 export async function loadEnvironment(
@@ -194,26 +258,7 @@ export async function loadEnvironment(
     // The second set of texture coordinates, written by `npm run optimize`.
     bakedLight.channel = 1;
   }
-  const baked = new Map<Material, Material>();
-  const glass = new Set<Material>();
-  gltf.scene.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    const material: Material = object.material;
-    prepare(material, anisotropy);
-    if (material.transparent && material instanceof MeshStandardMaterial && !glass.has(material)) {
-      glass.add(material);
-      asGlass(material);
-    }
-    // Only surfaces the bake painted carry the second set of coordinates.
-    if (
-      bakedLight &&
-      material instanceof MeshStandardMaterial &&
-      object.geometry.hasAttribute("uv1")
-    ) {
-      if (!baked.has(material)) baked.set(material, withBakedLight(material, bakedLight));
-      object.material = baked.get(material);
-    }
-  });
+  prepareSurfaces(gltf.scene, bakedLight, anisotropy);
 
   skyPicture.colorSpace = SRGBColorSpace;
   skyPicture.mapping = EquirectangularReflectionMapping;

@@ -35,8 +35,9 @@ export class N8 implements OcclusionWorkings {
     pass.configuration.autoRenderBeauty = false;
     pass.beautyRenderTarget.dispose();
     pass.beautyRenderTarget = this.depths.target;
-    // Glass is hidden from it and drawn by AmbientOcclusion.
-    pass.configuration.transparencyAware = false;
+    // Glass is left out of what it sees and drawn by AmbientOcclusion, so it need
+    // not look through the whole scene for it every frame.
+    pass.autoDetectTransparency = false;
     // What it calls its mobile setting.
     pass.configuration.denoiseSamples = 4;
     // Putting the darkening on the picture is left to AmbientOcclusion, so

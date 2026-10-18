@@ -18,8 +18,8 @@ declare module "n8ao" {
       gammaCorrection: boolean;
       halfRes: boolean;
       autoRenderBeauty: boolean;
-      transparencyAware: boolean;
     };
+    autoDetectTransparency: boolean;
     beautyRenderTarget: WebGLRenderTarget;
     accumulationRenderTarget: WebGLRenderTarget;
     effectCompositerQuad: { render(renderer: WebGLRenderer): void };
