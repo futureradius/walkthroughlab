@@ -7,12 +7,12 @@ import {
 } from "three";
 import { addAbout } from "./about";
 import { collisionMesh } from "./collision";
-import { loadEnvironment } from "./environment";
+import { loadConfig, loadEnvironment } from "./environment";
 import { Gestures } from "./gestures";
 import { AmbientOcclusion, OCCLUSION_DESCRIBED } from "./occlusion";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
-import { applyConfig, section, type Section } from "./settings";
+import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
 import { addTuning } from "./tuning";
 
@@ -32,8 +32,8 @@ const TEST_ENVIRONMENT = {
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
     bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
-    config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
   },
+  config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
   // At the foot of the stairs, looking up them.
   start: { x: -13.4, z: 13, heading: 0 },
 };
@@ -62,23 +62,39 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
+// Ambient occlusion is on wherever the device can work it out.
+const occlusion = AmbientOcclusion.supported(renderer)
+  ? new AmbientOcclusion(renderer, scene, camera)
+  : null;
+
 /**
- * Every setting the ?config panel changes while walking. A config file may
- * set those of ambient occlusion and zoom, which differ between environments.
+ * Settings the ?config panel changes while walking. A config file may set
+ * those of ambient occlusion and zoom, which differ between environments.
  */
-function sectionsOf(steering: Steering): Section[] {
+const occlusionSections: Section[] = occlusion
+  ? [section("Ambient occlusion", occlusion.settings, OCCLUSION_DESCRIBED, true)]
+  : [];
+
+function steeringSections(steering: Steering): Section[] {
   const { walking, running, coasting, joystick, zoom } = steering.settings;
   const described = STEERING_DESCRIBED;
   return [
-    ...(occlusion
-      ? [section("Ambient occlusion", occlusion.settings, OCCLUSION_DESCRIBED, true)]
-      : []),
     section("Walking", walking, described.walking),
     section("Running", running, described.running),
     section("Coasting", coasting, described.coasting),
     section("Joystick", joystick, described.joystick),
     section("Zoom", zoom, described.zoom, true),
   ];
+}
+
+/** Use what the config file sets in these sections, saying in the console what it could not. */
+function configure(sections: Section[], config: Config) {
+  for (const section of sections.filter(({ inFile }) => inFile)) {
+    const refused = applyConfig(section, config[section.heading.toLowerCase()]);
+    if (refused.length > 0) {
+      console.warn(`The config file's ${section.heading} section could not use ${refused.join("; ")}.`);
+    }
+  }
 }
 
 /** Load the test environment and steer through it from its starting spot. */
@@ -93,9 +109,13 @@ async function enterTestEnvironment(): Promise<{ steering: Steering; sections: S
     Object.assign(document.createElement("div"), { className: "loading__bar" }),
   );
   try {
-    // Started now, so what ambient occlusion usually needs arrives alongside
-    // the environment rather than after it.
-    void occlusion?.ready(scene, camera);
+    const config = loadConfig(TEST_ENVIRONMENT.config);
+    // The config file arrives first and says which way ambient occlusion is
+    // worked out, so only that is fetched, alongside the environment.
+    const occlusionReady = config.then((read) => {
+      configure(occlusionSections, read);
+      return occlusion?.ready();
+    });
     const environment = await loadEnvironment(
       TEST_ENVIRONMENT.files,
       renderer,
@@ -114,20 +134,13 @@ async function enterTestEnvironment(): Promise<{ steering: Steering; sections: S
       throw new Error("The starting spot is not on the collision mesh.");
     }
     const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
-    const sections = sectionsOf(steering);
-    for (const section of sections.filter(({ inFile }) => inFile)) {
-      const refused = applyConfig(section, environment.config[section.heading.toLowerCase()]);
-      if (refused.length > 0) {
-        console.warn(`The config file's ${section.heading} section could not use ${refused.join("; ")}.`);
-      }
-    }
-    if (occlusion) {
-      occlusion.bakedLight = environment.bakedLight ?? null;
-      // The loading bar stays until ambient occlusion can be in the first frame.
-      await occlusion.ready(scene, camera);
-    }
+    const sections = steeringSections(steering);
+    configure(sections, await config);
+    if (occlusion) occlusion.bakedLight = environment.bakedLight ?? null;
+    // The loading bar stays until ambient occlusion can be in the first frame.
+    await occlusionReady;
     loading.remove();
-    return { steering, sections };
+    return { steering, sections: [...occlusionSections, ...sections] };
   } catch (error) {
     loading.className = "loading loading--failed";
     loading.textContent = "This walkthrough could not be loaded.";
@@ -140,11 +153,6 @@ const fps = params.has("fps")
   ? document.body.appendChild(
       Object.assign(document.createElement("div"), { className: "fps" }),
     )
-  : null;
-
-// Ambient occlusion is on wherever the device can work it out.
-const occlusion = AmbientOcclusion.supported(renderer)
-  ? new AmbientOcclusion(renderer)
   : null;
 
 addAbout(document.body);
@@ -185,7 +193,7 @@ renderer.setAnimationLoop((now) => {
   camera.rotation.x = view.pitch;
   camera.fov = view.fov;
   camera.updateProjectionMatrix();
-  if (occlusion) occlusion.render(scene, camera);
+  if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
 
   if (fps) {

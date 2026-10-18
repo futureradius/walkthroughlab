@@ -1,8 +1,4 @@
 import {
-  DepthTexture,
-  DoubleSide,
-  ShaderMaterial,
-  UnsignedIntType,
   WebGLRenderTarget,
   type PerspectiveCamera,
   type Scene,
@@ -10,6 +6,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { N8AOPass } from "n8ao";
+import { Depths } from "./depths";
 import type { OcclusionSettings, OcclusionWorkings } from "./occlusion";
 
 /** The pass's way of showing the darkening alone instead of on the picture. */
@@ -25,32 +22,10 @@ export class N8 implements OcclusionWorkings {
   private readonly camera: PerspectiveCamera;
   private readonly pass: N8AOPass;
   /** How far away each surface is, which is all the pass looks at. */
-  private readonly depths: WebGLRenderTarget;
+  private readonly depths = new Depths();
   /** The darkening after the pass enlarged it, when it is asked to. */
   private readonly enlarged = new WebGLRenderTarget(1, 1, { depthBuffer: false });
   private enlarging = false;
-  private readonly light = { value: null as Texture | null };
-  /** Drawn in place of every surface: nothing but how brightly baked light falls on it. */
-  private readonly brightness = new ShaderMaterial({
-    uniforms: { bakedLight: this.light },
-    vertexShader: /* glsl */ `
-      attribute vec2 uv1;
-      varying vec2 vBakedUv;
-
-      void main() {
-        vBakedUv = uv1;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D bakedLight;
-      varying vec2 vBakedUv;
-
-      void main() {
-        gl_FragColor = vec4(vec3(0.0), dot(texture2D(bakedLight, vBakedUv).rgb, vec3(0.2126, 0.7152, 0.0722)));
-      }`,
-    // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
-    side: DoubleSide,
-  });
 
   constructor(scene: Scene, camera: PerspectiveCamera) {
     this.scene = scene;
@@ -59,10 +34,7 @@ export class N8 implements OcclusionWorkings {
     // The pass is handed its picture of the scene instead of drawing one.
     pass.configuration.autoRenderBeauty = false;
     pass.beautyRenderTarget.dispose();
-    this.depths = new WebGLRenderTarget(pass.width, pass.height, {
-      depthTexture: new DepthTexture(pass.width, pass.height, UnsignedIntType),
-    });
-    pass.beautyRenderTarget = this.depths;
+    pass.beautyRenderTarget = this.depths.target;
     // Glass is hidden from it and drawn by AmbientOcclusion.
     pass.configuration.transparencyAware = false;
     // What it calls its mobile setting.
@@ -102,18 +74,15 @@ export class N8 implements OcclusionWorkings {
     pass.configuration.distanceFalloff = settings.falloff;
     pass.configuration.aoSamples = settings.samples;
     pass.configuration.denoiseIterations = settings.smooth ? 2 : 0;
-    this.light.value = bakedLight;
 
-    const override = scene.overrideMaterial;
-    scene.overrideMaterial = this.brightness;
-    renderer.setRenderTarget(this.depths);
-    renderer.render(scene, this.camera);
-    scene.overrideMaterial = override;
+    const depths = this.depths.draw(renderer, scene, this.camera, width * scale, height * scale, bakedLight);
     pass.render(renderer, enlarged, null, 0, false);
     return {
       occlusion: (this.enlarging ? enlarged : pass.accumulationRenderTarget).texture,
-      brightness: this.depths.texture,
-      depths: this.depths.depthTexture!,
+      brightness: depths.texture,
+      depths: depths.depthTexture!,
+      strength: settings.strength,
+      brightens: false,
     };
   }
 }

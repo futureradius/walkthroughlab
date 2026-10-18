@@ -112,15 +112,14 @@ const depthShader = /* glsl */ `
  * it is enlarged onto the picture.
  */
 export class Blur {
-  /** The blurred share of light left, which can be above 1 like Glamarye's. */
+  /** The blurred share of light left, which can be above 1 where a method brightens. */
   private readonly output = new WebGLRenderTarget(1, 1, {
     type: HalfFloatType,
     depthBuffer: false,
   });
   private readonly materials = new Map<string, ShaderMaterial>();
   private readonly quad = new FullScreenQuad();
-  /** How far back the blurred darkening is to be read, as a share of its width and height. */
-  readonly shift = new Vector2();
+  private readonly shift = new Vector2();
 
   private material(blur: string): ShaderMaterial {
     let material = this.materials.get(blur);
@@ -146,7 +145,8 @@ export class Blur {
   /**
    * Blur the darkening, held in red, in the way named, which must be one of
    * BLURS other than `off`. The depths are those it was worked out from, at
-   * its size.
+   * its size. Hands back the blurred darkening, and how far back it is to be
+   * read, as a share of its width and height.
    */
   blur(
     renderer: WebGLRenderer,
@@ -154,7 +154,7 @@ export class Blur {
     occlusion: Texture,
     depths: Texture,
     camera: PerspectiveCamera,
-  ): Texture {
+  ): { texture: Texture; shift: Vector2 } {
     const { output } = this;
     const { width, height } = occlusion.image as { width: number; height: number };
     if (output.width !== width || output.height !== height) output.setSize(width, height);
@@ -169,6 +169,6 @@ export class Blur {
     renderer.setRenderTarget(output);
     this.quad.render(renderer);
     this.shift.set(BLUR_SHIFT / width, BLUR_SHIFT / height);
-    return output.texture;
+    return { texture: output.texture, shift: this.shift };
   }
 }

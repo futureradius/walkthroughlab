@@ -35,8 +35,6 @@ export interface EnvironmentFiles {
   skyLight: string;
   /** Written by `npm run bake`; without it the sky lights the surfaces live. */
   bakedLight?: string;
-  /** The config file, written by hand; without it everything keeps its usual settings. */
-  config?: string;
 }
 
 export interface Environment {
@@ -50,14 +48,16 @@ export interface Environment {
   skyLight: Texture;
   /** The baked light picture, if the environment has one. */
   bakedLight?: Texture;
-  /** What the environment's config file asks for, by heading. */
-  config: Config;
 }
 
-/** A missing config file is the same as an empty one. */
-async function textOf(address: string): Promise<string> {
+/**
+ * Read an environment's config file, written by hand, which is tiny and
+ * so arrives long before the environment. A missing one is the same as an
+ * empty one, so everything keeps its usual settings.
+ */
+export async function loadConfig(address: string): Promise<Config> {
   const response = await fetch(address);
-  return response.ok ? response.text() : "";
+  return readConfig(response.ok ? await response.text() : "");
 }
 
 /** Corner positions of every triangle under an object, in world space. */
@@ -168,12 +168,11 @@ export async function loadEnvironment(
         : undefined,
     );
   };
-  const [gltf, light, skyPicture, bakedLight, config] = await Promise.all([
+  const [gltf, light, skyPicture, bakedLight] = await Promise.all([
     new GLTFLoader().loadAsync(files.model, track(downloads[0])),
     new HDRLoader().loadAsync(files.skyLight, track(downloads[1])),
     new TextureLoader().loadAsync(files.skyPicture),
     files.bakedLight ? new TextureLoader().loadAsync(files.bakedLight) : undefined,
-    files.config ? textOf(files.config) : "",
   ]);
 
   // The loader rewrites names; the one written in Rhino is kept in userData.
@@ -231,6 +230,5 @@ export async function loadEnvironment(
     skyPicture,
     skyLight,
     bakedLight,
-    config: readConfig(config),
   };
 }

@@ -1,6 +1,5 @@
 import {
   CustomBlending,
-  DoubleSide,
   DstColorFactor,
   Mesh,
   ShaderMaterial,
@@ -12,15 +11,12 @@ import {
   type Scene,
   type Texture,
   type WebGLRenderer,
-  type WebGLRenderTarget,
 } from "three";
-import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
 import { BLURS, Blur } from "./blur";
-import { Glamarye } from "./glamarye";
 import { choice, fixed, number, percent, toggle, type Described } from "./settings";
+import { LET_OFF } from "./sunlit";
 
-/** What can be changed about ambient occlusion, in the ?config panel and an environment's config file. */
 export interface OcclusionSettings {
   /** Off draws the scene as if there were no ambient occlusion. */
   on: boolean;
@@ -123,9 +119,62 @@ export const OCCLUSION: OcclusionSettings = {
   dither: false,
 };
 
-const N8AO = { method: ["n8ao"] };
-const GLAMARYE = { method: ["glamarye"] };
-const NOT_GLAMARYE = { method: ["gtao", "n8ao"] };
+/** The darkening a method worked out for one frame, and how it is to be put on the picture. */
+export interface Darkening {
+  /** The share of light left at each pixel, in red. */
+  occlusion: Texture;
+  /** How brightly baked light falls on each surface, in alpha; see sunlit.ts. */
+  brightness: Texture;
+  /** The depths the darkening was worked out from, at its size. */
+  depths: Texture;
+  /** What the share of light left is raised to the power of: how hard the darkening is pressed. */
+  strength: number;
+  /** Whether the share of light left can be above 1, brightening the picture. */
+  brightens: boolean;
+}
+
+/** A way of working the darkening out, set up for a scene. */
+export interface OcclusionWorkings {
+  /** Work the darkening out for the scene as it now shows, at this size. */
+  work(
+    renderer: WebGLRenderer,
+    width: number,
+    height: number,
+    settings: OcclusionSettings,
+    bakedLight: Texture | null,
+  ): Darkening;
+}
+
+/** A way of working the darkening out, as the `method` setting names it. */
+export interface Method {
+  name: string;
+  /**
+   * The settings it uses that not every method does. The ?config panel
+   * shows each of them only while a method that uses it is chosen.
+   */
+  uses: readonly (keyof OcclusionSettings)[];
+  /** Fetch its code and set it up for the scene. */
+  load(scene: Scene, camera: PerspectiveCamera): Promise<OcclusionWorkings>;
+}
+
+/** Every way of working the darkening out. Each is its own download, fetched only once chosen. */
+export const METHODS: readonly Method[] = [
+  {
+    name: "gtao",
+    uses: ["reach", "strength", "samples", "smooth"],
+    load: async (scene, camera) => new (await import("./gtao")).Gtao(scene, camera),
+  },
+  {
+    name: "n8ao",
+    uses: ["reach", "strength", "samples", "smooth", "falloff", "edges"],
+    load: async (scene, camera) => new (await import("./n8")).N8(scene, camera),
+  },
+  {
+    name: "glamarye",
+    uses: ["shade", "shine", "radius", "points", "shape", "gap", "fade", "dither"],
+    load: async (scene, camera) => new (await import("./glamarye")).Glamarye(scene, camera),
+  },
+];
 
 export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
   on: toggle({ label: "On", about: "Off leaves ambient occlusion out altogether." }),
@@ -136,7 +185,7 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
   }),
   method: choice({
     label: "Method",
-    words: ["gtao", "n8ao", "glamarye"],
+    words: METHODS.map(({ name }) => name),
     about: "How the darkening is worked out: three.js's own GTAO, N8AO, or Glamarye Fast Effects'.",
   }),
   reach: number({
@@ -146,7 +195,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.05,
     show: fixed(2, " m"),
     about: "How far a surface looks for neighbours that shade it.",
-    when: NOT_GLAMARYE,
   }),
   strength: number({
     label: "Strength",
@@ -155,7 +203,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.1,
     show: fixed(1),
     about: "How hard the darkening is pressed: 0 is none, 1 is as worked out, more is darker.",
-    when: NOT_GLAMARYE,
   }),
   spare: number({
     label: "Spare sunlit",
@@ -180,7 +227,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 1,
     show: String,
     about: "How many spots around each pixel are checked: more is smoother and slower.",
-    when: NOT_GLAMARYE,
   }),
   detail: number({
     label: "Detail",
@@ -193,7 +239,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
   smooth: toggle({
     label: "Smoothing",
     about: "Smooths away the speckle that few samples leave.",
-    when: NOT_GLAMARYE,
   }),
   blur: choice({
     label: "Blur",
@@ -207,12 +252,10 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.1,
     show: fixed(1),
     about: "Smaller leaves less of a dark outline around whatever stands in front of a wall, and less darkening altogether.",
-    when: N8AO,
   }),
   edges: toggle({
     label: "Edge-aware",
     about: "At a detail of 50 % or less, keeps the darkening within the edges of surfaces, at twice the cost of the depths.",
-    when: N8AO,
   }),
   shade: number({
     label: "Shade",
@@ -221,7 +264,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.05,
     show: fixed(2),
     about: "How deep hollows are shaded, in place of strength.",
-    when: GLAMARYE,
   }),
   shine: number({
     label: "Shine",
@@ -230,7 +272,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.05,
     show: fixed(2),
     about: "How much bumps facing the viewpoint are brightened.",
-    when: GLAMARYE,
   }),
   radius: number({
     label: "Radius",
@@ -239,7 +280,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.05,
     show: fixed(2, " %"),
     about: "How far around each pixel it looks, in place of reach: 1 is a hundredth of the screen's diagonal.",
-    when: GLAMARYE,
   }),
   points: number({
     label: "Points",
@@ -248,7 +288,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 1,
     show: String,
     about: "How many spots on a circle around each pixel are checked, in place of samples.",
-    when: GLAMARYE,
   }),
   shape: number({
     label: "Shape",
@@ -257,7 +296,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 1,
     show: String,
     about: "How deep a hollow must be before it is shaded.",
-    when: GLAMARYE,
   }),
   gap: number({
     label: "Gap",
@@ -266,7 +304,6 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.01,
     show: fixed(2),
     about: "How much nearer or farther a spot may be and still count, in hundredths of the depth; smaller leaves less of an outline.",
-    when: GLAMARYE,
   }),
   fade: number({
     label: "Fade",
@@ -275,36 +312,17 @@ export const OCCLUSION_DESCRIBED: Described<OcclusionSettings> = {
     step: 0.05,
     show: fixed(2),
     about: "The depth at which the darkening has faded out: 0.5 is about 100 m.",
-    when: GLAMARYE,
   }),
   dither: toggle({
     label: "Bigger dither",
     about: "Uses four sizes of circle in a 2 by 4 pattern instead of two in a checkerboard; box4 blurs it away.",
-    when: GLAMARYE,
   }),
 };
 
-/** A way of working the darkening out. */
-export interface OcclusionWorkings {
-  /**
-   * Work the darkening out for the scene as it now shows, at this size. The
-   * first picture holds it in red; the second holds, in alpha, how brightly
-   * baked light falls on each surface; the third is the depths the darkening
-   * was worked out from, at the first's size.
-   */
-  work(
-    renderer: WebGLRenderer,
-    width: number,
-    height: number,
-    settings: OcclusionSettings,
-    bakedLight: Texture | null,
-  ): { occlusion: Texture; brightness: Texture; depths: Texture };
-}
-
-/** The pass keeps the step that draws each of its stages to itself. */
-interface PassInternals {
-  _renderPass(renderer: WebGLRenderer, material: Material, ...rest: unknown[]): void;
-  normalRenderTarget: WebGLRenderTarget;
+// A setting some methods use is shown only while one of them is chosen.
+for (const setting of Object.keys(OCCLUSION_DESCRIBED) as (keyof OcclusionSettings)[]) {
+  const usedBy = METHODS.filter(({ uses }) => uses.includes(setting)).map(({ name }) => name);
+  if (usedBy.length > 0) OCCLUSION_DESCRIBED[setting].when = { method: usedBy };
 }
 
 function seeThrough(mesh: Mesh): boolean {
@@ -314,85 +332,6 @@ function seeThrough(mesh: Mesh): boolean {
 
 function show(meshes: Mesh[], visible: boolean) {
   for (const mesh of meshes) mesh.visible = visible;
-}
-
-/** Works the darkening out the way three.js does. */
-class Gtao implements OcclusionWorkings {
-  private readonly pass: GTAOPass;
-  private readonly internals: PassInternals;
-  private readonly light = { value: null as Texture | null };
-  private smooth = true;
-
-  constructor(scene: Scene, camera: PerspectiveCamera) {
-    this.pass = new GTAOPass(scene, camera);
-    // Work the darkening out, but leave drawing it to AmbientOcclusion.
-    this.pass.output = GTAOPass.OUTPUT.Off;
-    // The pass always smooths, so leaving that out means stepping over it.
-    const internals = (this.internals = this.pass as unknown as PassInternals);
-    const renderPass = internals._renderPass.bind(this.pass);
-    internals._renderPass = (renderer, material, ...rest) => {
-      if (material === this.pass.pdMaterial && !this.smooth) return;
-      renderPass(renderer, material, ...rest);
-    };
-    // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
-    this.pass.normalMaterial.side = DoubleSide;
-    // The picture of which way surfaces face has a spare channel, which
-    // carries how brightly the baked light falls on each of them.
-    this.pass.normalMaterial.onBeforeCompile = (shader) => {
-      shader.uniforms.bakedLight = this.light;
-      shader.vertexShader = shader.vertexShader
-        .replace(
-          "void main() {",
-          /* glsl */ `
-          attribute vec2 uv1;
-          varying vec2 vBakedUv;
-
-          void main() {
-            vBakedUv = uv1;`,
-        );
-      shader.fragmentShader =
-        shader.fragmentShader.replace(
-          "void main() {",
-          /* glsl */ `
-          uniform sampler2D bakedLight;
-          varying vec2 vBakedUv;
-
-          void facing() {`,
-        ) +
-        /* glsl */ `
-          void main() {
-            facing();
-            gl_FragColor.a = dot(texture2D(bakedLight, vBakedUv).rgb, vec3(0.2126, 0.7152, 0.0722));
-          }`;
-    };
-  }
-
-  work(
-    renderer: WebGLRenderer,
-    width: number,
-    height: number,
-    settings: OcclusionSettings,
-    bakedLight: Texture | null,
-  ) {
-    const { pass } = this;
-    if (pass.width !== width || pass.height !== height) pass.setSize(width, height);
-    pass.updateGtaoMaterial({
-      radius: settings.reach,
-      // Nothing farther in front than the reach may shade a surface, or a
-      // column draws an outline on whatever stands a little way behind it.
-      thickness: settings.reach,
-      samples: settings.samples,
-    });
-    this.smooth = settings.smooth;
-    this.light.value = bakedLight;
-    // The pass reads neither buffer when its output is off.
-    pass.render(renderer, null!, null!, 0, false);
-    return {
-      occlusion: (settings.smooth ? pass.pdRenderTarget : pass.gtaoRenderTarget).texture,
-      brightness: this.internals.normalRenderTarget.texture,
-      depths: pass.depthTexture,
-    };
-  }
 }
 
 /**
@@ -406,11 +345,14 @@ export class AmbientOcclusion {
   bakedLight: Texture | null = null;
 
   private readonly renderer: WebGLRenderer;
-  private gtao: OcclusionWorkings | null = null;
-  private n8ao: OcclusionWorkings | null = null;
-  private glamarye: OcclusionWorkings | null = null;
+  private readonly scene: Scene;
+  private readonly camera: PerspectiveCamera;
+  private readonly methods: readonly Method[];
+  /** Each method asked for so far, by name, until it has arrived or failed to. */
+  private readonly loading = new Map<string, Promise<void>>();
+  /** Each method that has arrived, by name, set up for the scene. */
+  private readonly loaded = new Map<string, OcclusionWorkings>();
   private blur: Blur | null = null;
-  private fetched: Promise<void> | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
   private readonly glass: Mesh[] = [];
@@ -424,8 +366,16 @@ export class AmbientOcclusion {
     );
   }
 
-  constructor(renderer: WebGLRenderer) {
+  constructor(
+    renderer: WebGLRenderer,
+    scene: Scene,
+    camera: PerspectiveCamera,
+    methods: readonly Method[] = METHODS,
+  ) {
     this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
+    this.methods = methods;
     this.darken = new FullScreenQuad(
       new ShaderMaterial({
         uniforms: {
@@ -448,18 +398,14 @@ export class AmbientOcclusion {
           uniform sampler2D occlusion;
           uniform float strength;
           uniform sampler2D brightness;
-          uniform float spare;
-          uniform float sunlit;
           uniform float headroom;
           uniform vec2 shift;
           varying vec2 vUv;
+          ${LET_OFF}
 
           void main() {
             float light = pow(texture2D(occlusion, vUv - shift).r, strength);
-            // Ambient occlusion only dims light from all around, and a
-            // surface in the sun gets nearly all its light from one place.
-            float inSun = smoothstep(sunlit - 0.05, sunlit + 0.05, texture2D(brightness, vUv).a);
-            light = mix(light, 1.0, spare * inSun);
+            light = spared(light, texture2D(brightness, vUv));
             // The canvas holds colours encoded for display, where taking away
             // a share of the light takes away a smaller share of the number.
             gl_FragColor = vec4(vec3(pow(light, 1.0 / 2.2) / headroom), 1.0);
@@ -474,38 +420,38 @@ export class AmbientOcclusion {
     );
   }
 
-  /** The way the settings ask for, or nothing while it is still on its way. */
-  private workings(scene: Scene, camera: PerspectiveCamera): OcclusionWorkings | null {
-    switch (this.settings.method) {
-      case "n8ao":
-        if (!this.n8ao) void this.fetch(scene, camera);
-        return this.n8ao;
-      case "glamarye":
-        return (this.glamarye ??= new Glamarye(scene, camera));
-      default:
-        return (this.gtao ??= new Gtao(scene, camera));
+  /** Fetch a method and set it up, once however often it is asked for. */
+  private load(name: string): Promise<void> {
+    let loading = this.loading.get(name);
+    if (!loading) {
+      loading = (async () => {
+        const method = this.methods.find((method) => method.name === name);
+        if (!method) throw new Error(`There is no method named ${name}.`);
+        this.loaded.set(name, await method.load(this.scene, this.camera));
+      })().catch((error: unknown) => {
+        console.warn(`Ambient occlusion could not load ${name}, so frames go without it.`, error);
+      });
+      this.loading.set(name, loading);
     }
-  }
-
-  private fetch(scene: Scene, camera: PerspectiveCamera): Promise<void> {
-    return (this.fetched ??= import("./n8").then(({ N8 }) => {
-      this.n8ao = new N8(scene, camera);
-    }));
+    return loading;
   }
 
   /**
-   * Fetch what the settings' method needs, so that the first frame drawn
-   * already has ambient occlusion. If it cannot be had, frames go without.
+   * Fetch the method the settings ask for, and nothing while they turn
+   * ambient occlusion off, so that the first frame drawn already has it.
+   * A method chosen later is fetched then, and frames go without until it
+   * arrives.
    */
-  async ready(scene: Scene, camera: PerspectiveCamera): Promise<void> {
-    if (this.settings.method === "n8ao") await this.fetch(scene, camera).catch(() => {});
+  async ready(): Promise<void> {
+    if (this.settings.on) await this.load(this.settings.method);
   }
 
   /** Draw the scene to the canvas with ambient occlusion over it. */
-  render(scene: Scene, camera: PerspectiveCamera) {
-    const { renderer, settings } = this;
-    const workings = settings.on ? this.workings(scene, camera) : null;
+  render() {
+    const { renderer, scene, camera, settings } = this;
+    const workings = settings.on ? this.loaded.get(settings.method) : undefined;
     if (!workings) {
+      if (settings.on) void this.load(settings.method);
       renderer.render(scene, camera);
       return;
     }
@@ -522,32 +468,24 @@ export class AmbientOcclusion {
     show(this.glass, false);
     const background = scene.background;
     scene.background = null;
-    const { occlusion, brightness, depths } = workings.work(
-      renderer,
-      width,
-      height,
-      settings,
-      this.bakedLight,
-    );
+    const darkening = workings.work(renderer, width, height, settings, this.bakedLight);
     scene.background = background;
     const { uniforms } = this.darken.material as ShaderMaterial;
     if (settings.blur !== "off") {
       const blur = (this.blur ??= new Blur());
-      uniforms.occlusion.value = blur.blur(renderer, settings.blur, occlusion, depths, camera);
-      uniforms.shift.value.copy(blur.shift);
+      const blurred = blur.blur(renderer, settings.blur, darkening.occlusion, darkening.depths, camera);
+      uniforms.occlusion.value = blurred.texture;
+      uniforms.shift.value.copy(blurred.shift);
     } else {
-      uniforms.occlusion.value = occlusion;
+      uniforms.occlusion.value = darkening.occlusion;
       uniforms.shift.value.set(0, 0);
     }
-    uniforms.brightness.value = brightness;
-    // Glamarye presses its darkening by `shade` as it works it out.
-    const glamarye = settings.method === "glamarye";
-    uniforms.strength.value = glamarye ? 1 : settings.strength;
-    // Its shine brightens, which a colour cannot hold. Halved, the colour is
+    uniforms.brightness.value = darkening.brightness;
+    uniforms.strength.value = darkening.strength;
+    // Light above 1 is more than a colour can hold. Halved, the colour is
     // added twice, at the cost of coarser steps in the darkening.
-    const brighten = glamarye && settings.shine > 0;
-    uniforms.headroom.value = brighten ? 2 : 1;
-    this.darken.material.blendDst = brighten ? SrcColorFactor : ZeroFactor;
+    uniforms.headroom.value = darkening.brightens ? 2 : 1;
+    this.darken.material.blendDst = darkening.brightens ? SrcColorFactor : ZeroFactor;
     uniforms.spare.value = settings.spare;
     uniforms.sunlit.value = settings.sunlit;
 

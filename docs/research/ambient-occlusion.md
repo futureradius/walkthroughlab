@@ -41,7 +41,7 @@ MXAO cannot be ported at all: its licence forbids using its source in another pr
 
 Added 2026-10-12, after both were built and compared by eye in the test environment.
 
-**What is in use.** N8AO, preferred for its look over `GTAOPass`, which stays selectable (`method` in the environment's config file). Only N8AO's sampling and smoothing run. The scene is still drawn straight to the canvas and the darkening is multiplied on top ([src/occlusion.ts][occlusion], [src/n8.ts][n8-ours]), which keeps canvas MSAA, the tone mapping and the sky as they were, and avoids every problem in "Leaving direct-to-canvas rendering" below. The price is that N8AO's one-scene-render advantage (recommendation 3) is not had: the canvas's depth cannot be read, so the scene is drawn a second time for depth, with a trivial material and at half the width and height. A denser bake (recommendation 2) was ruled out: longer bakes and a bigger download.
+**What is in use.** N8AO, preferred for its look over `GTAOPass`, which stays selectable (`method` in the environment's config file). Only N8AO's sampling and smoothing run. The scene is still drawn straight to the canvas and the darkening is multiplied on top ([src/occlusion.ts][occlusion], [src/n8.ts][n8-ours]), which keeps canvas MSAA, the tone mapping and the sky as they were, and avoids every problem in "Leaving direct-to-canvas rendering" below. The price is that N8AO's one-scene-render advantage (recommendation 3) is not had: the canvas's depth cannot be read, so the scene is drawn a second time for depth, with a trivial material and at half the width and height ([src/depths.ts][depths], shared with Glamarye; GTAO keeps its own, since handing it outside depths hits the defect under `GTAOPass` below). A denser bake (recommendation 2) was ruled out: longer bakes and a bigger download.
 
 **Measured.** The chunk holding N8AO is 160 kB minified, 84 kB compressed; of the `postprocessing` peer dependency only the `Pass` base class is imported. Viewers download it while the environment loads.
 
@@ -400,3 +400,4 @@ N8AO handles the second and third points itself: "transparent objects with depth
 [main]: ../../src/main.ts
 [occlusion]: ../../src/occlusion.ts
 [n8-ours]: ../../src/n8.ts
+[depths]: ../../src/depths.ts

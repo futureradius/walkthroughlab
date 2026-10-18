@@ -28,11 +28,8 @@
  * SOFTWARE.
  */
 import {
-  DepthTexture,
-  DoubleSide,
   HalfFloatType,
   ShaderMaterial,
-  UnsignedIntType,
   Vector2,
   WebGLRenderTarget,
   type PerspectiveCamera,
@@ -41,6 +38,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
+import { Depths } from "./depths";
 import type { OcclusionSettings, OcclusionWorkings } from "./occlusion";
 
 /**
@@ -59,36 +57,11 @@ import type { OcclusionSettings, OcclusionWorkings } from "./occlusion";
 export class Glamarye implements OcclusionWorkings {
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
-  /** How far away each surface is, and in alpha how brightly baked light falls on it. */
-  private readonly depths = new WebGLRenderTarget(1, 1, {
-    depthTexture: new DepthTexture(1, 1, UnsignedIntType),
-  });
+  private readonly depths = new Depths();
   /** The share of light left, which shine can take above 1. */
   private readonly output = new WebGLRenderTarget(1, 1, {
     type: HalfFloatType,
     depthBuffer: false,
-  });
-  private readonly light = { value: null as Texture | null };
-  /** Drawn in place of every surface: nothing but how brightly baked light falls on it. */
-  private readonly brightness = new ShaderMaterial({
-    uniforms: { bakedLight: this.light },
-    vertexShader: /* glsl */ `
-      attribute vec2 uv1;
-      varying vec2 vBakedUv;
-
-      void main() {
-        vBakedUv = uv1;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D bakedLight;
-      varying vec2 vBakedUv;
-
-      void main() {
-        gl_FragColor = vec4(vec3(0.0), dot(texture2D(bakedLight, vBakedUv).rgb, vec3(0.2126, 0.7152, 0.0722)));
-      }`,
-    // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
-    side: DoubleSide,
   });
   private readonly quad: FullScreenQuad;
   private readonly material: ShaderMaterial;
@@ -99,7 +72,7 @@ export class Glamarye implements OcclusionWorkings {
     this.material = new ShaderMaterial({
       defines: { POINTS: 6, BIG_DITHER: 0 },
       uniforms: {
-        depths: { value: this.depths.depthTexture },
+        depths: { value: this.depths.target.depthTexture },
         size: { value: new Vector2(1, 1) },
         radius: { value: 1 },
         shape: { value: 0 },
@@ -226,11 +199,8 @@ export class Glamarye implements OcclusionWorkings {
     settings: OcclusionSettings,
     bakedLight: Texture | null,
   ) {
-    const { scene, depths, output, material } = this;
-    if (depths.width !== width || depths.height !== height) {
-      depths.setSize(width, height);
-      output.setSize(width, height);
-    }
+    const { scene, output, material } = this;
+    if (output.width !== width || output.height !== height) output.setSize(width, height);
     // The number of points and the dither shape the loops, so changing
     // either builds the shader anew.
     const { points } = settings;
@@ -249,19 +219,18 @@ export class Glamarye implements OcclusionWorkings {
     uniforms.fade.value = settings.fade;
     uniforms.shade.value = settings.shade;
     uniforms.shine.value = settings.shine;
-    this.light.value = bakedLight;
 
-    const override = scene.overrideMaterial;
-    scene.overrideMaterial = this.brightness;
-    renderer.setRenderTarget(depths);
-    renderer.render(scene, this.camera);
-    scene.overrideMaterial = override;
+    const depths = this.depths.draw(renderer, scene, this.camera, width, height, bakedLight);
     renderer.setRenderTarget(output);
     this.quad.render(renderer);
     return {
       occlusion: output.texture,
       brightness: depths.texture,
       depths: depths.depthTexture!,
+      // Pressed by `shade` as it is worked out.
+      strength: 1,
+      // Its shine takes the light above 1, brightening bumps.
+      brightens: settings.shine > 0,
     };
   }
 }
