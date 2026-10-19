@@ -44,6 +44,10 @@ _Avoid_: Settings file, preferences, options file
 The position and direction of the viewer's eyes within the space.
 _Avoid_: Camera, player, character
 
+**Start spot**:
+The spot and direction where the viewpoint begins when a viewer opens an environment, chosen by the author.
+_Avoid_: Spawn point, start position, origin
+
 **Steering**:
 How the viewer's joystick, keys, free look and zoom move the viewpoint, frame by frame.
 _Avoid_: Player controller, camera controller, input handling

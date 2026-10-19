@@ -1,0 +1,201 @@
+import { Group, PerspectiveCamera, Scene, Texture, type WebGLRenderer } from "three";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadEnvironment, type Environment } from "./environment";
+import { WALKING } from "./motion";
+import { AmbientOcclusion, METHODS, OCCLUSION, type Method, type OcclusionWorkings } from "./occlusion";
+import { openEnvironment, type EnvironmentAddress } from "./opening";
+import { ZOOM } from "./zoom";
+
+// Unpacking a real environment's sky needs WebGL, so the tests hand over one of their own.
+vi.mock("./environment", async (original) => ({
+  ...(await original<typeof import("./environment")>()),
+  loadEnvironment: vi.fn(),
+}));
+
+const ADDRESS: EnvironmentAddress = {
+  files: { model: "model.glb", skyPicture: "sky.jpg", skyLight: "sky.hdr", bakedLight: "light.jpg" },
+  config: "config.md",
+  start: { x: 1, z: -2, heading: 0.5 },
+};
+
+/** A square of floor 10 m across around the origin, 2 m up. */
+const FLOOR = new Float32Array([
+  -5, 2, -5, 5, 2, -5, 5, 2, 5,
+  -5, 2, -5, 5, 2, 5, -5, 2, 5,
+]);
+
+const CONFIG = `
+# Config file
+
+## Ambient occlusion
+
+- method: glamarye
+- reach: 0.5
+
+## Zoom
+
+- max: 2
+- upright: lots
+`;
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** A gate the test opens when it chooses. */
+function gate<T = void>() {
+  let open!: (value: T) => void;
+  const opened = new Promise<T>((resolve) => (open = resolve));
+  return { opened, open };
+}
+
+/** Ambient occlusion with methods that only note what was fetched, and wait for `arrive`. */
+function occlusionFor(scene: Scene, arrive: Promise<void> = Promise.resolve()) {
+  const fetched: string[] = [];
+  const methods: Method[] = METHODS.map(({ name, uses }) => ({
+    name,
+    uses,
+    load: async () => {
+      fetched.push(name);
+      await arrive;
+      return {} as OcclusionWorkings;
+    },
+  }));
+  const occlusion = new AmbientOcclusion({} as WebGLRenderer, scene, new PerspectiveCamera(), methods);
+  return { occlusion, fetched };
+}
+
+function environment(): Environment {
+  return {
+    visible: new Group(),
+    collision: FLOOR,
+    skyPicture: new Texture(),
+    skyLight: new Texture(),
+    bakedLight: new Texture(),
+  };
+}
+
+/** Serve this config file, or none. */
+function serve(config: string | null) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (address: string) =>
+      address === ADDRESS.config && config !== null ? new Response(config) : new Response("", { status: 404 }),
+    ),
+  );
+}
+
+/** Open the environment into a fresh scene. */
+function open(options: { occlusion?: boolean; arrive?: Promise<void>; address?: EnvironmentAddress } = {}) {
+  const scene = new Scene();
+  const { occlusion, fetched } = occlusionFor(scene, options.arrive);
+  const opening = openEnvironment(
+    options.address ?? ADDRESS,
+    { renderer: {} as WebGLRenderer, scene, occlusion: options.occlusion === false ? null : occlusion },
+    () => {},
+  );
+  return { scene, occlusion, fetched, opening };
+}
+
+beforeEach(() => {
+  serve(CONFIG);
+  vi.mocked(loadEnvironment).mockResolvedValue(environment());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("opening an environment", () => {
+  it("fetches the ambient occlusion method the config file names while the environment downloads", async () => {
+    const download = gate<Environment>();
+    vi.mocked(loadEnvironment).mockReturnValue(download.opened);
+    const { fetched, opening } = open();
+    await tick();
+    expect(fetched).toEqual(["glamarye"]);
+    download.open(environment());
+    await opening;
+    expect(fetched).toEqual(["glamarye"]);
+  });
+
+  it("finishes only once that method has arrived", async () => {
+    const arrival = gate();
+    const { opening } = open({ arrive: arrival.opened });
+    let finished = false;
+    void opening.then(() => (finished = true));
+    await tick();
+    expect(finished).toBe(false);
+    arrival.open();
+    await opening;
+    expect(finished).toBe(true);
+  });
+
+  it("uses the config file's settings and reports those it cannot use", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { occlusion, opening } = open();
+    const { steering } = await opening;
+    expect(occlusion.settings.reach).toBe(0.5);
+    expect(steering.settings.zoom.max).toBe(2);
+    expect(steering.settings.zoom.upright).toBe(ZOOM.upright);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0][0]).toMatch(/Zoom section could not use upright/);
+  });
+
+  it("keeps the usual settings without a config file", async () => {
+    serve(null);
+    const { occlusion, fetched, opening } = open();
+    const { steering } = await opening;
+    expect(occlusion.settings).toEqual(OCCLUSION);
+    expect(steering.settings.zoom).toEqual(ZOOM);
+    expect(fetched).toEqual([OCCLUSION.method]);
+  });
+
+  it("starts at the start spot, on the floor there", async () => {
+    const { opening } = open();
+    const { steering } = await opening;
+    const view = steering.step(
+      { knob: { x: 0, y: 0 }, keys: { walk: 0, sidestep: 0, turn: 0, run: false } },
+      0,
+      { width: 400, height: 800 },
+    );
+    expect(view).toMatchObject({ x: 1, z: -2, heading: 0.5, pitch: 0 });
+    expect(view.y).toBeCloseTo(2 + WALKING.eyeHeight);
+  });
+
+  it("fails when the start spot is not on the collision mesh", async () => {
+    const { opening } = open({ address: { ...ADDRESS, start: { x: 50, z: 50, heading: 0 } } });
+    await expect(opening).rejects.toThrow(/start spot is not on the collision mesh/);
+  });
+
+  it("puts the environment, its sky and its baked light in place", async () => {
+    const loaded = environment();
+    vi.mocked(loadEnvironment).mockResolvedValue(loaded);
+    const { scene, occlusion, opening } = open();
+    await opening;
+    expect(scene.children).toContain(loaded.visible);
+    expect(scene.background).toBe(loaded.skyPicture);
+    expect(scene.environment).toBe(loaded.skyLight);
+    expect(occlusion.bakedLight).toBe(loaded.bakedLight);
+  });
+
+  it("gives the sections in the panel's order", async () => {
+    const { opening } = open();
+    const { sections } = await opening;
+    expect(sections.map(({ heading }) => heading)).toEqual([
+      "Ambient occlusion",
+      "Walking",
+      "Running",
+      "Coasting",
+      "Joystick",
+      "Zoom",
+    ]);
+  });
+
+  it("opens without ambient occlusion where the device cannot work it out", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { fetched, opening } = open({ occlusion: false });
+    const { steering, sections } = await opening;
+    expect(fetched).toEqual([]);
+    expect(sections.map(({ heading }) => heading)).not.toContain("Ambient occlusion");
+    expect(steering.settings.zoom.max).toBe(2);
+  });
+});
