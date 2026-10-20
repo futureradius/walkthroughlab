@@ -1,4 +1,5 @@
 import { COASTING, COASTING_DESCRIBED, Coasting, glideOf, type CoastingSettings } from "./coasting";
+import { BODY } from "./collision";
 import {
   advance,
   levelling,
@@ -121,6 +122,20 @@ export interface View {
 /** Share of a sideways push below which the joystick has eased back to turning. */
 const TURNING = 0.01;
 
+/** A fall off a ledge taller than a step, until the viewer lands. */
+interface Fall {
+  /** Metres the feet are above the origin. */
+  feet: number;
+  /** Metres per second the feet drop at. */
+  speed: number;
+  /** Metres per second east and south the viewer stepped off at, and keeps. */
+  east: number;
+  south: number;
+}
+
+/** A terrain that keeps the viewer where they are, while they are in the air. */
+const stay: Terrain = (from) => from;
+
 const unit = (value: number) => Math.max(-1, Math.min(1, value));
 
 /** How hard the knob pushes, rising smoothly from the edge of the dead zone. */
@@ -163,6 +178,7 @@ export class Steering {
   private thrown: { x: number; y: number } | null = null;
   /** The share of a sideways push that sidesteps; the rest turns. */
   private sidestepping = 0;
+  private fall: Fall | null = null;
 
   constructor(private readonly place: Place) {
     this.viewpoint = place.start;
@@ -217,7 +233,7 @@ export class Steering {
     this.dragged = { x: 0, y: 0 };
 
     this.handOver(stick, seconds);
-    const intent: Intent = {
+    const steered: Intent = {
       walk: unit(stick.y + keys.walk),
       sidestep: unit(stick.x * this.sidestepping + keys.sidestep),
       turn: unit(stick.x * (1 - this.sidestepping) + keys.turn) / this.zoom.level,
@@ -226,14 +242,59 @@ export class Steering {
       looking: this.held,
       forwardSpeed: this.running.step({ knob, stick }, keys.run && keys.walk > 0, seconds),
     };
+    // In the air the viewer can look around but not steer.
+    const intent = this.fall ? { ...steered, walk: 0, sidestep: 0, turn: 0 } : steered;
 
-    const moved = advance(this.viewpoint, intent, seconds, this.place.terrain, walking);
+    const moved = this.fall
+      ? this.drift(this.fall, advance(this.viewpoint, intent, seconds, stay, walking), seconds)
+      : this.walk(intent, seconds);
     // Zoom wears off by the same share as the view levels out.
     this.viewpoint = this.zoom.step(moved, seconds, levelling(intent, seconds, walking), screen);
     const { x, z, floor, heading, pitch } = this.viewpoint;
-    this.eyes +=
-      (floor + walking.eyeHeight - this.eyes) * Math.min(1, seconds * walking.eyeCatchUp);
+    if (this.fall) this.drop(this.fall, floor, seconds);
+    else {
+      this.eyes +=
+        (floor + walking.eyeHeight - this.eyes) * Math.min(1, seconds * walking.eyeCatchUp);
+    }
     return { x, y: this.eyes, z, heading, pitch, fov: this.zoom.fov(screen) };
+  }
+
+  /** Walk for a frame, and begin a fall where that steps off a ledge taller than a step. */
+  private walk(intent: Intent, seconds: number): Viewpoint {
+    const from = this.viewpoint;
+    const moved = advance(from, intent, seconds, this.place.terrain, this.settings.walking);
+    if (moved.floor < from.floor - BODY.maxStep && seconds > 0) {
+      this.fall = {
+        feet: from.floor,
+        speed: 0,
+        east: (moved.x - from.x) / seconds,
+        south: (moved.z - from.z) / seconds,
+      };
+    }
+    return moved;
+  }
+
+  /** Carry a falling viewer on at the speed they stepped off with, short of walls. */
+  private drift(fall: Fall, looked: Viewpoint, seconds: number): Viewpoint {
+    const footing = this.place.terrain(
+      { x: looked.x, z: looked.z, floor: fall.feet },
+      looked.x + fall.east * seconds,
+      looked.z + fall.south * seconds,
+    );
+    // Held where they are, they fall on towards the floor already beneath
+    // them rather than stand on the air.
+    return footing.x === looked.x && footing.z === looked.z ? looked : { ...looked, ...footing };
+  }
+
+  /** Drop the feet faster and faster, and land on the floor beneath. */
+  private drop(fall: Fall, floor: number, seconds: number) {
+    fall.speed += this.settings.walking.gravity * seconds;
+    fall.feet -= fall.speed * seconds;
+    if (fall.feet <= floor) {
+      fall.feet = floor;
+      this.fall = null;
+    }
+    this.eyes = fall.feet + this.settings.walking.eyeHeight;
   }
 
   /**

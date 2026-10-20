@@ -6,7 +6,7 @@ export interface Body {
   radius: number;
   /** Walls entirely above this height over the floor are walked under. */
   height: number;
-  /** Tallest sudden change in floor height the viewer walks over. */
+  /** Tallest sudden rise in floor height the viewer walks up; a deeper drop is a fall. */
   maxStep: number;
 }
 
@@ -25,7 +25,10 @@ type Triangle = ArrayLike<number>;
 type Point = [x: number, y: number, z: number];
 
 export interface CollisionMesh {
-  /** Ends each step short of walls and on the floor, or refuses it. */
+  /**
+   * Ends each step short of walls and on the floor beneath, or refuses it.
+   * The floor may lie more than a step below: then the viewer falls.
+   */
   terrain: Terrain;
   /** Height of the floor at a spot, choosing the level closest to `near`. */
   floorAt(x: number, z: number, near: number): number | undefined;
@@ -51,6 +54,28 @@ function heightOn(t: Triangle, x: number, z: number): number | undefined {
   const w = 1 - u - v;
   if (u < -SEAM || v < -SEAM || w < -SEAM) return undefined;
   return u * t[1] + v * t[4] + w * t[7];
+}
+
+/** The point on a polygon's outline nearest a spot on the floor plan, and how far off it lies. */
+function nearestOnOutline(polygon: Point[], x: number, z: number): [point: Point, distance: number] {
+  let nearest = polygon[0], distance = Infinity;
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    const ex = b[0] - a[0], ey = b[1] - a[1], ez = b[2] - a[2];
+    const span = ex * ex + ez * ez;
+    const along =
+      span === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((x - a[0]) * ex + (z - a[2]) * ez) / span));
+    const point: Point = [a[0] + ex * along, a[1] + ey * along, a[2] + ez * along];
+    const off = Math.hypot(x - point[0], z - point[2]);
+    if (off < distance) {
+      nearest = point;
+      distance = off;
+    }
+  }
+  return [nearest, distance];
 }
 
 /** Keep the part of a polygon on one side of a horizontal plane. */
@@ -93,6 +118,40 @@ export function collisionMesh(
     return best;
   }
 
+  /** Height of the highest floor under a spot that lies no higher than `top`. */
+  function floorUnder(x: number, z: number, top: number): number | undefined {
+    let best: number | undefined;
+    for (const floor of floors) {
+      const height = heightOn(floor, x, z);
+      if (height === undefined || height > top) continue;
+      if (best === undefined || height > best) best = height;
+    }
+    return best;
+  }
+
+  /**
+   * Height of floor within the body's radius of a spot, no more than a step
+   * from `level`: a ledge the viewer still stands on with part of the body.
+   */
+  function ledgeAt(x: number, z: number, level: number): number | undefined {
+    let best: number | undefined;
+    for (const floor of floors) {
+      const corners: Point[] = [
+        [floor[0], floor[1], floor[2]],
+        [floor[3], floor[4], floor[5]],
+        [floor[6], floor[7], floor[8]],
+      ];
+      const [edge, distance] = nearestOnOutline(corners, x, z);
+      if (distance >= body.radius) continue;
+      const height = heightOn(floor, x, z) ?? edge[1];
+      if (Math.abs(height - level) > body.maxStep) continue;
+      if (best === undefined || Math.abs(height - level) < Math.abs(best - level)) {
+        best = height;
+      }
+    }
+    return best;
+  }
+
   /** Move a spot away from every wall the body would touch at this floor height. */
   function pushOut(x: number, z: number, floor: number): [x: number, z: number] {
     const low = floor + body.maxStep;
@@ -114,24 +173,8 @@ export function collisionMesh(
           [t[6], t[7], t[8]],
         ];
         const slice = clip(clip(corners, low, true), high, false);
-        let nearestX = 0, nearestZ = 0, nearest = Infinity;
-        for (let i = 0; i < slice.length; i++) {
-          const a = slice[i];
-          const b = slice[(i + 1) % slice.length];
-          const ex = b[0] - a[0], ez = b[2] - a[2];
-          const span = ex * ex + ez * ez;
-          const along =
-            span === 0
-              ? 0
-              : Math.max(0, Math.min(1, ((x - a[0]) * ex + (z - a[2]) * ez) / span));
-          const px = a[0] + ex * along, pz = a[2] + ez * along;
-          const distance = Math.hypot(x - px, z - pz);
-          if (distance < nearest) {
-            nearest = distance;
-            nearestX = px;
-            nearestZ = pz;
-          }
-        }
+        if (slice.length === 0) continue;
+        const [[nearestX, , nearestZ], nearest] = nearestOnOutline(slice, x, z);
         if (nearest >= body.radius || nearest === 0) continue;
         const push = (body.radius - nearest) / nearest;
         x += (x - nearestX) * push;
@@ -145,11 +188,12 @@ export function collisionMesh(
 
   function step(from: Footing, x: number, z: number): Footing | undefined {
     const [clearX, clearZ] = pushOut(x, z, from.floor);
-    const floor = floorAt(clearX, clearZ, from.floor);
-    if (floor === undefined || Math.abs(floor - from.floor) > body.maxStep) {
-      return undefined;
-    }
-    return { x: clearX, z: clearZ, floor };
+    const floor = floorUnder(clearX, clearZ, from.floor + body.maxStep);
+    if (floor === undefined) return undefined;
+    if (floor >= from.floor - body.maxStep) return { x: clearX, z: clearZ, floor };
+    // Off a ledge the viewer stays on it while any of the body is over it,
+    // so a fall begins clear of the ledge's edge.
+    return { x: clearX, z: clearZ, floor: ledgeAt(clearX, clearZ, from.floor) ?? floor };
   }
 
   return {

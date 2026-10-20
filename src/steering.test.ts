@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { collisionMesh } from "./collision";
 import { WALKING, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { RUNNING } from "./running";
 import { JOYSTICK, Steering, type Keys, type Stick, type View } from "./steering";
@@ -112,6 +113,73 @@ describe("steering", () => {
       expect(view.y).toBeGreaterThan(WALKING.eyeHeight);
       expect(view.y).toBeLessThan(WALKING.eyeHeight + 0.3);
       expect(hold(centred, 2).view.y).toBeCloseTo(WALKING.eyeHeight + 0.3);
+    });
+  });
+
+  describe("falling", () => {
+    /** A floor that drops by 3 m half a metre ahead. */
+    const ledge: Terrain = (_from, x, z) => ({ x, z, floor: z < -0.5 ? -3 : 0 });
+
+    /** Walk forward until just off the ledge. */
+    function steppedOff() {
+      const walked = walkthrough(ledge);
+      let { view } = walked.frame(forward);
+      while (view.z > -0.5) view = walked.frame(forward).view;
+      return walked;
+    }
+
+    it("falls faster and faster, and lands at eye height on the floor below", () => {
+      const { hold } = steppedOff();
+      const early = hold(centred, 0.1).view.y;
+      const later = hold(centred, 0.3).view.y;
+      // The frame that stepped off began the fall.
+      const fallen = 0.4 + FRAME;
+      expect(WALKING.eyeHeight - later).toBeCloseTo((WALKING.gravity * fallen ** 2) / 2, 1);
+      expect(WALKING.eyeHeight - early).toBeLessThan((WALKING.eyeHeight - later) / 4);
+      // Three metres take about 0.8 s.
+      expect(hold(centred, 0.5).view.y).toBeCloseTo(WALKING.eyeHeight - 3);
+    });
+
+    it("keeps the speed it stepped off with and can't steer in the air", () => {
+      const { frame } = steppedOff();
+      const { moved, turned, view } = frame({ x: 1, y: -1 }, { ...noKeys, turn: 1 });
+      expect(moved).toBeCloseTo(WALKING.speed * FRAME);
+      expect(turned).toBe(0);
+      expect(view.x).toBe(0);
+    });
+
+    it("still looks around in the air", () => {
+      const { steering, frame } = steppedOff();
+      steering.touch();
+      steering.drag(-100, 0);
+      expect(frame().turned).toBeGreaterThan(0);
+    });
+
+    it("falls past a modelled ledge without being shoved off its edge", () => {
+      const quad = ([a, b, c, d]: number[][]) => [...a, ...b, ...c, ...a, ...c, ...d];
+      // Floor, the ledge's face, and floor 3 m below.
+      const { terrain } = collisionMesh([
+        ...quad([[-5, 0, -1], [5, 0, -1], [5, 0, 5], [-5, 0, 5]]),
+        ...quad([[-5, -3, -1], [5, -3, -1], [5, 0, -1], [-5, 0, -1]]),
+        ...quad([[-5, -3, -9], [5, -3, -9], [5, -3, -1], [-5, -3, -1]]),
+      ]);
+      const { frame } = walkthrough(terrain);
+      let farthest = 0;
+      let view = frame(forward).view;
+      for (let frames = 0; frames < 120; frames++) {
+        const next = frame(forward);
+        farthest = Math.max(farthest, next.moved);
+        view = next.view;
+      }
+      expect(view.y).toBeCloseTo(WALKING.eyeHeight - 3);
+      expect(farthest).toBeLessThan(WALKING.speed * FRAME * 1.01);
+    });
+
+    it("steers again once landed", () => {
+      const { hold, frame } = steppedOff();
+      hold(centred, 1);
+      expect(frame(centred).moved).toBe(0);
+      expect(frame(right).turned).toBeGreaterThan(0);
     });
   });
 

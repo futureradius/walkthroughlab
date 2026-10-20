@@ -52,10 +52,23 @@ describe("collision mesh", () => {
     expect(next.z).toBeLessThan(-1.9);
   });
 
-  it("refuses a drop taller than a step", () => {
+  it("steps off a ledge taller than a step only once the body is clear of it", () => {
     const { terrain } = collisionMesh([
       ...floor(-5, -2, 5, 5, 0),
-      ...floor(-5, -9, 5, -2, -1),
+      ...wall(-5, -2, 5, -2, -3, 0),
+      ...floor(-5, -9, 5, -2, -3),
+    ]);
+    let viewpoint = start;
+    while (viewpoint.floor === 0) viewpoint = advance(viewpoint, forward, FRAME, terrain);
+    expect(viewpoint.floor).toBe(-3);
+    expect(viewpoint.z).toBeLessThanOrEqual(-2 - BODY.radius);
+    expect(viewpoint.z).toBeGreaterThan(-2 - BODY.radius - WALKING.speed * FRAME);
+  });
+
+  it("refuses a rise taller than a step", () => {
+    const { terrain } = collisionMesh([
+      ...floor(-5, -2, 5, 5, 0),
+      ...floor(-5, -9, 5, -2, 0.5),
     ]);
     const next = walk(start, terrain, 5);
     expect(next.z).toBeGreaterThanOrEqual(-2);

@@ -65,6 +65,8 @@ export interface WalkingSettings {
   eyeHeight: number;
   /** How quickly the eyes catch up with a sudden change in floor height, per second. */
   eyeCatchUp: number;
+  /** Metres per second the speed of a fall off a ledge grows by, each second. */
+  gravity: number;
 }
 
 /**
@@ -78,6 +80,7 @@ export const WALKING: WalkingSettings = {
   levelling: 4,
   eyeHeight: 1.6,
   eyeCatchUp: 12,
+  gravity: 9.8,
 };
 
 const perTurn = fixed(2, " s a turn");
@@ -131,6 +134,14 @@ export const WALKING_DESCRIBED: Described<WalkingSettings> = {
     step: 1,
     show: perSecond,
     about: "How quickly the eyes follow the floor up or down a step, so the view never jolts.",
+  }),
+  gravity: number({
+    label: "Falling",
+    min: 1,
+    max: 20,
+    step: 0.1,
+    show: fixed(1, " m/s²"),
+    about: "How quickly a fall off a ledge taller than a step speeds up; 9.8 is a real fall.",
   }),
 };
 
