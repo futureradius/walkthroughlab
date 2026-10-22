@@ -15,6 +15,9 @@ up, it becomes an issue and leaves this log.
   moving parts on the finish line. (#11)
 - **More than one environment behind one link.** One link opens one
   environment. (#11)
+- **Sliding doors with several leaves stacking to one side**, for large
+  openings, each leaf travelling its own distance. A sliding door on the
+  finish line has one leaf, or two that part. (#12)
 
 ## Materials
 
@@ -41,6 +44,9 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
 
 ## Light
 
+- **Spotlights and other directed light the author places.** On the finish
+  line a lamp is a surface whose material glows; Rhino's own lights do not
+  export. (#12)
 - **A second bake for a moving part's other state.** ADR 0003 allows one, for
   a moving part that opens or closes an opening. Come back to it only if a door
   in the test environment looks wrong when it opens. (#11)

@@ -36,6 +36,10 @@ _Avoid_: Player, user, visitor, player controller
 The person who prepares a walkthrough from their own architectural model and publishes it for viewers.
 _Avoid_: Admin, creator, uploader
 
+**Mark**:
+A layer name, or for water a material name, in the author's Rhino model that says what the things under it are, such as a door, a placed sound or the collision mesh. Lines drawn under a mark say where and which way: a hinge, a route, a start spot.
+_Avoid_: Tag, label, annotation, user text
+
 **Config file**:
 The file an author writes beside an environment to change how ambient occlusion and zoom work in it, overriding their usual values. Adding `?config` to a walkthrough's address opens a panel that changes the same values while walking and copies them for the config file.
 _Avoid_: Settings file, preferences, options file
@@ -45,7 +49,7 @@ The position and direction of the viewer's eyes within the space.
 _Avoid_: Camera, player, character
 
 **Start spot**:
-The spot and direction where the viewpoint begins when a viewer opens an environment, chosen by the author.
+The spot and direction where the viewpoint begins when a viewer opens an environment, drawn by the author in the model.
 _Avoid_: Spawn point, start position, origin
 
 **Steering**:
