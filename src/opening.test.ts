@@ -182,6 +182,7 @@ describe("opening an environment", () => {
     const { sections } = await opening;
     expect(sections.map(({ heading }) => heading)).toEqual([
       "Ambient occlusion",
+      "Faces",
       "Walking",
       "Running",
       "Coasting",

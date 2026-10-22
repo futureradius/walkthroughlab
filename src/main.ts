@@ -55,7 +55,7 @@ const fps = params.has("fps")
 
 addAbout(document.body);
 
-const { steering, sections } = await whileLoading(document.body, (onProgress) =>
+const { steering, faces, sections } = await whileLoading(document.body, (onProgress) =>
   openEnvironment(TEST_ENVIRONMENT, { renderer, scene, occlusion }, onProgress),
 );
 
@@ -93,6 +93,7 @@ renderer.setAnimationLoop((now) => {
   camera.rotation.x = view.pitch;
   camera.fov = view.fov;
   camera.updateProjectionMatrix();
+  faces.update();
   if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
 

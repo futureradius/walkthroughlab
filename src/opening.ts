@@ -1,6 +1,7 @@
 import { Color, type Scene, type WebGLRenderer } from "three";
 import { collisionMesh } from "./collision";
 import { loadConfig, loadEnvironment, type EnvironmentFiles } from "./environment";
+import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
@@ -40,6 +41,8 @@ export interface Walkthrough {
 /** An opened environment, ready for its first frame. */
 export interface Opened {
   steering: Steering;
+  /** Which faces of the environment are drawn; `update` it each frame. */
+  faces: Faces;
   /** The settings the ?config panel changes while walking, in its order. */
   sections: Section[];
 }
@@ -91,6 +94,7 @@ export async function openEnvironment(
   });
   const loaded = await loadEnvironment(environment.files, renderer, onProgress);
   scene.add(loaded.visible);
+  const faces = new Faces(loaded.visible);
   scene.background = loaded.skyPicture;
   scene.environment = loaded.skyLight;
   const { terrain, floorAt } = collisionMesh(loaded.collision);
@@ -105,5 +109,9 @@ export async function openEnvironment(
   configure(sections, await config);
   if (occlusion) occlusion.bakedLight = loaded.bakedLight ?? null;
   await occlusionReady;
-  return { steering, sections: [...occlusionSections, ...sections] };
+  return {
+    steering,
+    faces,
+    sections: [...occlusionSections, section("Faces", faces.settings, FACES_DESCRIBED), ...sections],
+  };
 }
