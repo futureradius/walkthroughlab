@@ -13,23 +13,23 @@ function environment() {
 }
 
 describe("drawing faces", () => {
-  it("draws both sides of everything as usual", () => {
-    const { model, glass, wall } = environment();
-    new Faces(model).update();
-    expect(glass.side).toBe(DoubleSide);
-    expect(wall.side).toBe(DoubleSide);
-  });
-
-  it("draws glass from the front alone, letting its colour through twice", () => {
+  it("draws glass from the front alone as usual, letting its colour through twice", () => {
     const { model, glass, wall } = environment();
     const once = glass.blendColor.clone();
-    const faces = new Faces(model);
-    faces.settings.front = "glass";
-    faces.update();
+    new Faces(model).update();
     expect(glass.side).toBe(FrontSide);
     expect(wall.side).toBe(DoubleSide);
     expect(glass.blendColor.r).toBeCloseTo(once.r ** 2);
     expect(glass.blendColor.b).toBeCloseTo(once.b ** 2);
+  });
+
+  it("draws everything from both sides", () => {
+    const { model, glass, wall } = environment();
+    const faces = new Faces(model);
+    faces.settings.front = "none";
+    faces.update();
+    expect(glass.side).toBe(DoubleSide);
+    expect(wall.side).toBe(DoubleSide);
   });
 
   it("draws everything from the front alone", () => {
@@ -45,7 +45,6 @@ describe("drawing faces", () => {
     const { model, glass } = environment();
     const once = glass.blendColor.clone();
     const faces = new Faces(model);
-    faces.settings.front = "glass";
     faces.update();
     faces.settings.front = "none";
     faces.update();

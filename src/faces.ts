@@ -13,7 +13,9 @@ export interface FacesSettings {
 }
 
 export const FACES: FacesSettings = {
-  front: "none",
+  // Measured on the Redmi Note 8 (issue #9): through stacked glass, 32 fps
+  // instead of 21 with ambient occlusion. Solid surfaces gain next to nothing.
+  front: "glass",
 };
 
 export const FACES_DESCRIBED: Described<FacesSettings> = {
@@ -36,7 +38,8 @@ export class Faces {
   private readonly solid = new Set<Material>();
   /** Each glass material, with the share of light it lets through at one surface. */
   private readonly glass = new Map<Material, Color>();
-  private drawn = FACES.front;
+  /** What the materials were last set to draw; nothing until the first frame. */
+  private drawn: string | undefined;
 
   /** Takes the environment once `prepareSurfaces` has sorted it. */
   constructor(visible: Object3D) {
