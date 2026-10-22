@@ -73,14 +73,18 @@ Narrowing the view to bring distant detail closer, without the viewpoint moving.
 _Avoid_: Field of view, FOV, dolly, magnify
 
 **Scatter**:
-Many copies of one small thing, such as a grass tuft, a pebble or a fallen leaf, spread over a surface by the author.
+Many copies of one thing, such as a grass tuft, a pebble, a fallen leaf or a tree in a wooded patch, spread over a surface by the author.
 _Avoid_: Instancing, foliage, particles, scattered texture
+
+**Prop**:
+A thing prepared once as its own small file and placed by hand wherever the author marks it in an environment, such as a chair, a table, a potted plant or a single tree. One prop can be placed many times; some sway, most stand still.
+_Avoid_: Asset, object, block, instance
 
 ### Movement
 
 **Moving part**:
 A piece of the architecture that moves between set positions, such as a door, a window, a shutter, or an elevator and its doors.
-_Avoid_: Dynamic object, animated object, prop, actor
+_Avoid_: Dynamic object, animated object, actor
 
 **Window**:
 A moving part that opens and closes an opening in a wall. The see-through surface in it is glass.
@@ -99,6 +103,10 @@ _Avoid_: NPCs, vehicles, agents, crowd
 **Glass**:
 A surface of an environment that the viewer sees through, which dims and tints what lies beyond it by its own colour and reflects the sky.
 _Avoid_: Window, transparent material, transmission, see-through surface
+
+**Water**:
+A still surface of an environment, such as a pool, that tints what lies below it and reflects the sky through small moving waves.
+_Avoid_: Glass, liquid, fluid, ocean
 
 ### Sound
 
