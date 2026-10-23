@@ -78,6 +78,14 @@ Movement is done until the finish line (#8).
   walkthrough plays back. Birds flap by a simple formula instead; this is the
   upgrade for sway that looks fake by formula. (#11)
 
+## Grass
+
+- **The author's own grass tuft, made in Blender** following Ghislain
+  Girardot's tutorial on making grass assets (https://youtu.be/BFnwkBv19TA),
+  as solid blades, which ran faster than see-through cards on phones. The
+  generated placeholder blades (`scripts/placeholder-grass.mjs`) serve until
+  then. (#25)
+
 ## Viewer interaction
 
 - **Trampling grass, dust in the air, and ripples from the viewer.** See

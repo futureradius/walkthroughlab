@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bladeRoots, keptAt, REDUCED, SCATTER, scatterOver, spreadFor, type Ground } from "./scatter";
+import { bladeRoots, keptAt, REDUCED, SCATTER, scatterOver, spreadAt, type Ground } from "./scatter";
 
 /** A flat square of ground `size` metres across at height `y`, as two triangles, its light spots spanning the picture. */
 function square(size: number, y = 0): Ground {
@@ -50,22 +50,24 @@ describe("scattering copies", () => {
 });
 
 describe("thinning out with distance", () => {
-  it("keeps every copy up close and a third where they end", () => {
+  it("keeps every copy up to where they thin out, and only the far share from where they shrink", () => {
     expect(keptAt(5, SCATTER)).toBe(1);
-    expect(keptAt(10, SCATTER)).toBe(1);
+    expect(keptAt(SCATTER.thinFrom, SCATTER)).toBe(1);
+    expect(keptAt(15, SCATTER)).toBeCloseTo((1 + SCATTER.thin) / 2);
+    expect(keptAt(SCATTER.near, SCATTER)).toBeCloseTo(SCATTER.thin);
     expect(keptAt(SCATTER.far, SCATTER)).toBeCloseTo(SCATTER.thin);
-    expect(keptAt(27.5, SCATTER)).toBeCloseTo((1 + SCATTER.thin) / 2);
   });
 
-  it("keeps fewer, ending sooner, at the safety net's steps", () => {
+  it("keeps fewer, thinning out sooner, at the safety net's steps", () => {
     expect(keptAt(5, SCATTER, REDUCED[1])).toBeCloseTo(2 / 3);
-    expect(keptAt(25, SCATTER, REDUCED[2])).toBeCloseTo(SCATTER.thin / 3);
+    expect(keptAt(SCATTER.near * REDUCED[2].far, SCATTER, REDUCED[2])).toBeCloseTo(SCATTER.thin / 3);
   });
 
-  it("spreads blades apart as copies thin out, so they still cover the ground, but no further than the setting", () => {
-    expect(spreadFor(1, SCATTER)).toBe(1);
-    expect(spreadFor(0.5, SCATTER)).toBeCloseTo(Math.SQRT2);
-    expect(spreadFor(0.1, SCATTER)).toBe(SCATTER.spread);
+  it("spreads blades apart as copies thin out, reaching the far spread where they shrink", () => {
+    expect(spreadAt(5, SCATTER)).toBe(1);
+    expect(spreadAt(15, SCATTER)).toBeCloseTo((1 + SCATTER.spread) / 2);
+    expect(spreadAt(SCATTER.near, SCATTER)).toBeCloseTo(SCATTER.spread);
+    expect(spreadAt(SCATTER.near, { ...SCATTER, spread: 10 })).toBeCloseTo(10);
   });
 });
 

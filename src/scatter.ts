@@ -28,9 +28,13 @@ export interface ScatterSettings {
   near: number;
   /** Metres from the viewpoint where they have gone. */
   far: number;
-  /** Share of copies still drawn where they end; they thin out from THIN_FROM. */
+  /** Their height, as a share of the tuft's own. */
+  height: number;
+  /** Metres from the viewpoint where copies start to thin out. */
+  thinFrom: number;
+  /** Share of copies still drawn from where they start to shrink away, thinned out from `thinFrom`. */
   thin: number;
-  /** How far apart the blades of a far copy may move, so fewer copies still cover the ground. */
+  /** How far apart the blades of a thinned-out copy move, by then, so the ground still looks covered. */
   spread: number;
   /** How much of the colour of the ground below copies take, from 0 to 1. */
   groundColour: number;
@@ -42,6 +46,8 @@ export const SCATTER: ScatterSettings = {
   density: 30,
   near: 20,
   far: 45,
+  height: 1,
+  thinFrom: 10,
   thin: 0.33,
   spread: 1.7,
   groundColour: 0.5,
@@ -73,21 +79,37 @@ export const SCATTER_DESCRIBED: Described<ScatterSettings> = {
     show: fixed(0, " m"),
     about: "How far from the viewpoint they have gone; beyond, only the ground shows.",
   }),
+  height: number({
+    label: "Height",
+    min: 0.1,
+    max: 2,
+    step: 0.05,
+    show: fixed(2, "×"),
+    about: "How tall copies grow, as a share of the tuft as it was made.",
+  }),
+  thinFrom: number({
+    label: "Thins from",
+    min: 0,
+    max: 60,
+    step: 1,
+    show: fixed(0, " m"),
+    about: "How far from the viewpoint fewer copies start to be drawn; by where they start to shrink, only the far share is left.",
+  }),
   thin: number({
     label: "Far share",
-    min: 0.1,
+    min: 0.01,
     max: 1,
     step: 0.01,
     show: percent,
-    about: "Share of copies still drawn where they end. From 10 m on, fewer are drawn the further away they are.",
+    about: "Share of copies still drawn from where they start to shrink away.",
   }),
   spread: number({
     label: "Far spread",
     min: 1,
-    max: 3,
-    step: 0.05,
-    show: fixed(2, "×"),
-    about: "How far apart the blades of a thinned-out copy may move, so the ground still looks covered.",
+    max: 10,
+    step: 0.1,
+    show: fixed(1, "×"),
+    about: "How far apart the blades of each copy left move by then, so the ground still looks covered.",
   }),
   groundColour: number({
     label: "Ground colour",
@@ -107,8 +129,6 @@ export const SCATTER_DESCRIBED: Described<ScatterSettings> = {
   }),
 };
 
-/** Metres from the viewpoint where copies start to thin out. */
-const THIN_FROM = 10;
 /** Share of copies over which one fades out as their number falls, so none pops. */
 const FADE_SHARE = 0.05;
 /**
@@ -129,16 +149,21 @@ const MIN_UP = 0.5;
 /** Mipmap level the ground's colour is read at: an average over a patch, not one speck. */
 const GROUND_COLOUR_LEVEL = 3;
 
-/** The share of copies drawn at a distance: all up close, `thin` where they end, times `reduced`. */
-export function keptAt(distance: number, settings: ScatterSettings, reduced = REDUCED[0]): number {
-  const far = settings.far * reduced.far;
-  const along = Math.min(1, Math.max(0, (distance - THIN_FROM) / Math.max(far - THIN_FROM, 1)));
-  return (1 + (settings.thin - 1) * along) * reduced.density;
+/** How far along thinning out a distance is: 0 up to `thinFrom`, 1 from where copies start to shrink. */
+export function thinningAt(distance: number, settings: ScatterSettings, reduced = REDUCED[0]): number {
+  const end = Math.min(settings.near, settings.far - 1) * reduced.far;
+  const start = Math.min(settings.thinFrom, end - 0.5);
+  return Math.min(1, Math.max(0, (distance - start) / (end - start)));
 }
 
-/** How far apart a copy's blades move when only `kept` of the copies are drawn, so they still cover the ground. */
-export function spreadFor(kept: number, settings: ScatterSettings): number {
-  return Math.min(settings.spread, 1 / Math.sqrt(Math.max(kept, 0.01)));
+/** The share of copies drawn at a distance: all up close, `thin` by where they shrink, times `reduced`. */
+export function keptAt(distance: number, settings: ScatterSettings, reduced = REDUCED[0]): number {
+  return (1 + (settings.thin - 1) * thinningAt(distance, settings, reduced)) * reduced.density;
+}
+
+/** How far apart a copy's blades move at a distance: not at all up close, `spread` by where they shrink. */
+export function spreadAt(distance: number, settings: ScatterSettings, reduced = REDUCED[0]): number {
+  return 1 + (settings.spread - 1) * thinningAt(distance, settings, reduced);
 }
 
 /** One surface of a scatter mark: its triangles, where they fall in the baked light picture, and its colour. */
@@ -329,6 +354,7 @@ const VERTEX = /* glsl */ `
   uniform mat3 groundMapTransform;
   uniform vec3 groundTint;
   uniform float height;
+  uniform float tall;
   uniform float near;
   uniform float far;
   uniform float thinFrom;
@@ -348,20 +374,24 @@ const VERTEX = /* glsl */ `
     float away = distance(root, cameraPosition);
     // Fewer copies the further away, those with the lowest rank kept, each
     // fading out as the share passes it; the rest spread their blades.
-    float kept = mix(1.0, thin, clamp((away - thinFrom) / max(far - thinFrom, 1.0), 0.0, 1.0)) * density;
+    float shrinkFrom = min(near, far - 1.0);
+    float thinning = clamp((away - thinFrom) / max(shrinkFrom - thinFrom, 0.5), 0.0, 1.0);
+    float kept = mix(1.0, thin, thinning) * density;
     float shown = clamp((kept - rank) / ${FADE_SHARE.toFixed(3)}, 0.0, 1.0);
-    float spreadBy = min(spread, inversesqrt(max(kept, 0.01)));
+    float spreadBy = mix(1.0, spread, thinning);
     // How far up the tuft this point is: the root stays put, the tip moves most.
     float up = clamp(position.y / height, 0.0, 1.0);
     vec3 local = position;
+    local.y *= tall;
     local.xz += pivot * (spreadBy - 1.0);
     float c = cos(turn.x), s = sin(turn.x);
     vec3 p = vec3(c * local.x - s * local.z, local.y, s * local.x + c * local.z) * turn.y;
     // Shrinks away into the ground with distance, and grows in once arrived.
-    p *= (1.0 - smoothstep(min(near, far - 1.0), far, away)) * grown * shown;
-    float push = gust(root.xz, turn.x * 7.0) * sway * up * up * height * turn.y;
+    p *= (1.0 - smoothstep(shrinkFrom, far, away)) * grown * shown;
+    float tallness = height * tall * turn.y;
+    float push = gust(root.xz, turn.x * 7.0) * sway * up * up * tallness;
     p.xz += windDirection * push;
-    p.y -= 0.5 * push * push / max(height * turn.y, 0.01);
+    p.y -= 0.5 * push * push / max(tallness, 0.01);
     vUv = uv;
     vUp = up;
     #ifdef USE_COLOR
@@ -467,6 +497,8 @@ export class Scatter {
       uniforms.grown.value = Math.min(1, this.grownFor / GROW_SECONDS);
       uniforms.near.value = settings.near * reduced.far;
       uniforms.far.value = settings.far * reduced.far;
+      uniforms.tall.value = settings.height;
+      uniforms.thinFrom.value = settings.thinFrom * reduced.far;
       uniforms.thin.value = settings.thin;
       uniforms.density.value = reduced.density;
       uniforms.spread.value = settings.spread;
@@ -507,7 +539,8 @@ export class Scatter {
         height: { value: tuft.height },
         near: { value: this.settings.near },
         far: { value: this.settings.far },
-        thinFrom: { value: THIN_FROM },
+        tall: { value: this.settings.height },
+        thinFrom: { value: this.settings.thinFrom },
         thin: { value: this.settings.thin },
         density: { value: 1 },
         spread: { value: this.settings.spread },
@@ -566,7 +599,8 @@ export class Scatter {
         }
         const centre = lowest.clone().add(highest).multiplyScalar(0.5);
         const reach = centre.distanceTo(highest);
-        geometry.boundingSphere = new Sphere(centre, reach + tuft.height * 2 + 0.5);
+        // Room for the tallest and most spread out copies the settings allow.
+      geometry.boundingSphere = new Sphere(centre, reach + tuft.height * 4 + 2);
         const mesh = new Mesh(geometry, material);
         mesh.layers.enable(this.layer);
         this.group.add(mesh);
