@@ -86,6 +86,13 @@ Movement is done until the finish line (#8).
   generated placeholder blades (`scripts/placeholder-grass.mjs`) serve until
   then. (#25)
 
+- **A wooded patch as tree scatter** (`scatter-trees`): many trees grown
+  over marked surfaces like grass. The finish line places trees by hand as
+  props (#28); the scatter machinery is general enough to take trees later,
+  with their own sway. (#25)
+- **The author's own trees, made in Blender**, with sway painted as vertex
+  colour; a generated placeholder tree serves until then. (#25, #28)
+
 ## Viewer interaction
 
 - **Trampling grass, dust in the air, and ripples from the viewer.** See

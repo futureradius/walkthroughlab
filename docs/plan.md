@@ -186,8 +186,9 @@ and never published (#15, #16, #34).
       motion
 - [ ] Materials: plain, relief, shine and both, each used at least once, tuned
       in the test environment
-- [ ] Grass as swaying scatter; bushes and trees
-- [ ] Still props (chairs, tables) with baked shadow; potted plants swaying
+- [ ] Grass as swaying scatter
+- [ ] Still props (chairs, tables) with baked shadow; potted plants swaying;
+      trees and bushes placed by hand, swaying as painted
 - [ ] Curtains and flags swaying
 - [ ] Birds on their loop, absent for reduced motion
 - [ ] A door that opens, closes and stops the viewpoint when closed
