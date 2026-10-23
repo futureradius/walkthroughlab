@@ -36,7 +36,7 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
 - **Transparency below 100 %.** Today transparency only decides whether a
   material is glass (#6).
 - **Glass across its range**, from clear to dark enough to be nearly opaque, as
-  a set of samples in the material test environment (#21).
+  a set of samples in the test environment (#21).
 - **A switch for one material to opt out of being simplified.** The optimize
   step turns a texture that is almost one value into that value and drops the
   texture, which leaves a small detail that differs, such as one shiny nail in
@@ -62,6 +62,14 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
   what is on screen and cost time every frame, of which about 1 ms is left in
   the worst view on the Redmi Note 8 (#9); probes cost almost nothing while
   walking but are coarser. Measure each on the Redmi. (#11)
+
+## Moving through
+
+Movement is done until the finish line (#8).
+
+- **Head bob while walking or running**: a gentle rise and fall of the
+  viewpoint with each step. Suggested while deciding how running works
+  (3a1ae8a) and left out of that step on purpose. (#17)
 
 ## Movement in place
 
