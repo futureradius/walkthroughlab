@@ -331,6 +331,13 @@ for (const setting of Object.keys(OCCLUSION_DESCRIBED) as (keyof OcclusionSettin
  */
 const OVER_DARKENING = [LAYERS.glass];
 
+/**
+ * The kinds of surface drawn under the darkening and darkened by it. Things
+ * that sway take no part in working it out, since they move and are thin,
+ * but are darkened like the ground behind them (#25).
+ */
+const UNDER_DARKENING = [LAYERS.solid, LAYERS.sway];
+
 /** Seconds a method's darkening takes to fade in once it has arrived (#14). */
 const FADE_IN_SECONDS = 1;
 
@@ -512,6 +519,8 @@ export class AmbientOcclusion {
       renderer.setClearColor(0xffffff);
       renderer.clear();
     } else {
+      camera.layers.disableAll();
+      for (const layer of UNDER_DARKENING) camera.layers.enable(layer);
       renderer.render(scene, camera);
     }
     const autoClear = renderer.autoClear;
