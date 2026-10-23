@@ -17,7 +17,8 @@ up, it becomes an issue and leaves this log.
   environment. (#11)
 - **Sliding doors with several leaves stacking to one side**, for large
   openings, each leaf travelling its own distance. A sliding door on the
-  finish line has one leaf, or two that part. (#12)
+  finish line has one leaf, or two that part, marked by the sublayers
+  `leaf-left` and `leaf-right`; more leaves need a way to name them. (#12)
 
 ## Materials
 
