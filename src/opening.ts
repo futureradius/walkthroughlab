@@ -21,7 +21,7 @@ export const TEST_ENVIRONMENT: EnvironmentAddress = {
     smallSkyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.hdr`,
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
-    bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
+    bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.webp`,
   },
   config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
 };

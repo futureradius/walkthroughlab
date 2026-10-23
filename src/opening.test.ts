@@ -21,7 +21,7 @@ const ADDRESS: EnvironmentAddress = {
     smallSkyLight: "sky-small.hdr",
     skyPicture: "sky.jpg",
     skyLight: "sky.hdr",
-    bakedLight: "light.jpg",
+    bakedLight: "light.webp",
   },
   config: "config.md",
 };

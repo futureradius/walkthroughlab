@@ -335,7 +335,7 @@ async function reportBudget(environment, sky) {
     for (const path of paths) bytes += await onTheWire(path).catch(() => 0);
     return bytes / 1024 / 1024;
   };
-  const baked = joinPath(MODELS, renamed(environment, "-light.jpg"));
+  const baked = joinPath(MODELS, renamed(environment, "-light.webp"));
   const opening =
     CODE_ESTIMATE +
     (await megabytes([

@@ -30,7 +30,11 @@ const SKY_EXPOSURE = 1;
  * environment.ts.
  */
 const LIGHT_RANGE = 4;
-const PICTURE_QUALITY = 90;
+/**
+ * WebP, written straight from Blender's lossless output: half the size of the
+ * JPEG it replaced, with no banding to be seen in shadow gradients (#23).
+ */
+const PICTURE_QUALITY = 85;
 
 function findBlender() {
   if (process.env.BLENDER) return process.env.BLENDER;
@@ -83,7 +87,7 @@ async function writeLightPicture(from, to) {
     }
   }
   await sharp(bytes, { raw: { width, height, channels: 3 } })
-    .jpeg({ quality: PICTURE_QUALITY, chromaSubsampling: "4:4:4", mozjpeg: true })
+    .webp({ quality: PICTURE_QUALITY })
     .toFile(to);
   return (100 * clipped) / (width * height * 3);
 }
@@ -92,7 +96,7 @@ const [environmentName, skyName] = process.argv.slice(2);
 const environment = await pick(MODELS, ".glb", environmentName);
 const sky = await pick(SKIES, ".hdr", skyName);
 const raw = joinPath(WORK, environment.replace(".glb", ".exr"));
-const picture = joinPath(MODELS, environment.replace(".glb", "-light.jpg"));
+const picture = joinPath(MODELS, environment.replace(".glb", "-light.webp"));
 await mkdir(WORK, { recursive: true });
 if (!existsSync(joinPath(WORK, environment))) {
   throw new Error(`${WORK}/${environment} is missing; run npm run optimize first.`);
