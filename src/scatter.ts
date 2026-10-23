@@ -45,13 +45,13 @@ export interface ScatterSettings {
 export const SCATTER: ScatterSettings = {
   density: 30,
   near: 20,
-  far: 45,
-  height: 1,
+  far: 40,
+  height: 0.45,
   thinFrom: 10,
-  thin: 0.33,
-  spread: 1.7,
-  groundColour: 0.5,
-  sway: 1,
+  thin: 0.2,
+  spread: 3,
+  groundColour: 0.85,
+  sway: 1.7,
 };
 
 export const SCATTER_DESCRIBED: Described<ScatterSettings> = {
@@ -431,11 +431,12 @@ const FRAGMENT = /* glsl */ `
       // Solid or cut away, never see-through, so grass hides what is behind it.
       if (colour.a < 0.5) discard;
     #endif
-    // Some of the ground's own colour, lighter towards the tip as the tuft's is.
-    vec3 ground = vGround * mix(0.7, 1.2, vUp);
-    colour.rgb = mix(colour.rgb, ground, groundShare);
-    // A little darker towards the root, where blades shade each other.
-    gl_FragColor = vec4(colour.rgb * vLight * mix(0.55, 1.0, vUp), 1.0);
+    // The tuft's own colour is a little darker towards the root, where blades
+    // shade each other. The ground's is its own at the root, so blades grow
+    // out of it seamlessly, and lighter and greener towards the tip.
+    vec3 own = colour.rgb * mix(0.55, 1.0, vUp);
+    vec3 ground = vGround * mix(vec3(1.0), vec3(1.15, 1.35, 1.05), vUp);
+    gl_FragColor = vec4(mix(own, ground, groundShare) * vLight, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
