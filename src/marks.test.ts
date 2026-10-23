@@ -1,0 +1,125 @@
+import { describe, expect, it } from "vitest";
+import { headingOf, normalise, readMarks, type Layer, type Point } from "./marks";
+
+/** A layer as the export carries it; its node is its own name, to find it again. */
+function layer(name: string, contents: { layers?: Layer<string>[]; lines?: Point[][]; surfaces?: number } = {}): Layer<string> {
+  return { name, node: name, layers: contents.layers ?? [], lines: contents.lines ?? [], surfaces: contents.surfaces ?? 0 };
+}
+
+const flat = (from: [number, number], to: [number, number], y = 0): Point[] => [
+  [from[0], y, from[1]],
+  [to[0], y, to[1]],
+];
+const surfaces = (name: string) => layer(name, { surfaces: 1 });
+const door = (name: string, line: Point[], extra: Layer<string>[] = []) =>
+  layer(name, { lines: [line], layers: [surfaces("model"), surfaces("collision mesh"), ...extra] });
+const start = () => layer("start", { lines: [flat([16.62, 3.66], [14.63, 4.45])] });
+
+/** A model with a collision mesh and a start spot, plus these layers inside `Walkthrough`. */
+const model = (...inside: Layer<string>[]) => [
+  layer("Walkthrough", { layers: [surfaces("collision mesh"), start(), ...inside] }),
+  layer("Buildings", { layers: [surfaces("3d_Travertin")] }),
+];
+
+describe("reading marks", () => {
+  it("reads the start spot from its line, looking along it", () => {
+    const marks = readMarks(model());
+    expect(marks.errors).toEqual([]);
+    expect(marks.warnings).toEqual([]);
+    expect(marks.start).toMatchObject({ x: 16.62, y: 0, z: 3.66 });
+    expect(marks.start!.heading).toBeCloseTo(headingOf([16.62, 0, 3.66], [14.63, 0, 4.45]));
+  });
+
+  it("counts headings as steering does: 0 looks towards -z, a quarter turn right looks towards +x", () => {
+    expect(headingOf([0, 0, 0], [0, 0, -1])).toBeCloseTo(0);
+    expect(headingOf([0, 0, 0], [1, 0, 0])).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("ignores capitals and spaces around dashes", () => {
+    expect(normalise("  Door - Hinged -2 ")).toBe("door-hinged-2");
+    expect(normalise("Collision  Mesh")).toBe("collision mesh");
+  });
+
+  it("will not open without a Walkthrough layer, a collision mesh or a start spot", () => {
+    expect(readMarks([layer("Buildings")]).errors).toHaveLength(1);
+    const bare = readMarks([layer("Walkthrough", { layers: [layer("door-hinged-1")] })]);
+    expect(bare.errors).toEqual([
+      'There is no "collision mesh" layer inside "Walkthrough" with surfaces on it.',
+      'There is no "start" layer inside "Walkthrough" with a line on it.',
+    ]);
+  });
+
+  it("gathers every collision mesh, the still one and each moving part's, and nothing outside Walkthrough", () => {
+    const marks = readMarks(model(door("door-hinged-1", flat([0, 0], [1, 0]))));
+    expect(marks.collision).toEqual(["collision mesh", "collision mesh"]);
+    expect(marks.parts.map(({ kind, name }) => `${kind} ${name}`)).toEqual(["door-hinged 1"]);
+  });
+
+  it("reads the test environment's elevator without a warning", () => {
+    const leaves = (y: number) => [
+      layer("leaf-left", { lines: [flat([12.36, 7.66], [13.06, 7.66], y)], layers: [surfaces("model"), surfaces("collision mesh")] }),
+      layer("leaf-right", { lines: [flat([12.34, 7.66], [11.64, 7.66], y)], layers: [surfaces("model"), surfaces("collision mesh")] }),
+    ];
+    const route: Point[] = [[11.36, 0, 10.83], [11.36, 3.5, 10.83], [11.36, 6.5, 10.83]];
+    const elevator = layer("elevator-1", {
+      lines: [route],
+      layers: [
+        layer("door-sliding-3", { layers: leaves(6.5) }),
+        layer("door-sliding-2", { layers: leaves(3.5) }),
+        layer("model", { surfaces: 16, layers: [layer("door-sliding-car-1", { layers: leaves(0) })] }),
+        layer("door-sliding-1", { layers: leaves(0) }),
+        surfaces("collision mesh"),
+      ],
+    });
+    const marks = readMarks(model(elevator));
+    expect(marks.warnings).toEqual([]);
+    expect(marks.parts.map(({ path }) => path)).toEqual([
+      "elevator-1",
+      "elevator-1 › door-sliding-3",
+      "elevator-1 › door-sliding-2",
+      "elevator-1 › model › door-sliding-car-1",
+      "elevator-1 › door-sliding-1",
+    ]);
+    // The still one, the car's, and two leaves on each of four doors.
+    expect(marks.collision).toHaveLength(10);
+  });
+
+  it("warns about a door without a collision mesh, which still opens but won't stop the viewpoint", () => {
+    const marks = readMarks(model(layer("door-hinged-2", { lines: [flat([4.41, 7.88], [5.13, 7.17], 2.25)], layers: [surfaces("model")] })));
+    expect(marks.warnings).toEqual([`door-hinged-2: has no "collision mesh" layer, so it won't stop the viewpoint.`]);
+    expect(marks.parts).toHaveLength(1);
+  });
+
+  it("warns about a misspelt kind, a kind without a name, and a door without its line", () => {
+    const marks = readMarks(
+      model(
+        layer("dor-hinged-1", { surfaces: 1 }),
+        layer("door-2", { surfaces: 1 }),
+        layer("elevator", { surfaces: 1 }),
+        layer("door-sliding-4", { layers: [surfaces("model"), surfaces("collision mesh")] }),
+      ),
+    );
+    expect(marks.warnings).toEqual([
+      expect.stringMatching(/^dor-hinged-1: is not a kind of mark/),
+      expect.stringMatching(/^door-2: is not a kind of mark.*door-hinged-… or door-sliding-…/),
+      "elevator: has no name after its kind; call it elevator-1. Its things stay still until then.",
+      expect.stringMatching(/^door-sliding-4: has no line/),
+    ]);
+    expect(marks.parts.map(({ path }) => path)).toEqual(["door-sliding-4"]);
+  });
+
+  it("warns about a door that parts in two with only one leaf, and about leaves outside a sliding door", () => {
+    const leaf = () => layer("leaf-left", { lines: [flat([0, 0], [1, 0])], layers: [surfaces("model"), surfaces("collision mesh")] });
+    const marks = readMarks(model(layer("door-sliding-1", { layers: [leaf()] }), door("door-hinged-1", flat([0, 0], [1, 0]), [leaf()])));
+    expect(marks.warnings).toEqual([
+      "door-sliding-1: has only one leaf; a door that parts in two needs leaf-right as well.",
+      "door-hinged-1 › leaf-left: leaves belong only inside a door-sliding-… layer.",
+    ]);
+  });
+
+  it("uses the first start spot when there are two, and says so", () => {
+    const marks = readMarks([layer("Walkthrough", { layers: [surfaces("collision mesh"), start(), layer("start", { lines: [flat([0, 0], [0, -1])] })] })]);
+    expect(marks.start!.x).toBe(16.62);
+    expect(marks.warnings).toEqual(["start: there is more than one start layer; only the first is used."]);
+  });
+});

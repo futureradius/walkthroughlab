@@ -15,7 +15,6 @@ vi.mock("./environment", async (original) => ({
 const ADDRESS: EnvironmentAddress = {
   files: { model: "model.glb", skyPicture: "sky.jpg", skyLight: "sky.hdr", bakedLight: "light.jpg" },
   config: "config.md",
-  start: { x: 1, z: -2, heading: 0.5 },
 };
 
 /** A square of floor 10 m across around the origin, 2 m up. */
@@ -63,13 +62,16 @@ function occlusionFor(scene: Scene, arrive: Promise<void> = Promise.resolve()) {
   return { occlusion, fetched };
 }
 
-function environment(): Environment {
+/** An environment as `npm run optimize` left it, its start line drawn on the floor. */
+function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
   return {
     visible: new Group(),
     collision: FLOOR,
     skyPicture: new Texture(),
     skyLight: new Texture(),
     bakedLight: new Texture(),
+    start,
+    warnings: [],
   };
 }
 
@@ -161,9 +163,35 @@ describe("opening an environment", () => {
     expect(view.y).toBeCloseTo(2 + WALKING.eyeHeight);
   });
 
-  it("fails when the start spot is not on the collision mesh", async () => {
-    const { opening } = open({ address: { ...ADDRESS, start: { x: 50, z: 50, heading: 0 } } });
-    await expect(opening).rejects.toThrow(/start spot is not on the collision mesh/);
+  it("fails when the start spot is not over the collision mesh", async () => {
+    vi.mocked(loadEnvironment).mockResolvedValue(environment({ x: 50, y: 0, z: 50, heading: 0 }));
+    const { opening } = open();
+    await expect(opening).rejects.toThrow(/start spot is not over the collision mesh/);
+  });
+
+  it("stands on the floor nearest the start line's height, on a spot with floors above each other", async () => {
+    const upstairs = FLOOR.map((value, i) => (i % 3 === 1 ? 5.5 : value));
+    vi.mocked(loadEnvironment).mockResolvedValue({
+      ...environment({ x: 1, y: 5.5, z: -2, heading: 0 }),
+      collision: Float32Array.from([...FLOOR, ...upstairs]),
+    });
+    const { opening } = open();
+    const { steering } = await opening;
+    const view = steering.step(
+      { knob: { x: 0, y: 0 }, keys: { walk: 0, sidestep: 0, turn: 0, run: false } },
+      0,
+      { width: 400, height: 800 },
+    );
+    expect(view.y).toBeCloseTo(5.5 + WALKING.eyeHeight);
+  });
+
+  it("passes on the warnings about the marks, and says them in the console", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(loadEnvironment).mockResolvedValue({ ...environment(), warnings: ["door-hinged-2: no collision mesh"] });
+    const { opening } = open();
+    const { warnings } = await opening;
+    expect(warnings).toEqual(["door-hinged-2: no collision mesh"]);
+    expect(warn).toHaveBeenCalledWith("door-hinged-2: no collision mesh");
   });
 
   it("puts the environment, its sky and its baked light in place", async () => {

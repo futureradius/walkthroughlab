@@ -210,6 +210,12 @@ body {
   cursor: pointer;
 }
 
+.tuning__warnings ul {
+  margin: 4px 0 6px;
+  padding-left: 14px;
+  color: #ffd27a;
+}
+
 .tuning__row {
   display: flex;
   align-items: center;

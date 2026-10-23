@@ -6,7 +6,9 @@ import sys
 
 import bpy
 
-COLLISION_LAYER = "Collision Mesh"
+# What `npm run optimize` notes on every collision mesh layer it finds among
+# the marks; Blender keeps it as a custom property.
+COLLISION_MESH = "collision mesh"
 # Pixels the light is spread past each surface's edge, so no dark seams show.
 MARGIN = 8
 
@@ -77,7 +79,7 @@ scene.cycles.transparent_max_bounces = 32
 
 def in_collision_layer(thing):
     while thing is not None:
-        if thing.name.startswith(COLLISION_LAYER):
+        if thing.get("walkthrough") == COLLISION_MESH:
             return True
         thing = thing.parent
     return False

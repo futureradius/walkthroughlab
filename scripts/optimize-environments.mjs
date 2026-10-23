@@ -1,6 +1,7 @@
 // Turns the raw files in models-source/ into the small files viewers download.
 // Rhino exports (.glb) go to public/models/, skies (.exr) to public/skies/.
-// Run with `npm run optimize`.
+// Run with `npm run optimize`, or `npm run optimize -- <environment>` when
+// models-source/ holds more than one Rhino export.
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join as joinPath } from "node:path";
 import { NodeIO } from "@gltf-transform/core";
@@ -17,6 +18,7 @@ import sharp from "sharp";
 import { FloatType } from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import * as watlas from "watlas";
+import { COLLISION_MESH, readMarks } from "../src/marks.ts";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
@@ -37,8 +39,7 @@ const DROPPED_EXTENSIONS = [
   "KHR_materials_emissive_strength",
 ];
 const LINEAR_MIPMAP_LINEAR = 9987;
-/** The Rhino layer whose contents are the collision mesh rather than something to see. */
-const COLLISION_LAYER = "Collision Mesh";
+const TRIANGLES = 4;
 /** Width of the sky picture viewers see: the largest texture old phones accept. */
 const SKY_PICTURE_WIDTH = 4096;
 const SKY_PICTURE_QUALITY = 85;
@@ -77,12 +78,65 @@ function simplifyMaterials(document) {
   }
 }
 
+/**
+ * The model's layers as the marks reader takes them: a node without a mesh
+ * of its own is a layer, and the nodes with meshes under it are its objects.
+ */
+function layersOf(nodes) {
+  return nodes
+    .filter((node) => !node.getMesh() && node.getName())
+    .map((node) => {
+      const layer = { name: node.getName(), node, layers: layersOf(node.listChildren()), lines: [], surfaces: 0 };
+      for (const object of node.listChildren()) {
+        const matrix = object.getWorldMatrix();
+        for (const primitive of object.getMesh()?.listPrimitives() ?? []) {
+          if (primitive.getMode() === TRIANGLES) {
+            layer.surfaces++;
+            continue;
+          }
+          const position = primitive.getAttribute("POSITION");
+          const line = [];
+          for (let i = 0, p = [0, 0, 0]; i < position.getCount(); i++) {
+            position.getElement(i, p);
+            line.push([0, 1, 2].map((r) => matrix[r] * p[0] + matrix[4 + r] * p[1] + matrix[8 + r] * p[2] + matrix[12 + r]));
+          }
+          layer.lines.push(line);
+        }
+      }
+      return layer;
+    });
+}
+
+/**
+ * Read the marks in the model, report what is wrong with them, and note in
+ * the file what the walkthrough and the bake need: which layers are
+ * collision meshes, where the viewer starts, and the warnings, which the
+ * ?config panel lists.
+ */
+function markEnvironment(document, file) {
+  const scene = document.getRoot().listScenes()[0];
+  const marks = readMarks(layersOf(scene.listChildren()));
+  for (const warning of marks.warnings) console.warn(`${file}: ${warning}`);
+  for (const error of marks.errors) console.error(`${file}: ${error}`);
+  if (marks.errors.length > 0) {
+    throw new Error(`${file} would not open in the walkthrough; nothing was written.`);
+  }
+  for (const node of marks.collision) node.setExtras({ ...node.getExtras(), walkthrough: COLLISION_MESH });
+  scene.setExtras({ ...scene.getExtras(), walkthrough: { start: marks.start, warnings: marks.warnings } });
+  const kinds = new Map();
+  for (const { kind } of marks.parts) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+  const found = [...kinds].map(([kind, count]) => `${count} ${kind}`).join(", ");
+  console.log(`${file}: marks found: ${found || "none"}; ${marks.warnings.length} warnings`);
+}
+
 /** Every surface that takes baked light: seen, solid and not metal. */
 function bakedPrimitives(document) {
   const primitives = [];
   const visit = (node) => {
-    if (node.getName() === COLLISION_LAYER) return;
+    if (node.getExtras().walkthrough === COLLISION_MESH) return;
     for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+      // Lines are marks, never seen.
+      if (primitive.getMode() !== TRIANGLES) continue;
       const material = primitive.getMaterial();
       // Glass and metal show the sky live, in reflections, instead.
       if (material?.getAlphaMode() === "BLEND") continue;
@@ -231,6 +285,7 @@ async function optimizeEnvironment(io, file) {
     }),
     prune(),
   );
+  markEnvironment(document, file);
   // A second set of texture coordinates in which no two surfaces overlap, so
   // `npm run bake` can paint each one's light into a single shared picture.
   unwrapPrimitives(bakedPrimitives(document), { watlas, texcoord: 1, overwrite: true });
@@ -259,8 +314,13 @@ await watlas.Initialize();
 await mkdir(MODELS, { recursive: true });
 await mkdir(SKIES, { recursive: true });
 const files = await readdir(SOURCE);
-const environments = files.filter((file) => file.endsWith(".glb"));
+const exports = files.filter((file) => file.endsWith(".glb"));
 const skies = files.filter((file) => file.endsWith(".exr"));
+const [named] = process.argv.slice(2);
+const environments = named ? [`${named.replace(/.glb$/, "")}.glb`] : exports;
+if (environments.length > 1) {
+  throw new Error(`${SOURCE}/ holds ${environments.length} Rhino exports; name one: npm run optimize -- <environment>`);
+}
 if (environments.length + skies.length === 0) {
   console.log(`No .glb or .exr files in ${SOURCE}/`);
 }

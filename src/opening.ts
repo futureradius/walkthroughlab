@@ -9,12 +9,10 @@ import { Steering, STEERING_DESCRIBED } from "./steering";
 /** Shown behind the loading bar until the sky arrives. */
 const LOADING_BACKDROP = 0xdde8f0;
 
-/** An environment's files, its config file, and its start spot. */
+/** An environment's files and its config file. */
 export interface EnvironmentAddress {
   files: EnvironmentFiles;
   config: string;
-  /** Where the viewpoint begins on the floor plan, and which way it looks. */
-  start: { x: number; z: number; heading: number };
 }
 
 /** The environment the link opens. */
@@ -26,8 +24,6 @@ export const TEST_ENVIRONMENT: EnvironmentAddress = {
     bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
   },
   config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
-  // At the foot of the stairs, looking up them.
-  start: { x: -13.4, z: 13, heading: 0 },
 };
 
 /** What the environment is opened into. */
@@ -45,6 +41,8 @@ export interface Opened {
   faces: Faces;
   /** The settings the ?config panel changes while walking, in its order. */
   sections: Section[];
+  /** What is wrong with the environment's marks, for the ?config panel. */
+  warnings: string[];
 }
 
 /** Use what the config file sets in these sections, saying in the console what it could not. */
@@ -97,11 +95,16 @@ export async function openEnvironment(
   const faces = new Faces(loaded.visible);
   scene.background = loaded.skyPicture;
   scene.environment = loaded.skyLight;
+  for (const warning of loaded.warnings) console.warn(warning);
   const { terrain, floorAt } = collisionMesh(loaded.collision);
-  const { x, z, heading } = environment.start;
-  const floor = floorAt(x, z, 0);
+  if (!loaded.start) {
+    throw new Error("The environment has no start spot; run `npm run optimize` again.");
+  }
+  // The start line is drawn near the floor the viewer stands on.
+  const { x, y, z, heading } = loaded.start;
+  const floor = floorAt(x, z, y);
   if (floor === undefined) {
-    throw new Error("The start spot is not on the collision mesh.");
+    throw new Error("The start spot is not over the collision mesh.");
   }
   const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
   // Steering's sections exist only once it does.
@@ -113,5 +116,6 @@ export async function openEnvironment(
     steering,
     faces,
     sections: [...occlusionSections, section("Faces", faces.settings, FACES_DESCRIBED), ...sections],
+    warnings: loaded.warnings,
   };
 }

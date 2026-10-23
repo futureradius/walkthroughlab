@@ -4,6 +4,7 @@ import {
   CustomBlending,
   DoubleSide,
   EquirectangularReflectionMapping,
+  Line,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -21,10 +22,8 @@ import {
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
+import { COLLISION_MESH, type Start } from "./marks";
 import { readConfig, type Config } from "./settings";
-
-/** The Rhino layer whose contents are the collision mesh rather than something to see. */
-const COLLISION_LAYER = "Collision Mesh";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 const BAKED_LIGHT_RANGE = 4;
 
@@ -61,6 +60,10 @@ export interface Environment {
   skyLight: Texture;
   /** The baked light picture, if the environment has one. */
   bakedLight?: Texture;
+  /** Where the viewpoint begins, drawn in the model. */
+  start?: Start;
+  /** What `npm run optimize` found wrong with the marks, for the ?config panel. */
+  warnings: string[];
 }
 
 /**
@@ -239,16 +242,21 @@ export async function loadEnvironment(
     files.bakedLight ? new TextureLoader().loadAsync(files.bakedLight) : undefined,
   ]);
 
-  // The loader rewrites names; the one written in Rhino is kept in userData.
-  let collisionLayer: Object3D | undefined;
+  // `npm run optimize` read the marks and noted what they say in the file:
+  // which layers are collision meshes, the start spot, and the warnings.
+  const collisionLayers: Object3D[] = [];
+  const lines: Object3D[] = [];
   gltf.scene.traverse((object) => {
-    if (object.userData.name === COLLISION_LAYER) collisionLayer = object;
+    if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
+    else if (object instanceof Line) lines.push(object);
   });
-  if (!collisionLayer) {
-    throw new Error(`The environment has no "${COLLISION_LAYER}" layer.`);
+  if (collisionLayers.length === 0) {
+    throw new Error("The environment has no collision mesh; run `npm run optimize` again.");
   }
-  const collision = trianglesOf(collisionLayer);
-  collisionLayer.removeFromParent();
+  const collision = Float32Array.from(collisionLayers.flatMap((layer) => Array.from(trianglesOf(layer))));
+  // Collision meshes stop the viewpoint unseen, and lines are only marks.
+  for (const object of [...collisionLayers, ...lines]) object.removeFromParent();
+  const { start, warnings = [] } = gltf.scene.userData.walkthrough ?? {};
 
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   if (bakedLight) {
@@ -275,5 +283,7 @@ export async function loadEnvironment(
     skyPicture,
     skyLight,
     bakedLight,
+    start,
+    warnings,
   };
 }

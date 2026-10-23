@@ -104,13 +104,30 @@ function addSection(parent: HTMLElement, section: Section) {
 }
 
 /**
+ * What `npm run optimize` found wrong with the environment's marks, open
+ * at the top of the panel so an author on a phone sees it first.
+ */
+function addWarnings(parent: HTMLElement, warnings: string[]) {
+  const panel = element("details", { className: "tuning__warnings", open: warnings.length > 0 });
+  panel.append(element("summary", { textContent: `Warnings and errors (${warnings.length})` }));
+  if (warnings.length === 0) {
+    panel.append(element("p", { className: "tuning__about", textContent: "The marks in the model are all in order." }));
+  } else {
+    const list = panel.appendChild(element("ul", {}));
+    for (const warning of warnings) list.append(element("li", { textContent: warning }));
+  }
+  parent.append(panel);
+}
+
+/**
  * Add the panel that changes settings while walking, to find by feel and by
  * frame rate what suits an environment and what a device can afford. A
  * section a config file may set has a button that copies it as the config
  * file lists it; what suits the others goes into their defaults by hand, as
  * it is the same for every environment.
  */
-export function addTuning(parent: HTMLElement, sections: Section[]) {
+export function addTuning(parent: HTMLElement, sections: Section[], warnings: string[]) {
   const panel = parent.appendChild(element("div", { className: "tuning" }));
+  addWarnings(panel, warnings);
   for (const section of sections) addSection(panel, section);
 }

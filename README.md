@@ -3,9 +3,9 @@ Walk through an architectural space in the browser: https://futureradius.github.
 
 ## Preparing an environment
 
-1. In Rhino, put the collision mesh on a layer named `Collision Mesh` and export everything as one `.glb` into `models-source/`.
+1. In Rhino, mark what the walkthrough needs to know with layers inside one top layer named `Walkthrough` (ADR 0004; the full convention is in issue #12). At the least: the collision mesh on `Walkthrough › collision mesh`, and one flat line on `Walkthrough › start` from where the viewer stands towards where they look. Keep those layers switched on, and export everything with "Export Layers" ticked as one `.glb` into `models-source/`.
 2. Put the sky, an equirectangular `.exr` panorama, into `models-source/` as well.
-3. Run `npm run optimize`. It shrinks the textures and writes the file viewers download to `public/models/`. From the sky it writes a picture and a small light file to `public/skies/`.
+3. Run `npm run optimize` (or `npm run optimize -- <environment>` when `models-source/` holds more than one Rhino export). It reads the marks and lists what is wrong with them, shrinks the textures and writes the file viewers download to `public/models/`. From the sky it writes a picture and a small light file to `public/skies/`. A model without a collision mesh or a start spot is refused; other mistakes are warnings, also listed under "Warnings and errors" in the `?config` panel.
 
 4. Run `npm run bake`. It needs [Blender](https://www.blender.org/) installed and takes a few minutes: it computes the light and shadow the sky casts on the environment and writes them as one picture next to the environment in `public/models/`. Run it again whenever the environment or its sky changes.
 

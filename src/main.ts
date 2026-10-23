@@ -55,7 +55,7 @@ const fps = params.has("fps")
 
 addAbout(document.body);
 
-const { steering, faces, sections } = await whileLoading(document.body, (onProgress) =>
+const { steering, faces, sections, warnings } = await whileLoading(document.body, (onProgress) =>
   openEnvironment(TEST_ENVIRONMENT, { renderer, scene, occlusion }, onProgress),
 );
 
@@ -66,7 +66,7 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const { coasting } = steering.settings;
 coasting.reduced = reducedMotion.matches;
 if (params.has("config")) {
-  addTuning(document.body, sections);
+  addTuning(document.body, sections, warnings);
 } else {
   // The panel has a switch for this instead, to try both brakes on one device.
   reducedMotion.addEventListener("change", () => {
