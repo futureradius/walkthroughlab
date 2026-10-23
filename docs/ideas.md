@@ -100,16 +100,11 @@ everything else. That costs download for every copy. If the download budget
 
 ## Making the opening download smaller
 
-The opening download is about 2.4 MB on the wire (2026-10-23), over the 2 MB
-budget. That is accepted while the test environment isn't optimised for size;
+The opening download is about 2.2 MB on the wire (2026-10-23, after the baked
+light became WebP), over the 2 MB budget. That is accepted while the test environment isn't optimised for size;
 come back to these when the real building's opening download is too big.
 Measured on the test environment, from smallest change to biggest. (#23)
 
-- **Baked light as WebP** instead of JPEG, written straight from the bake:
-  0.44 MB becomes 0.32 MB at quality 90 or 0.21 MB at 85. Compared side by
-  side from the start spot on 2026-10-23: no banding to be seen in the shadow
-  gradients, the rendered view differing from the JPEG's by 0.6 of 255 on
-  average, at 90 and at 85 alike. The easiest saving: WebP 85, about 0.23 MB.
 - **Stronger texture compression**: WebP quality 70 instead of 80, a little
   softer up close.
 - **Smaller textures**: at most 512 px instead of 1024, about a fifth of the
