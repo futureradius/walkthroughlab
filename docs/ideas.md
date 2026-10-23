@@ -98,18 +98,39 @@ everything else. That costs download for every copy. If the download budget
 - **Splitting big objects into pieces**, so the parts out of view can be
   skipped.
 
-## Loading
+## Making the opening download smaller
 
-- **Loading a big building in parts as the viewer walks**, so only the part
-  around the start spot has to arrive before they can move. The real building
-  may be two to four times the test environment and wait longer than the
-  budget; come back to this only if that wait becomes a real problem. (#14)
+The opening download is about 2.4 MB on the wire (2026-10-23), over the 2 MB
+budget. That is accepted while the test environment isn't optimised for size;
+come back to these when the real building's opening download is too big.
+Measured on the test environment, from smallest change to biggest. (#23)
+
+- **Baked light as WebP** instead of JPEG, written straight from the bake:
+  0.44 MB becomes 0.32 MB at quality 90 or 0.21 MB at 85. Compared side by
+  side from the start spot on 2026-10-23: no banding to be seen in the shadow
+  gradients, the rendered view differing from the JPEG's by 0.6 of 255 on
+  average, at 90 and at 85 alike. The easiest saving: WebP 85, about 0.23 MB.
+- **Stronger texture compression**: WebP quality 70 instead of 80, a little
+  softer up close.
+- **Smaller textures**: at most 512 px instead of 1024, about a fifth of the
+  size, but visibly blurrier up close.
 - **Textures in the trailing download.** Surfaces first show in their own
   average colour with baked light, like a clay model, and their textures fade
   in a few seconds later, so the opening download stays about 1 MB however
   many textures there are. Kept in reserve: Loading makes the files smaller
   with WebP textures and compressed geometry first; come back to this if
   Materials (#6) pushes the opening download over 2 MB again. (#23)
+- **GPU texture compression (KTX2/Basis)**: much less graphics memory, though
+  files are not always smaller than WebP; worth weighing if phones run short
+  of memory rather than bandwidth.
+- **Loading a big building in parts**, under Loading below.
+
+## Loading
+
+- **Loading a big building in parts as the viewer walks**, so only the part
+  around the start spot has to arrive before they can move. The real building
+  may be two to four times the test environment and wait longer than the
+  budget; come back to this only if that wait becomes a real problem. (#14)
 - **A picture of the view from the start spot while loading**, rendered by the
   bake, shown under the loading bar until the walkthrough replaces it. For now
   the page stays white behind the bar. (#14)
