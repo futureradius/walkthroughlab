@@ -84,6 +84,10 @@ _Avoid_: Instancing, foliage, particles, scattered texture
 A thing prepared once as its own small file and placed by hand wherever the author marks it in an environment, such as a chair, a table, a potted plant or a single tree. One prop can be placed many times; some sway, most stand still.
 _Avoid_: Asset, object, block, instance
 
+**Stress copy**:
+The finished test environment copied side by side in Rhino until it is four times as big, baked and walked once on an old phone to show that the walkthrough holds at the size of the real building. It is never published, and thrown away afterwards.
+_Avoid_: Stress test, benchmark scene, load test
+
 ### Loading
 
 **Download budget**:
