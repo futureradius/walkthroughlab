@@ -89,6 +89,19 @@ everything else. That costs download for every copy. If the download budget
 - **Splitting big objects into pieces**, so the parts out of view can be
   skipped.
 
+## Loading
+
+- **Loading a big building in parts as the viewer walks**, so only the part
+  around the start spot has to arrive before they can move. The real building
+  may be two to four times the test environment and wait longer than the
+  budget; come back to this only if that wait becomes a real problem. (#14)
+- **A picture of the view from the start spot while loading**, rendered by the
+  bake, shown under the loading bar until the walkthrough replaces it. For now
+  the page stays white behind the bar. (#14)
+- **Coming back to the tab shows a white page.** Seen by the author on
+  returning to a walkthrough left open in another tab; the walkthrough then
+  needs reloading. Not yet looked into. (#14)
+
 ## Author conveniences
 
 The map keeps these off the finish line: other authors are a principle, not a

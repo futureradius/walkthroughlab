@@ -41,7 +41,7 @@ A layer name, or for water a material name, in the author's Rhino model that say
 _Avoid_: Tag, label, annotation, user text
 
 **Config file**:
-The file an author writes beside an environment to change how ambient occlusion and zoom work in it, overriding their usual values. Adding `?config` to a walkthrough's address opens a panel that changes the same values while walking and copies them for the config file.
+The file an author writes beside an environment to give it the name viewers see while it loads, and to change how ambient occlusion and zoom work in it, overriding their usual values. Adding `?config` to a walkthrough's address opens a panel that changes the same values while walking and copies them for the config file.
 _Avoid_: Settings file, preferences, options file
 
 **Viewpoint**:
@@ -83,6 +83,20 @@ _Avoid_: Instancing, foliage, particles, scattered texture
 **Prop**:
 A thing prepared once as its own small file and placed by hand wherever the author marks it in an environment, such as a chair, a table, a potted plant or a single tree. One prop can be placed many times; some sway, most stand still.
 _Avoid_: Asset, object, block, instance
+
+### Loading
+
+**Download budget**:
+How long a viewer may wait on a slow connection before they can move, which limits the size of the opening download.
+_Avoid_: Payload limit, size limit, performance budget
+
+**Opening download**:
+Everything that must arrive before the viewer can move: the environment with its still props, moving parts and collision mesh, its baked light and a small sky picture. The loading bar measures it alone.
+_Avoid_: Preload, first load, initial payload
+
+**Trailing download**:
+Everything that arrives after the viewer can move, each part fading in where it belongs as it arrives: ambient occlusion, reflections of the sky, scatter, swaying things, a sharper sky picture, birds and sound. A part that fails is tried again until it arrives.
+_Avoid_: Late arrival, lazy loading, streaming, deferred assets
 
 ### Movement
 
