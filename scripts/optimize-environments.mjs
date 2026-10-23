@@ -276,7 +276,9 @@ async function optimizeEnvironment(io, file) {
     dedup(),
     weld(),
     // Rhino writes one mesh per face; merge them so each layer draws at once.
-    join(),
+    // Lines are marks, each saying something of its own, so never merge them:
+    // two lines on one layer would become one polyline.
+    join({ filter: (node) => !node.getMesh()?.listPrimitives().some((primitive) => primitive.getMode() !== TRIANGLES) }),
     textureCompress({
       encoder: sharp,
       targetFormat: "jpeg",
