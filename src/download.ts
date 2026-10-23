@@ -25,6 +25,8 @@ const BROWSER: Network = {
 export class Downloads {
   /** Told true when a download starts waiting to be tried again, false when none is. */
   onWaiting: (waiting: boolean) => void = () => {};
+  /** Told when a file has arrived, which may stall a frame while it is unpacked. */
+  onArrival: () => void = () => {};
 
   private readonly network: Network;
   /** Each waiting download's way to be tried at once. */
@@ -43,7 +45,9 @@ export class Downloads {
   async get(address: string, onBytes: (bytes: number) => void = () => {}): Promise<ArrayBuffer> {
     for (let failures = 0; ; failures++) {
       try {
-        return await this.once(address, onBytes);
+        const file = await this.once(address, onBytes);
+        this.onArrival();
+        return file;
       } catch (error) {
         console.warn(`Could not download ${address}; trying again.`, error);
         onBytes(0);

@@ -61,7 +61,7 @@ function control(description: Description, value: SettingValue, set: (value: Set
 }
 
 /** A section of the panel, folded shut to leave the view free. */
-function addSection(parent: HTMLElement, section: Section) {
+function addSection(parent: HTMLElement, section: Section, onChange: () => void) {
   const panel = element("details", {});
   panel.append(element("summary", { textContent: section.heading }));
   const settings = new Map<string, HTMLElement>();
@@ -77,6 +77,7 @@ function addSection(parent: HTMLElement, section: Section) {
       control(description, section.settings[name], (value) => {
         section.settings[name] = value;
         showOnly();
+        onChange();
       }),
       element("p", { className: "tuning__about", textContent: description.about }),
     );
@@ -126,8 +127,13 @@ function addWarnings(parent: HTMLElement, warnings: string[]) {
  * file lists it; what suits the others goes into their defaults by hand, as
  * it is the same for every environment.
  */
-export function addTuning(parent: HTMLElement, sections: Section[], warnings: string[]) {
+export function addTuning(
+  parent: HTMLElement,
+  sections: Section[],
+  warnings: string[],
+  onChange: () => void = () => {},
+) {
   const panel = parent.appendChild(element("div", { className: "tuning" }));
   addWarnings(panel, warnings);
-  for (const section of sections) addSection(panel, section);
+  for (const section of sections) addSection(panel, section, onChange);
 }

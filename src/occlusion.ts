@@ -343,6 +343,8 @@ export class AmbientOcclusion {
 
   /** The environment's baked light, which tells sunlit surfaces from shaded ones. */
   bakedLight: Texture | null = null;
+  /** Called when a method has arrived, which stalls a frame or two. */
+  onArrival: () => void = () => {};
 
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
@@ -354,6 +356,7 @@ export class AmbientOcclusion {
   private readonly loaded = new Map<string, OcclusionWorkings>();
   /** When each method was first drawn, by name, so its darkening fades in. */
   private readonly firstDrawn = new Map<string, number>();
+  private held = false;
   private blur: Blur | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
@@ -431,6 +434,7 @@ export class AmbientOcclusion {
         const method = this.methods.find((method) => method.name === name);
         if (!method) throw new Error(`There is no method named ${name}.`);
         this.loaded.set(name, await method.load(this.scene, this.camera));
+        this.onArrival();
       })().catch((error: unknown) => {
         console.warn(`Ambient occlusion could not load ${name}, so frames go without it.`, error);
       });
@@ -449,12 +453,21 @@ export class AmbientOcclusion {
     if (this.settings.on) await this.load(this.settings.method);
   }
 
+  /**
+   * Whether the safety net holds ambient occlusion off, to keep the frame
+   * rate up. Given back, the darkening fades in again.
+   */
+  set heldOff(held: boolean) {
+    if (this.held && !held) this.firstDrawn.clear();
+    this.held = held;
+  }
+
   /** Draw the scene to the canvas with ambient occlusion over it. */
   render() {
     const { renderer, scene, camera, settings } = this;
-    const workings = settings.on ? this.loaded.get(settings.method) : undefined;
+    const workings = settings.on && !this.held ? this.loaded.get(settings.method) : undefined;
     if (!workings) {
-      if (settings.on) void this.load(settings.method);
+      if (settings.on && !this.held) void this.load(settings.method);
       renderer.render(scene, camera);
       return;
     }
