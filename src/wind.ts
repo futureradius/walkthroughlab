@@ -68,8 +68,13 @@ export const GUST_GLSL = /* glsl */ `
   float gust(vec2 spot, float phase) {
     float along = dot(spot, windDirection);
     float across = dot(spot, vec2(-windDirection.y, windDirection.x));
-    float drifting = 0.6 + 0.4 * sin(along * 0.35 - time * 1.7) * (0.6 + 0.4 * sin(across * 0.21 + time * 0.5));
-    float flutter = 0.15 * sin(time * 3.1 + phase);
-    return windStrength * (drifting + flutter);
+    // Broad gusts rolling across with the wind, their fronts wavering, and
+    // smaller ones inside them, at speeds that never line up.
+    float broad = sin(along * 0.23 - time * 1.1 + 1.7 * sin(across * 0.13 + time * 0.21));
+    float small = sin(along * 0.87 - time * 2.6 + across * 0.41);
+    float push = 0.55 + 0.3 * broad + 0.15 * small;
+    // Each thing also flutters in its own rhythm.
+    float own = sin(time * (2.0 + 1.5 * fract(phase)) + phase);
+    return windStrength * (push + 0.2 * own);
   }
 `;

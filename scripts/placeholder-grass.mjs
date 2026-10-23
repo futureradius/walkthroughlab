@@ -1,8 +1,10 @@
-// Writes two placeholder grass tufts into models-source/scatter/, to build and
+// Writes placeholder grass tufts into models-source/scatter/, to build and
 // measure grass with before the author's own tuft from Blender exists (#25):
-//   grass.glb         cards: a few flat see-through pictures of several blades
-//   grass-blades.glb  blades: thin solid tapered ribbons, nothing see-through
-// Run with `node scripts/placeholder-grass.mjs`, then `npm run optimize`.
+//   grass.glb        blades: thin solid tapered ribbons, nothing see-through,
+//                    the kind that ran faster on phones and laptops
+//   grass-cards.glb  cards: a few flat see-through pictures of several blades
+// Run with `node scripts/placeholder-grass.mjs`, then `npm run optimize`;
+// `?tuft=cards` grows the cards instead.
 import { mkdir } from "node:fs/promises";
 import { Document, NodeIO } from "@gltf-transform/core";
 import sharp from "sharp";
@@ -131,6 +133,6 @@ function blades(count = 24, rows = 4) {
 }
 
 await mkdir(OUT, { recursive: true });
-await writeTuft(`${OUT}/grass.glb`, cards(), await bladesPicture());
-await writeTuft(`${OUT}/grass-blades.glb`, blades());
-console.log(`Wrote ${OUT}/grass.glb (cards) and ${OUT}/grass-blades.glb (blades).`);
+await writeTuft(`${OUT}/grass.glb`, blades());
+await writeTuft(`${OUT}/grass-cards.glb`, cards(), await bladesPicture());
+console.log(`Wrote ${OUT}/grass.glb (blades) and ${OUT}/grass-cards.glb (cards).`);

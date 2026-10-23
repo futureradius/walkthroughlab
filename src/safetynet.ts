@@ -16,9 +16,14 @@ export const NET = {
 
 /** What the viewer's device is asked to draw at one step of the net. */
 export interface Level {
+  /** How much scatter is taken away: 0 none, then 1 and 2 (REDUCED in scatter.ts). */
+  scatter: number;
   occlusion: boolean;
   pixelRatio: number;
 }
+
+/** What ?fps calls each scatter step. */
+const SCATTER_STEPS = ["", " · less grass", " · little grass"];
 
 /** Resolutions the net steps down through, in rendered pixels per screen pixel. */
 const LOWER_RATIOS = [1.5, 1];
@@ -31,14 +36,15 @@ export const NET_DESCRIBED: Described<NetSettings> = {
   on: toggle({
     label: "On",
     about:
-      "Turns ambient occlusion off, then lowers the resolution, while the frame rate stays under 28, and gives them back once it holds 50. Off to measure what something costs.",
+      "Takes away some grass, then turns ambient occlusion off, then lowers the resolution, while the frame rate stays under 28, and gives them back once it holds 50. Off to measure what something costs.",
   }),
 };
 
 /**
- * Keeps the frame rate of a struggling device above 30 by giving up ambient
- * occlusion first, then resolution, and giving them back when it can. It is
- * told each second's frame rate, and never tells the viewer anything.
+ * Keeps the frame rate of a struggling device above 30 by giving up some of
+ * the grass first, then ambient occlusion, then resolution, and giving them
+ * back when it can, in reverse. It is told each second's frame rate, and
+ * never tells the viewer anything.
  */
 export class SafetyNet {
   readonly settings: NetSettings = { on: true };
@@ -53,12 +59,17 @@ export class SafetyNet {
   /** Levels a step back up failed to hold, never tried again this visit. */
   private readonly given = new Set<number>();
 
-  /** `pixelRatio` is what the device draws at in full; `occlusion` whether it has ambient occlusion. */
-  constructor(pixelRatio: number, occlusion: boolean) {
-    this.levels = [{ occlusion, pixelRatio }];
-    if (occlusion) this.levels.push({ occlusion: false, pixelRatio });
+  /**
+   * `pixelRatio` is what the device draws at in full; `occlusion` whether it
+   * has ambient occlusion; `scatter` whether the environment has grass.
+   */
+  constructor(pixelRatio: number, occlusion: boolean, scatter = false) {
+    this.levels = [{ scatter: 0, occlusion, pixelRatio }];
+    if (scatter) this.levels.push({ scatter: 1, occlusion, pixelRatio }, { scatter: 2, occlusion, pixelRatio });
+    const most = scatter ? 2 : 0;
+    if (occlusion) this.levels.push({ scatter: most, occlusion: false, pixelRatio });
     for (const ratio of LOWER_RATIOS) {
-      if (ratio < pixelRatio) this.levels.push({ occlusion: false, pixelRatio: ratio });
+      if (ratio < pixelRatio) this.levels.push({ scatter: most, occlusion: false, pixelRatio: ratio });
     }
   }
 
@@ -71,7 +82,7 @@ export class SafetyNet {
   describe(): string {
     const full = this.levels[0];
     const now = this.current;
-    let given = "";
+    let given = SCATTER_STEPS[now.scatter];
     if (full.occlusion && !now.occlusion) given += " · no AO";
     if (now.pixelRatio < full.pixelRatio) given += ` · ${now.pixelRatio}×`;
     return given;

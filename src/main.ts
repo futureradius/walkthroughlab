@@ -42,12 +42,15 @@ const occlusion = AmbientOcclusion.supported(renderer)
   ? new AmbientOcclusion(renderer, scene, camera)
   : null;
 
-// Gives up ambient occlusion, then resolution, while the frame rate is too low.
-const net = new SafetyNet(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO), occlusion !== null);
+/** What the device draws at in full, before the safety net lowers it. */
+const fullPixelRatio = Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO);
+// Gives up some grass, then ambient occlusion, then resolution, while the
+// frame rate is too low; made once the environment says whether it has grass.
+let net: SafetyNet | undefined;
 
 function resize() {
   const { width, height } = screenSize();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, net.current.pixelRatio));
+  renderer.setPixelRatio(net ? net.current.pixelRatio : fullPixelRatio);
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
@@ -80,6 +83,8 @@ const { steering, faces, sections, warnings, wind, scatters } = await whileLoadi
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const { coasting } = steering.settings;
 coasting.reduced = reducedMotion.matches;
+net = new SafetyNet(fullPixelRatio, occlusion !== null, scatters.length > 0);
+
 // Something arriving, the page going off screen or a setting changed stalls
 // frames for reasons the net can do nothing about, so those seconds don't count.
 let hitch = performance.now() + SETTLING_SECONDS * 1000;
@@ -119,7 +124,7 @@ renderer.setAnimationLoop((now) => {
   camera.updateProjectionMatrix();
   faces.update();
   blow(wind, seconds, reducedMotion.matches);
-  for (const scatter of scatters) scatter.update(seconds);
+  for (const scatter of scatters) scatter.update(seconds, camera.position);
   if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
 
@@ -132,6 +137,7 @@ renderer.setAnimationLoop((now) => {
     // Also gives everything back at once when the net is switched off.
     const level = net.current;
     if (level !== applied) {
+      for (const scatter of scatters) scatter.reduce(level.scatter);
       if (occlusion) occlusion.heldOff = !level.occlusion;
       applied = level;
       resize();

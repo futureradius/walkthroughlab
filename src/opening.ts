@@ -2,7 +2,7 @@ import type { Scene, WebGLRenderer } from "three";
 import { collisionMesh } from "./collision";
 import type { Downloads } from "./download";
 import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type EnvironmentFiles } from "./environment";
-import { groundOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
+import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
@@ -163,7 +163,7 @@ export async function openEnvironment(
   // Copies grow once their file arrives; their settings are there from the start.
   const wind = { ...WIND };
   const scatters = loaded.scatter.map(({ name, layer }) => {
-    const scatter = new Scatter(groundOf(layer), loaded.bakedLight, LAYERS.sway);
+    const scatter = new Scatter(groundsOf(layer), loaded.bakedLight, LAYERS.sway);
     scene.add(scatter.group);
     return { name, scatter };
   });

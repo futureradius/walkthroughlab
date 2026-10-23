@@ -14,13 +14,13 @@ describe("the safety net", () => {
   it("steps down only after two slow seconds in a row: ambient occlusion first, then resolution, stopping at 1", () => {
     const net = new SafetyNet(2, true);
     feed(net, [20, 40, 20]);
-    expect(net.current).toEqual({ occlusion: true, pixelRatio: 2 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: true, pixelRatio: 2 });
     feed(net, slow(1), 3);
-    expect(net.current).toEqual({ occlusion: false, pixelRatio: 2 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: false, pixelRatio: 2 });
     feed(net, slow(2), 4);
-    expect(net.current).toEqual({ occlusion: false, pixelRatio: 1.5 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: false, pixelRatio: 1.5 });
     feed(net, slow(10), 6);
-    expect(net.current).toEqual({ occlusion: false, pixelRatio: 1 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: false, pixelRatio: 1 });
     expect(net.describe()).toBe(" · no AO · 1×");
   });
 
@@ -37,9 +37,9 @@ describe("the safety net", () => {
     now = feed(net, steady(4), now);
     expect(net.current.pixelRatio).toBe(1.5);
     now = feed(net, steady(1), now);
-    expect(net.current).toEqual({ occlusion: false, pixelRatio: 2 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: false, pixelRatio: 2 });
     feed(net, steady(5), now + NET.relapseSeconds);
-    expect(net.current).toEqual({ occlusion: true, pixelRatio: 2 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: true, pixelRatio: 2 });
   });
 
   it("undoes a step back up that does not hold, and does not try it again", () => {
@@ -65,8 +65,8 @@ describe("the safety net", () => {
 
   it("only lowers resolution where the device draws above it, and skips ambient occlusion it does not have", () => {
     expect(new SafetyNet(1, true).levels).toEqual([
-      { occlusion: true, pixelRatio: 1 },
-      { occlusion: false, pixelRatio: 1 },
+      { scatter: 0, occlusion: true, pixelRatio: 1 },
+      { scatter: 0, occlusion: false, pixelRatio: 1 },
     ]);
     expect(new SafetyNet(1.75, false).levels.map(({ pixelRatio }) => pixelRatio)).toEqual([1.75, 1.5, 1]);
   });
@@ -75,9 +75,25 @@ describe("the safety net", () => {
     const net = new SafetyNet(2, true);
     feed(net, slow(4));
     net.settings.on = false;
-    expect(net.current).toEqual({ occlusion: true, pixelRatio: 2 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: true, pixelRatio: 2 });
     feed(net, slow(10), 4);
     net.settings.on = true;
-    expect(net.current).toEqual({ occlusion: true, pixelRatio: 2 });
+    expect(net.current).toEqual({ scatter: 0, occlusion: true, pixelRatio: 2 });
+  });
+
+  it("takes away grass in two steps before ambient occlusion, and gives it back last", () => {
+    const net = new SafetyNet(2, true, true);
+    let now = feed(net, slow(2));
+    expect(net.current).toEqual({ scatter: 1, occlusion: true, pixelRatio: 2 });
+    expect(net.describe()).toBe(" · less grass");
+    now = feed(net, slow(2), now);
+    expect(net.current).toEqual({ scatter: 2, occlusion: true, pixelRatio: 2 });
+    now = feed(net, slow(2), now);
+    expect(net.current).toEqual({ scatter: 2, occlusion: false, pixelRatio: 2 });
+    expect(net.describe()).toBe(" · little grass · no AO");
+    now = feed(net, steady(5), now);
+    expect(net.current).toEqual({ scatter: 2, occlusion: true, pixelRatio: 2 });
+    feed(net, steady(10), now + NET.relapseSeconds);
+    expect(net.current.scatter).toBe(0);
   });
 });
