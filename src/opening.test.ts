@@ -87,6 +87,8 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     start,
     warnings: [],
     scatter: [],
+    shiny: [],
+    glass: [],
   };
 }
 
@@ -247,6 +249,7 @@ describe("opening an environment", () => {
       "Coasting",
       "Joystick",
       "Zoom",
+      "Materials",
       "Wind",
     ]);
   });

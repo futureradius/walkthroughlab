@@ -25,6 +25,7 @@ import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { Downloads } from "./download";
 import { COLLISION_MESH, type Start } from "./marks";
+import { withReliefAndShine, type Shiny } from "./materials";
 import { readConfig, type Config } from "./settings";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 export const BAKED_LIGHT_RANGE = 4;
@@ -73,6 +74,9 @@ export interface Environment {
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
   scatter: { name: string; layer: Object3D }[];
+  /** Surfaces that may show relief or shine, and glass, for Surfaces to switch and tune. */
+  shiny: Shiny[];
+  glass: MeshStandardMaterial[];
 }
 
 /**
@@ -168,7 +172,7 @@ function asGlass(material: MeshStandardMaterial) {
  * light, which is the cheapest thing a phone can draw.
  */
 function withBakedLight(material: MeshStandardMaterial, bakedLight: Texture) {
-  const baked = new MeshBasicMaterial({
+  return new MeshBasicMaterial({
     name: material.name,
     color: material.color,
     map: material.map,
@@ -177,8 +181,11 @@ function withBakedLight(material: MeshStandardMaterial, bakedLight: Texture) {
     // Undoes the division by pi three.js applies and the bake's range.
     lightMapIntensity: Math.PI * BAKED_LIGHT_RANGE,
   });
-  material.dispose();
-  return baked;
+}
+
+/** Whether a material could ever show relief or shine, so it keeps its rich version beside the plain one. */
+function couldBeRich(material: MeshStandardMaterial): boolean {
+  return material.normalMap !== null || material.roughnessMap !== null || material.metalness > 0.5 || material.roughness < 1;
 }
 
 /**
@@ -186,9 +193,14 @@ function withBakedLight(material: MeshStandardMaterial, bakedLight: Texture) {
  * kind's layer, and give its material what the kind needs: glass blends with
  * what is behind it, and a solid surface the bake painted shows baked light.
  */
-export function prepareSurfaces(model: Object3D, bakedLight: Texture | undefined, anisotropy: number) {
-  const baked = new Map<Material, Material>();
-  const glass = new Set<Material>();
+export function prepareSurfaces(
+  model: Object3D,
+  bakedLight: Texture | undefined,
+  anisotropy: number,
+): { shiny: Shiny[]; glass: MeshStandardMaterial[] } {
+  const baked = new Map<Material, { plain: Material; rich?: MeshStandardMaterial }>();
+  const glass = new Set<MeshStandardMaterial>();
+  const shiny: Shiny[] = [];
   let bakedGlass = 0;
   model.traverse((object) => {
     if (!(object instanceof Mesh)) return;
@@ -211,8 +223,16 @@ export function prepareSurfaces(model: Object3D, bakedLight: Texture | undefined
       material instanceof MeshStandardMaterial &&
       object.geometry.hasAttribute("uv1")
     ) {
-      if (!baked.has(material)) baked.set(material, withBakedLight(material, bakedLight));
-      object.material = baked.get(material);
+      let made = baked.get(material);
+      if (!made) {
+        const rich = couldBeRich(material) ? withReliefAndShine(material, bakedLight, BAKED_LIGHT_RANGE) : undefined;
+        if (!rich) material.dispose();
+        made = { plain: withBakedLight(material, bakedLight), rich };
+        baked.set(material, made);
+      }
+      // Plain until the settings say otherwise; see Surfaces.
+      object.material = made.plain;
+      if (made.rich) shiny.push({ mesh: object, plain: made.plain, rich: made.rich });
     }
   });
   if (bakedGlass > 0) {
@@ -220,6 +240,7 @@ export function prepareSurfaces(model: Object3D, bakedLight: Texture | undefined
       `${bakedGlass} glass meshes carry coordinates for baked light, which glass does not show yet (issue #20).`,
     );
   }
+  return { shiny, glass: [...glass] };
 }
 
 /**
@@ -329,7 +350,7 @@ export async function loadEnvironment(
     // The second set of texture coordinates, written by `npm run optimize`.
     bakedLight.channel = 1;
   }
-  prepareSurfaces(gltf.scene, bakedLight, anisotropy);
+  const { shiny, glass } = prepareSurfaces(gltf.scene, bakedLight, anisotropy);
 
   return {
     visible: gltf.scene,
@@ -340,6 +361,8 @@ export async function loadEnvironment(
     start,
     warnings,
     scatter,
+    shiny,
+    glass,
   };
 }
 

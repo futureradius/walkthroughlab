@@ -2,6 +2,7 @@ import type { Scene, WebGLRenderer } from "three";
 import { collisionMesh } from "./collision";
 import type { Downloads } from "./download";
 import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type EnvironmentFiles } from "./environment";
+import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
 import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
@@ -15,6 +16,8 @@ export interface EnvironmentAddress {
   config: string;
   /** Where the file a scatter mark copies lies, by the mark's name, such as "grass". */
   scatter: (name: string) => string;
+  /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, and heading. */
+  at?: { x: number; z: number; heading: number };
 }
 
 /** The environment the link opens. */
@@ -54,6 +57,8 @@ export interface Opened {
   wind: WindSettings;
   /** Copies grown over marked surfaces; `update` each every frame. */
   scatters: Scatter[];
+  /** Surfaces that may show relief or shine; `apply` them every frame. */
+  surfaces: Surfaces;
 }
 
 /**
@@ -152,7 +157,7 @@ export async function openEnvironment(
     throw new Error("The environment has no start spot; run `npm run optimize` again.");
   }
   // The start line is drawn near the floor the viewer stands on.
-  const { x, y, z, heading } = loaded.start;
+  const { x, y, z, heading } = environment.at ? { ...environment.at, y: loaded.start.y } : loaded.start;
   const floor = floorAt(x, z, y);
   if (floor === undefined) {
     throw new Error("The start spot is not over the collision mesh.");
@@ -160,6 +165,7 @@ export async function openEnvironment(
   const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
   // Steering's sections exist only once it does.
   const sections = steeringSections(steering);
+  const surfaces = new Surfaces(loaded.shiny, loaded.glass);
   // Copies grow once their file arrives; their settings are there from the start.
   const wind = { ...WIND };
   const scatters = loaded.scatter.map(({ name, layer }) => {
@@ -168,10 +174,12 @@ export async function openEnvironment(
     return { name, scatter };
   });
   sections.push(
+    section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
     ...scatters.map(({ name, scatter }) => section(`scatter-${name}`, scatter.settings, SCATTER_DESCRIBED, true)),
   );
   configure(sections, await config);
+  surfaces.apply(true);
   if (occlusion) occlusion.bakedLight = loaded.bakedLight ?? null;
   void trail(environment, scatters, { renderer, scene, occlusion, downloads });
   return {
@@ -181,5 +189,6 @@ export async function openEnvironment(
     warnings: loaded.warnings,
     wind,
     scatters: scatters.map(({ scatter }) => scatter),
+    surfaces,
   };
 }

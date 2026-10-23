@@ -18,6 +18,8 @@ export const NET = {
 export interface Level {
   /** How much scatter is taken away: 0 none, then 1 and 2 (REDUCED in scatter.ts). */
   scatter: number;
+  /** Whether surfaces may show relief and shine, or only baked light. */
+  shine: boolean;
   occlusion: boolean;
   pixelRatio: number;
 }
@@ -36,7 +38,7 @@ export const NET_DESCRIBED: Described<NetSettings> = {
   on: toggle({
     label: "On",
     about:
-      "Takes away some grass, then turns ambient occlusion off, then lowers the resolution, while the frame rate stays under 28, and gives them back once it holds 50. Off to measure what something costs.",
+      "Takes away some grass, then shine and relief, then turns ambient occlusion off, then lowers the resolution, while the frame rate stays under 28, and gives them back once it holds 50. Off to measure what something costs.",
   }),
 };
 
@@ -61,16 +63,21 @@ export class SafetyNet {
 
   /**
    * `pixelRatio` is what the device draws at in full; `occlusion` whether it
-   * has ambient occlusion; `scatter` whether the environment has grass.
+   * has ambient occlusion; `scatter` whether the environment has grass;
+   * `shine` whether it has surfaces with relief or shine.
    */
-  constructor(pixelRatio: number, occlusion: boolean, scatter = false) {
-    this.levels = [{ scatter: 0, occlusion, pixelRatio }];
-    if (scatter) this.levels.push({ scatter: 1, occlusion, pixelRatio }, { scatter: 2, occlusion, pixelRatio });
-    const most = scatter ? 2 : 0;
-    if (occlusion) this.levels.push({ scatter: most, occlusion: false, pixelRatio });
-    for (const ratio of LOWER_RATIOS) {
-      if (ratio < pixelRatio) this.levels.push({ scatter: most, occlusion: false, pixelRatio: ratio });
+  constructor(pixelRatio: number, occlusion: boolean, scatter = false, shine = false) {
+    const full: Level = { scatter: 0, shine: true, occlusion, pixelRatio };
+    this.levels = [full];
+    let last = full;
+    const step = (change: Partial<Level>) => this.levels.push((last = { ...last, ...change }));
+    if (scatter) {
+      step({ scatter: 1 });
+      step({ scatter: 2 });
     }
+    if (shine) step({ shine: false });
+    if (occlusion) step({ occlusion: false });
+    for (const ratio of LOWER_RATIOS) if (ratio < pixelRatio) step({ pixelRatio: ratio });
   }
 
   /** What to draw now. */
@@ -83,6 +90,7 @@ export class SafetyNet {
     const full = this.levels[0];
     const now = this.current;
     let given = SCATTER_STEPS[now.scatter];
+    if (!now.shine) given += " · no shine";
     if (full.occlusion && !now.occlusion) given += " · no AO";
     if (now.pixelRatio < full.pixelRatio) given += ` · ${now.pixelRatio}×`;
     return given;

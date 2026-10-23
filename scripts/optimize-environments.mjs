@@ -91,12 +91,80 @@ function simplifyMaterials(document) {
     material.setBaseColorFactor([red, green, blue, 1]);
     // Rhino asks for no mipmaps, which makes distant textures shimmer.
     material.getBaseColorTextureInfo()?.setMinFilter(LINEAR_MIPMAP_LINEAR);
+    material.getNormalTextureInfo()?.setMinFilter(LINEAR_MIPMAP_LINEAR);
+    material.getMetallicRoughnessTextureInfo()?.setMinFilter(LINEAR_MIPMAP_LINEAR);
   }
   for (const extension of document.getRoot().listExtensionsUsed()) {
     const name = extension.extensionName;
     if (!DROPPED_EXTENSIONS.includes(name)) continue;
     if (!(anyGlass && KEPT_ON_GLASS.includes(name))) extension.dispose();
   }
+}
+
+/** A texture whose every channel varies less than this, out of 255, is taken as one value (#6, #11). */
+const FLAT = 4;
+/** A material rough everywhere beyond this never shines, so its roughness map is not needed. */
+const ALWAYS_ROUGH = 0.9;
+
+/** Each channel's average and spread in a texture, from 0 to 1. */
+async function channelsOf(texture) {
+  const { channels } = await sharp(texture.getImage()).stats();
+  return channels.map(({ mean, stdev, min }) => ({ mean: mean / 255, flat: stdev < FLAT, min: min / 255 }));
+}
+
+/**
+ * Turn textures that are nearly one value into that value, and drop maps a
+ * material's setup won't use, saying what was done so the author knows: a
+ * colour map of one colour, a roughness map of a material rough all over, a
+ * flat normal map, and every ambient occlusion map, since baked light covers
+ * that (#6).
+ */
+async function flattenTextures(document, file) {
+  const said = [];
+  for (const material of document.getRoot().listMaterials()) {
+    const name = material.getName() || "(unnamed)";
+    const colour = material.getBaseColorTexture();
+    if (colour && !material.getAlphaMode().startsWith("BLEND")) {
+      const [r, g, b] = await channelsOf(colour);
+      if (r.flat && g.flat && b.flat) {
+        const [fr, fg, fb, fa] = material.getBaseColorFactor();
+        material.setBaseColorFactor([fr * r.mean, fg * g.mean, fb * b.mean, fa]);
+        material.setBaseColorTexture(null);
+        said.push(`${name}: colour map is one colour, used as its colour`);
+      }
+    }
+    const rough = material.getMetallicRoughnessTexture();
+    if (rough) {
+      // glTF keeps roughness in green and metalness in blue.
+      const [, g, b] = await channelsOf(rough);
+      const roughness = material.getRoughnessFactor();
+      const metalness = material.getMetallicFactor();
+      const neverShines = roughness * g.min >= ALWAYS_ROUGH && metalness * b.mean < 0.02;
+      if ((g.flat && b.flat) || neverShines) {
+        material.setRoughnessFactor(roughness * g.mean);
+        material.setMetallicFactor(metalness * b.mean);
+        material.setMetallicRoughnessTexture(null);
+        said.push(`${name}: roughness map dropped, ${neverShines ? "rough all over" : "one value"}: roughness ${(roughness * g.mean).toFixed(2)}, metal ${(metalness * b.mean).toFixed(2)}`);
+      } else if (b.flat && metalness * b.mean < 0.02) {
+        // Kept for its roughness; a metal channel of nothing but black means not metal.
+        material.setMetallicFactor(0);
+        said.push(`${name}: metal map is black all over, so not metal`);
+      }
+    }
+    const normal = material.getNormalTexture();
+    if (normal) {
+      const [r, g] = await channelsOf(normal);
+      if (r.flat && g.flat && Math.abs(r.mean - 0.5) < 0.03 && Math.abs(g.mean - 0.5) < 0.03) {
+        material.setNormalTexture(null);
+        said.push(`${name}: normal map is flat, dropped`);
+      }
+    }
+    if (material.getOcclusionTexture()) {
+      material.setOcclusionTexture(null);
+      said.push(`${name}: ambient occlusion map dropped; baked light covers it`);
+    }
+  }
+  for (const line of said) console.log(`${file}: ${line}`);
 }
 
 /**
@@ -160,7 +228,10 @@ function markEnvironment(document, file) {
   console.log(`${file}: marks found: ${found || "none"}; ${marks.warnings.length} warnings`);
 }
 
-/** Every surface that takes baked light: seen, solid and not metal. */
+/**
+ * Every surface that takes baked light: seen and solid. Metal too, for its
+ * light only, so its reflections can be dimmed where little light reaches (#6).
+ */
 function bakedPrimitives(document) {
   const primitives = [];
   const visit = (node) => {
@@ -169,9 +240,8 @@ function bakedPrimitives(document) {
       // Lines are marks, never seen.
       if (primitive.getMode() !== TRIANGLES) continue;
       const material = primitive.getMaterial();
-      // Glass and metal show the sky live, in reflections, instead.
+      // Glass shows the sky live, in reflections, instead.
       if (material?.getAlphaMode() === "BLEND") continue;
-      if (material && material.getMetallicFactor() > 0.5) continue;
       primitives.push(primitive);
     }
     node.listChildren().forEach(visit);
@@ -303,6 +373,7 @@ async function optimizeEnvironment(io, file) {
   const to = joinPath(MODELS, file);
   const document = await io.read(from);
   simplifyMaterials(document);
+  await flattenTextures(document, file);
   await document.transform(
     dedup(),
     weld(),

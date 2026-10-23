@@ -73,6 +73,24 @@ for material in bpy.data.materials:
     tree.links.new(see_through.outputs["BSDF"], surface.inputs["Surface"])
     glass += 1
 print(f"bake: {glass} glass materials let tinted light through")
+
+# Metal is baked for its light only, so the walkthrough can dim its
+# reflections where little light reaches; a mirror-like surface would bake
+# black, so it is baked as if rough and not metal.
+metal = 0
+for material in bpy.data.materials:
+    if material.surface_render_method == "BLENDED" or not material.node_tree:
+        continue
+    principled = material.node_tree.nodes.get("Principled BSDF")
+    if principled is None:
+        continue
+    metallic = principled.inputs["Metallic"]
+    if metallic.is_linked or metallic.default_value > 0.5:
+        for link in list(metallic.links):
+            material.node_tree.links.remove(link)
+        metallic.default_value = 0
+        metal += 1
+print(f"bake: {metal} metal materials baked for their light only")
 # Enough for light to cross a row of panes, each a slab with two surfaces.
 scene.cycles.transparent_max_bounces = 32
 

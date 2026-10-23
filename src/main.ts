@@ -70,10 +70,15 @@ addAbout(document.body);
 const downloads = new Downloads();
 // Add ?tuft=blades to grow the placeholder blades instead of the placeholder cards (#25).
 const tuft = params.get("tuft");
-const environment = tuft
-  ? { ...TEST_ENVIRONMENT, scatter: (name: string) => TEST_ENVIRONMENT.scatter(`${name}-${tuft}`) }
-  : TEST_ENVIRONMENT;
-const { steering, faces, sections, warnings, wind, scatters } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+// Add ?at=x,z,bearing to open at that spot on the floor plan, looking along
+// the compass bearing (0 north, 90 east), instead of at the start spot.
+const [atX, atZ, bearing] = (params.get("at") ?? "").split(",").map(Number);
+const environment = {
+  ...TEST_ENVIRONMENT,
+  ...(tuft ? { scatter: (name: string) => TEST_ENVIRONMENT.scatter(`${name}-${tuft}`) } : {}),
+  ...(Number.isFinite(atZ) ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180 } } : {}),
+};
+const { steering, faces, sections, warnings, wind, scatters, surfaces } = await whileLoading(document.body, downloads, (onProgress, onName) =>
   openEnvironment(environment, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
@@ -83,7 +88,7 @@ const { steering, faces, sections, warnings, wind, scatters } = await whileLoadi
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const { coasting } = steering.settings;
 coasting.reduced = reducedMotion.matches;
-net = new SafetyNet(fullPixelRatio, occlusion !== null, scatters.length > 0);
+net = new SafetyNet(fullPixelRatio, occlusion !== null, scatters.length > 0, surfaces.any);
 
 // Something arriving, the page going off screen or a setting changed stalls
 // frames for reasons the net can do nothing about, so those seconds don't count.
@@ -125,6 +130,7 @@ renderer.setAnimationLoop((now) => {
   faces.update();
   blow(wind, seconds, reducedMotion.matches);
   for (const scatter of scatters) scatter.update(seconds, camera.position);
+  surfaces.apply(net!.current.shine);
   if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
 
