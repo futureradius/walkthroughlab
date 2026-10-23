@@ -1,4 +1,4 @@
-/** One value in a config file: `yes` or `no`, a number, or a word. */
+/** One value in a config file: `yes` or `no`, a number, or words, such as a name. */
 export type SettingValue = boolean | number | string;
 
 /** What a config file holds: under each heading, in lower case, the values listed there. */
@@ -105,7 +105,8 @@ export function readConfig(text: string): Config {
       section = config[heading[1].toLowerCase()] ??= {};
       continue;
     }
-    const entry = /^\s*[-*]\s+(\w+)\s*:\s*(\S+)\s*$/.exec(line);
+    // A value is the rest of the line, so a name may be several words.
+    const entry = /^\s*[-*]\s+(\w+)\s*:\s*(.*?)\s*$/.exec(line);
     if (entry && section) section[entry[1]] = valueOf(entry[2]);
   }
   return config;

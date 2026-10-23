@@ -1,6 +1,7 @@
 import { Group, PerspectiveCamera, Scene, Texture, type WebGLRenderer } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadEnvironment, type Environment } from "./environment";
+import { Downloads } from "./download";
+import { loadEnvironment, loadSharpSky, type Environment } from "./environment";
 import { WALKING } from "./motion";
 import { AmbientOcclusion, METHODS, OCCLUSION, type Method, type OcclusionWorkings } from "./occlusion";
 import { openEnvironment, type EnvironmentAddress } from "./opening";
@@ -10,10 +11,18 @@ import { ZOOM } from "./zoom";
 vi.mock("./environment", async (original) => ({
   ...(await original<typeof import("./environment")>()),
   loadEnvironment: vi.fn(),
+  loadSharpSky: vi.fn(async () => {}),
 }));
 
 const ADDRESS: EnvironmentAddress = {
-  files: { model: "model.glb", skyPicture: "sky.jpg", skyLight: "sky.hdr", bakedLight: "light.jpg" },
+  files: {
+    model: "model.glb",
+    smallSkyPicture: "sky-small.jpg",
+    smallSkyLight: "sky-small.hdr",
+    skyPicture: "sky.jpg",
+    skyLight: "sky.hdr",
+    bakedLight: "light.jpg",
+  },
   config: "config.md",
 };
 
@@ -25,6 +34,10 @@ const FLOOR = new Float32Array([
 
 const CONFIG = `
 # Config file
+
+## Environment
+
+- name: Test Environment #1
 
 ## Ambient occlusion
 
@@ -89,12 +102,19 @@ function serve(config: string | null) {
 function open(options: { occlusion?: boolean; arrive?: Promise<void>; address?: EnvironmentAddress } = {}) {
   const scene = new Scene();
   const { occlusion, fetched } = occlusionFor(scene, options.arrive);
+  const names: string[] = [];
   const opening = openEnvironment(
     options.address ?? ADDRESS,
-    { renderer: {} as WebGLRenderer, scene, occlusion: options.occlusion === false ? null : occlusion },
+    {
+      renderer: {} as WebGLRenderer,
+      scene,
+      occlusion: options.occlusion === false ? null : occlusion,
+      downloads: new Downloads(),
+    },
     () => {},
+    (name) => names.push(name),
   );
-  return { scene, occlusion, fetched, opening };
+  return { scene, occlusion, fetched, opening, names };
 }
 
 beforeEach(() => {
@@ -108,27 +128,34 @@ afterEach(() => {
 });
 
 describe("opening an environment", () => {
-  it("fetches the ambient occlusion method the config file names while the environment downloads", async () => {
+  it("fetches the ambient occlusion method the config file names only after the opening download", async () => {
     const download = gate<Environment>();
     vi.mocked(loadEnvironment).mockReturnValue(download.opened);
     const { fetched, opening } = open();
     await tick();
-    expect(fetched).toEqual(["glamarye"]);
+    expect(fetched).toEqual([]);
     download.open(environment());
     await opening;
+    await tick();
     expect(fetched).toEqual(["glamarye"]);
   });
 
-  it("finishes only once that method has arrived", async () => {
+  it("lets the viewer move before ambient occlusion has arrived, and sharpens the sky after it", async () => {
     const arrival = gate();
     const { opening } = open({ arrive: arrival.opened });
-    let finished = false;
-    void opening.then(() => (finished = true));
-    await tick();
-    expect(finished).toBe(false);
-    arrival.open();
     await opening;
-    expect(finished).toBe(true);
+    await tick();
+    expect(loadSharpSky).not.toHaveBeenCalled();
+    arrival.open();
+    await tick();
+    await tick();
+    expect(loadSharpSky).toHaveBeenCalledOnce();
+  });
+
+  it("tells the loading screen the environment's name from the config file", async () => {
+    const { opening, names } = open();
+    await opening;
+    expect(names).toEqual(["Test Environment #1"]);
   });
 
   it("uses the config file's settings and reports those it cannot use", async () => {
@@ -144,11 +171,13 @@ describe("opening an environment", () => {
 
   it("keeps the usual settings without a config file", async () => {
     serve(null);
-    const { occlusion, fetched, opening } = open();
+    const { occlusion, fetched, opening, names } = open();
     const { steering } = await opening;
+    await tick();
     expect(occlusion.settings).toEqual(OCCLUSION);
     expect(steering.settings.zoom).toEqual(ZOOM);
     expect(fetched).toEqual([OCCLUSION.method]);
+    expect(names).toEqual([]);
   });
 
   it("starts at the start spot, on the floor there", async () => {

@@ -1,6 +1,43 @@
-import { defineConfig } from "vite";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { defineConfig, type Plugin } from "vite";
+
+/** Folders of public/ whose files the loading bar measures. */
+const MEASURED = ["models", "skies"];
+
+/** The size of every file the walkthrough downloads, unpacked, by its address. */
+function sizes(): Record<string, number> {
+  const found: Record<string, number> = {};
+  for (const folder of MEASURED) {
+    for (const file of readdirSync(join("public", folder))) {
+      found[`${folder}/${file}`] = statSync(join("public", folder, file)).size;
+    }
+  }
+  return found;
+}
+
+/**
+ * Serves sizes.json beside the page, so the loading bar knows how much is
+ * coming before it arrives. Servers such as GitHub Pages say only how big a
+ * file is once compressed, while what arrives is counted unpacked.
+ */
+function fileSizes(): Plugin {
+  return {
+    name: "file-sizes",
+    configureServer(server) {
+      server.middlewares.use("/sizes.json", (_request, response) => {
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify(sizes()));
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "sizes.json", source: JSON.stringify(sizes()) });
+    },
+  };
+}
 
 export default defineConfig({
   // Relative paths so the page works under /walkthroughlab/ on GitHub Pages.
   base: "./",
+  plugins: [fileSizes()],
 });

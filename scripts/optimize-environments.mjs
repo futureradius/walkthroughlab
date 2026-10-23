@@ -4,11 +4,13 @@
 // models-source/ holds more than one Rhino export.
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join as joinPath } from "node:path";
+import { gzipSync } from "node:zlib";
 import { NodeIO } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import {
   dedup,
   join,
+  meshopt,
   prune,
   textureCompress,
   unwrapPrimitives,
@@ -17,15 +19,18 @@ import {
 import sharp from "sharp";
 import { FloatType } from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
+import { MeshoptEncoder } from "meshoptimizer";
 import * as watlas from "watlas";
 import { COLLISION_MESH, readMarks } from "../src/marks.ts";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
 const SKIES = "public/skies";
+/** Where `npm run bake` reads the environment from, before its geometry is compressed. */
+const BAKE_COPY = "models-source/baked";
 /** Longest side of any texture, in pixels. */
 const MAX_TEXTURE_SIZE = 1024;
-const JPEG_QUALITY = 80;
+const WEBP_QUALITY = 80;
 /** Materials that let more light through than this are shown as glass. */
 const GLASS_TRANSMISSION = 0.5;
 /** How strongly a material reflects, which the walkthrough honours on glass. */
@@ -45,6 +50,18 @@ const SKY_PICTURE_WIDTH = 4096;
 const SKY_PICTURE_QUALITY = 85;
 /** Width of the sky as a light source, which needs brightness but little detail. */
 const SKY_LIGHT_WIDTH = 1024;
+/**
+ * Widths of the small sky picture and sky light that arrive before the viewer
+ * can move; the ones above follow and sharpen them (#14, #23).
+ */
+const SMALL_SKY_PICTURE_WIDTH = 1024;
+const SMALL_SKY_LIGHT_WIDTH = 256;
+/** How long a viewer may wait before they can move: about 10 s on Slow 4G (#14). */
+const OPENING_BUDGET = 2;
+/** The whole walkthrough, and all its sound (#14). */
+const WHOLE_BUDGET = 10;
+/** The page's own code, which optimize cannot measure: about this much on the wire. */
+const CODE_ESTIMATE = 0.2;
 /** Brightens or darkens a sky, both as seen and as a light source. */
 const SKY_EXPOSURE = 1;
 
@@ -281,8 +298,10 @@ async function optimizeEnvironment(io, file) {
     join({ filter: (node) => !node.getMesh()?.listPrimitives().some((primitive) => primitive.getMode() !== TRIANGLES) }),
     textureCompress({
       encoder: sharp,
-      targetFormat: "jpeg",
-      quality: JPEG_QUALITY,
+      // A third smaller than JPEG for the same look, and every phone that
+      // matters reads it (#23).
+      targetFormat: "webp",
+      quality: WEBP_QUALITY,
       resize: [MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE],
     }),
     prune(),
@@ -291,14 +310,55 @@ async function optimizeEnvironment(io, file) {
   // A second set of texture coordinates in which no two surfaces overlap, so
   // `npm run bake` can paint each one's light into a single shared picture.
   unwrapPrimitives(bakedPrimitives(document), { watlas, texcoord: 1, overwrite: true });
+  // Blender can't read compressed geometry, so the bake gets its own copy.
+  await mkdir(BAKE_COPY, { recursive: true });
+  await io.write(joinPath(BAKE_COPY, file), document);
+  // Geometry stored compressed, a few times smaller (#23).
+  await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
   await io.write(to, document);
   console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}`);
+}
+
+/** Bytes a file takes on the wire: GitHub Pages compresses all but pictures. */
+async function onTheWire(path) {
+  const bytes = await readFile(path);
+  return /.(jpe?g|png|webp)$/.test(path) ? bytes.length : gzipSync(bytes).length;
+}
+
+/**
+ * Say how the environment's downloads compare with the download budget,
+ * warning, never failing, when one is over (#14).
+ */
+async function reportBudget(environment, sky) {
+  const megabytes = async (paths) => {
+    let bytes = 0;
+    for (const path of paths) bytes += await onTheWire(path).catch(() => 0);
+    return bytes / 1024 / 1024;
+  };
+  const baked = joinPath(MODELS, renamed(environment, "-light.jpg"));
+  const opening =
+    CODE_ESTIMATE +
+    (await megabytes([
+      joinPath(MODELS, environment),
+      baked,
+      joinPath(SKIES, renamed(sky, "-small.jpg")),
+      joinPath(SKIES, renamed(sky, "-small.hdr")),
+    ]));
+  const whole =
+    opening + (await megabytes([joinPath(SKIES, renamed(sky, ".jpg")), joinPath(SKIES, renamed(sky, ".hdr"))]));
+  const line = (what, size, budget) =>
+    `${what}: about ${size.toFixed(2)} MB on the wire, of ${budget} MB${size > budget ? " - OVER BUDGET" : ""}`;
+  console.log(line("Opening download, with about 0.2 MB of page code", opening, OPENING_BUDGET));
+  console.log(line("Whole walkthrough", whole, WHOLE_BUDGET));
+  console.log(line("Sound", 0, 3));
 }
 
 async function optimizeSky(file) {
   const from = joinPath(SOURCE, file);
   const picture = joinPath(SKIES, renamed(file, ".jpg"));
   const light = joinPath(SKIES, renamed(file, ".hdr"));
+  const smallPicture = joinPath(SKIES, renamed(file, "-small.jpg"));
+  const smallLight = joinPath(SKIES, renamed(file, "-small.hdr"));
   const raw = await readFile(from);
   const { data, width, height } = new EXRLoader()
     .setDataType(FloatType)
@@ -306,12 +366,18 @@ async function optimizeSky(file) {
   const channels = data.length / (width * height);
   await writeSkyPicture(shrink(data, width, height, channels, SKY_PICTURE_WIDTH), picture);
   await writeSkyLight(shrink(data, width, height, channels, SKY_LIGHT_WIDTH), light);
+  await writeSkyPicture(shrink(data, width, height, channels, SMALL_SKY_PICTURE_WIDTH), smallPicture);
+  await writeSkyLight(shrink(data, width, height, channels, SMALL_SKY_LIGHT_WIDTH), smallLight);
   console.log(
-    `${file}: ${await megabytes(from)} -> ${await megabytes(picture)} picture, ${await megabytes(light)} light`,
+    `${file}: ${await megabytes(from)} -> ${await megabytes(picture)} picture, ${await megabytes(light)} light, ` +
+      `${await megabytes(smallPicture)} and ${await megabytes(smallLight)} small`,
   );
 }
 
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+await MeshoptEncoder.ready;
+const io = new NodeIO()
+  .registerExtensions(ALL_EXTENSIONS)
+  .registerDependencies({ "meshopt.encoder": MeshoptEncoder });
 await watlas.Initialize();
 await mkdir(MODELS, { recursive: true });
 await mkdir(SKIES, { recursive: true });
@@ -328,3 +394,4 @@ if (environments.length + skies.length === 0) {
 }
 for (const file of environments) await optimizeEnvironment(io, file);
 for (const file of skies) await optimizeSky(file);
+if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0]);

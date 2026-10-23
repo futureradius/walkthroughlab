@@ -104,6 +104,12 @@ everything else. That costs download for every copy. If the download budget
   around the start spot has to arrive before they can move. The real building
   may be two to four times the test environment and wait longer than the
   budget; come back to this only if that wait becomes a real problem. (#14)
+- **Textures in the trailing download.** Surfaces first show in their own
+  average colour with baked light, like a clay model, and their textures fade
+  in a few seconds later, so the opening download stays about 1 MB however
+  many textures there are. Kept in reserve: Loading makes the files smaller
+  with WebP textures and compressed geometry first; come back to this if
+  Materials (#6) pushes the opening download over 2 MB again. (#23)
 - **A picture of the view from the start spot while loading**, rendered by the
   bake, shown under the loading bar until the walkthrough replaces it. For now
   the page stays white behind the bar. (#14)

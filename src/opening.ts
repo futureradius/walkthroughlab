@@ -1,13 +1,11 @@
-import { Color, type Scene, type WebGLRenderer } from "three";
+import type { Scene, WebGLRenderer } from "three";
 import { collisionMesh } from "./collision";
-import { loadConfig, loadEnvironment, type EnvironmentFiles } from "./environment";
+import type { Downloads } from "./download";
+import { loadConfig, loadEnvironment, loadSharpSky, type EnvironmentFiles } from "./environment";
 import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
-
-/** Shown behind the loading bar until the sky arrives. */
-const LOADING_BACKDROP = 0xdde8f0;
 
 /** An environment's files and its config file. */
 export interface EnvironmentAddress {
@@ -19,6 +17,8 @@ export interface EnvironmentAddress {
 export const TEST_ENVIRONMENT: EnvironmentAddress = {
   files: {
     model: `${import.meta.env.BASE_URL}models/test-environment.glb`,
+    smallSkyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.jpg`,
+    smallSkyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.hdr`,
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
     bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.jpg`,
@@ -32,6 +32,8 @@ export interface Walkthrough {
   scene: Scene;
   /** Null where the device cannot work out ambient occlusion. */
   occlusion: AmbientOcclusion | null;
+  /** Fetches every file, trying again until it arrives. */
+  downloads: Downloads;
 }
 
 /** An opened environment, ready for its first frame. */
@@ -43,6 +45,28 @@ export interface Opened {
   sections: Section[];
   /** What is wrong with the environment's marks, for the ?config panel. */
   warnings: string[];
+}
+
+/**
+ * The trailing download, in order, each part fading in or sharpening what is
+ * there as it arrives. Ambient occlusion fades in by itself once its method
+ * has arrived.
+ */
+async function trail(files: EnvironmentFiles, { renderer, scene, occlusion, downloads }: Walkthrough) {
+  await occlusion?.ready();
+  await loadSharpSky(
+    files,
+    renderer,
+    downloads,
+    (light) => {
+      scene.environment?.dispose();
+      scene.environment = light;
+    },
+    (picture) => {
+      (scene.background as { dispose?: () => void } | null)?.dispose?.();
+      scene.background = picture;
+    },
+  );
 }
 
 /** Use what the config file sets in these sections, saying in the console what it could not. */
@@ -67,30 +91,37 @@ function steeringSections(steering: Steering): Section[] {
   ];
 }
 
+/** The name the config file gives the environment, for the loading screen. */
+function nameOf(config: Config): string | undefined {
+  const name = config.environment?.name;
+  return name === undefined || name === "" ? undefined : String(name);
+}
+
 /**
- * Download an environment into the scene and steer from its start spot, with
- * its config file's settings. Resolves once ambient occlusion can be in the
- * first frame; rejects if the environment cannot be had or its start spot is
- * not on its collision mesh. `onProgress` gets the fraction downloaded, or
- * undefined while the server hasn't said how big the files are.
+ * Download an environment's opening download into the scene and steer from
+ * its start spot, with its config file's settings. Resolves once the viewer
+ * can move; the trailing download then follows on its own: ambient occlusion,
+ * then the sharp sky light and the sharp sky picture (#14). Rejects if the
+ * start spot is not over the collision mesh. `onProgress` gets the fraction
+ * downloaded, or undefined while the sizes are unknown, and `onName` the
+ * environment's name once the config file has said it.
  */
 export async function openEnvironment(
   environment: EnvironmentAddress,
-  { renderer, scene, occlusion }: Walkthrough,
+  { renderer, scene, occlusion, downloads }: Walkthrough,
   onProgress: (fraction: number | undefined) => void,
+  onName: (name: string) => void = () => {},
 ): Promise<Opened> {
-  scene.background = new Color(LOADING_BACKDROP);
   const occlusionSections = occlusion
     ? [section("Ambient occlusion", occlusion.settings, OCCLUSION_DESCRIBED, true)]
     : [];
-  const config = loadConfig(environment.config);
-  // The config file arrives first and says which way ambient occlusion is
-  // worked out, so only that is fetched, alongside the environment.
-  const occlusionReady = config.then((read) => {
+  const config = loadConfig(environment.config).then((read) => {
+    const name = nameOf(read);
+    if (name) onName(name);
     configure(occlusionSections, read);
-    return occlusion?.ready();
+    return read;
   });
-  const loaded = await loadEnvironment(environment.files, renderer, onProgress);
+  const loaded = await loadEnvironment(environment.files, renderer, downloads, onProgress);
   scene.add(loaded.visible);
   const faces = new Faces(loaded.visible);
   scene.background = loaded.skyPicture;
@@ -111,7 +142,7 @@ export async function openEnvironment(
   const sections = steeringSections(steering);
   configure(sections, await config);
   if (occlusion) occlusion.bakedLight = loaded.bakedLight ?? null;
-  await occlusionReady;
+  void trail(environment.files, { renderer, scene, occlusion, downloads });
   return {
     steering,
     faces,

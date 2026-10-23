@@ -331,6 +331,9 @@ for (const setting of Object.keys(OCCLUSION_DESCRIBED) as (keyof OcclusionSettin
  */
 const OVER_DARKENING = [LAYERS.glass];
 
+/** Seconds a method's darkening takes to fade in once it has arrived (#14). */
+const FADE_IN_SECONDS = 1;
+
 /**
  * Ambient occlusion: draws the scene to the canvas exactly as it would be
  * drawn without it, then darkens the picture where surfaces come close.
@@ -349,6 +352,8 @@ export class AmbientOcclusion {
   private readonly loading = new Map<string, Promise<void>>();
   /** Each method that has arrived, by name, set up for the scene. */
   private readonly loaded = new Map<string, OcclusionWorkings>();
+  /** When each method was first drawn, by name, so its darkening fades in. */
+  private readonly firstDrawn = new Map<string, number>();
   private blur: Blur | null = null;
   private readonly darken: FullScreenQuad;
   private readonly size = new Vector2();
@@ -381,6 +386,7 @@ export class AmbientOcclusion {
           sunlit: { value: this.settings.sunlit },
           headroom: { value: 1 },
           shift: { value: new Vector2() },
+          fade: { value: 1 },
         },
         vertexShader: /* glsl */ `
           varying vec2 vUv;
@@ -395,12 +401,14 @@ export class AmbientOcclusion {
           uniform sampler2D brightness;
           uniform float headroom;
           uniform vec2 shift;
+          uniform float fade;
           varying vec2 vUv;
           ${LET_OFF}
 
           void main() {
             float light = pow(texture2D(occlusion, vUv - shift).r, strength);
             light = spared(light, texture2D(brightness, vUv));
+            light = mix(1.0, light, fade);
             // The canvas holds colours encoded for display, where taking away
             // a share of the light takes away a smaller share of the number.
             gl_FragColor = vec4(vec3(pow(light, 1.0 / 2.2) / headroom), 1.0);
@@ -480,6 +488,9 @@ export class AmbientOcclusion {
     this.darken.material.blendDst = darkening.brightens ? SrcColorFactor : ZeroFactor;
     uniforms.spare.value = settings.spare;
     uniforms.sunlit.value = settings.sunlit;
+    const now = performance.now();
+    if (!this.firstDrawn.has(settings.method)) this.firstDrawn.set(settings.method, now);
+    uniforms.fade.value = Math.min(1, (now - this.firstDrawn.get(settings.method)!) / (FADE_IN_SECONDS * 1000));
 
     // Everything bound for the canvas is drawn in one go, after the work off
     // screen, so a phone never has to set a half-drawn canvas aside.

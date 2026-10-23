@@ -22,6 +22,8 @@ import {
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import type { Downloads } from "./download";
 import { COLLISION_MESH, type Start } from "./marks";
 import { readConfig, type Config } from "./settings";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
@@ -43,6 +45,9 @@ export const LAYERS = {
 /** The files `npm run optimize` writes for one environment and its sky. */
 export interface EnvironmentFiles {
   model: string;
+  /** Small versions of the sky, in the opening download, until the sharp ones arrive. */
+  smallSkyPicture: string;
+  smallSkyLight: string;
   skyPicture: string;
   skyLight: string;
   /** Written by `npm run bake`; without it the sky lights the surfaces live. */
@@ -54,9 +59,9 @@ export interface Environment {
   visible: Object3D;
   /** The collision mesh as nine numbers per triangle: the x, y, z of three corners. */
   collision: Float32Array;
-  /** The sky as the viewer sees it beyond the architecture. */
+  /** The sky as the viewer sees it beyond the architecture, small until the sharp one arrives. */
   skyPicture: Texture;
-  /** The sky as the light that falls on the architecture and reflects in it. */
+  /** The sky as the light that falls on the architecture and reflects in it, likewise. */
   skyLight: Texture;
   /** The baked light picture, if the environment has one. */
   bakedLight?: Texture;
@@ -72,8 +77,14 @@ export interface Environment {
  * empty one, so everything keeps its usual settings.
  */
 export async function loadConfig(address: string): Promise<Config> {
-  const response = await fetch(address);
-  return readConfig(response.ok ? await response.text() : "");
+  try {
+    const response = await fetch(address);
+    return readConfig(response.ok ? await response.text() : "");
+  } catch (error) {
+    // Without a connection it would hold up everything else, which retries.
+    console.warn("The config file could not be downloaded, so settings keep their usual values.", error);
+    return {};
+  }
 }
 
 /** Corner positions of every triangle under an object, in world space. */
@@ -208,38 +219,84 @@ export function prepareSurfaces(model: Object3D, bakedLight: Texture | undefined
 }
 
 /**
- * Download an environment and its sky, split the environment into what the
+ * The unpacked size of every file the walkthrough downloads, by its address
+ * under the page; see vite.config.ts. Without it the bar sweeps to and fro.
+ */
+async function sizesOf(downloads: Downloads): Promise<Record<string, number>> {
+  try {
+    return JSON.parse(new TextDecoder().decode(await downloads.get(SIZES)));
+  } catch {
+    return {};
+  }
+}
+
+const SIZES = `${import.meta.env.BASE_URL}sizes.json`;
+
+/** A picture or a sky light from its downloaded bytes, by the loader that reads such files. */
+async function decoded<T>(bytes: ArrayBuffer, loader: { loadAsync: (address: string) => Promise<T> }): Promise<T> {
+  const address = URL.createObjectURL(new Blob([bytes]));
+  try {
+    return await loader.loadAsync(address);
+  } finally {
+    URL.revokeObjectURL(address);
+  }
+}
+
+/** A sky picture ready to show beyond the architecture. */
+function asSkyPicture(picture: Texture): Texture {
+  picture.colorSpace = SRGBColorSpace;
+  picture.mapping = EquirectangularReflectionMapping;
+  return picture;
+}
+
+/** Blurred copies of the sky at every roughness, so lighting costs one lookup. */
+function asSkyLight(light: Texture, renderer: WebGLRenderer): Texture {
+  light.mapping = EquirectangularReflectionMapping;
+  const generator = new PMREMGenerator(renderer);
+  const blurred = generator.fromEquirectangular(light).texture;
+  generator.dispose();
+  light.dispose();
+  return blurred;
+}
+
+/**
+ * Download the opening download of an environment: everything the viewer
+ * needs before they can move (#14). Split the environment into what the
  * viewer sees and its collision mesh, and sort what the viewer sees into
  * kinds of surface; see LAYERS. `onProgress` gets the fraction
- * downloaded, or undefined while the server hasn't said how big the files are.
+ * downloaded, or undefined while the sizes are unknown. A download that
+ * fails is tried again until it arrives.
  */
 export async function loadEnvironment(
   files: EnvironmentFiles,
   renderer: WebGLRenderer,
+  downloads: Downloads,
   onProgress: (fraction: number | undefined) => void,
 ): Promise<Environment> {
-  // The sky picture loads as an image, which reports no progress, so the bar
-  // follows the other two files.
-  const downloads = [
-    { loaded: 0, total: 0 },
-    { loaded: 0, total: 0 },
-  ];
-  const track = (download: { loaded: number; total: number }) => (event: ProgressEvent) => {
-    download.loaded = event.loaded;
-    download.total = event.lengthComputable ? event.total : 0;
-    const known = downloads.every(({ total }) => total > 0);
-    onProgress(
-      known
-        ? downloads.reduce((sum, { loaded }) => sum + loaded, 0) /
-            downloads.reduce((sum, { total }) => sum + total, 0)
-        : undefined,
-    );
+  const sizes = await sizesOf(downloads);
+  const addresses = [files.model, files.smallSkyLight, files.smallSkyPicture, files.bakedLight].filter(
+    (address): address is string => address !== undefined,
+  );
+  const base = import.meta.env.BASE_URL;
+  const totals = addresses.map((address) => sizes[address.slice(base.length)]);
+  const arrived = addresses.map(() => 0);
+  const known = totals.every((total) => total > 0);
+  const whole = totals.reduce((sum, total) => sum + (total ?? 0), 0);
+  const track = (index: number) => (bytes: number) => {
+    arrived[index] = bytes;
+    onProgress(known ? Math.min(1, arrived.reduce((sum, part) => sum + part, 0) / whole) : undefined);
   };
-  const [gltf, light, skyPicture, bakedLight] = await Promise.all([
-    new GLTFLoader().loadAsync(files.model, track(downloads[0])),
-    new HDRLoader().loadAsync(files.skyLight, track(downloads[1])),
-    new TextureLoader().loadAsync(files.skyPicture),
-    files.bakedLight ? new TextureLoader().loadAsync(files.bakedLight) : undefined,
+  onProgress(known ? 0 : undefined);
+  const [model, light, picture, baked] = await Promise.all(
+    addresses.map((address, index) => downloads.get(address, track(index))),
+  );
+
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  const [gltf, skyLight, skyPicture, bakedLight] = await Promise.all([
+    loader.parseAsync(model, ""),
+    decoded(light, new HDRLoader()),
+    decoded(picture, new TextureLoader()),
+    baked ? decoded(baked, new TextureLoader()) : undefined,
   ]);
 
   // `npm run optimize` read the marks and noted what they say in the file:
@@ -268,22 +325,29 @@ export async function loadEnvironment(
   }
   prepareSurfaces(gltf.scene, bakedLight, anisotropy);
 
-  skyPicture.colorSpace = SRGBColorSpace;
-  skyPicture.mapping = EquirectangularReflectionMapping;
-  // Blurred copies of the sky at every roughness, so lighting costs one lookup.
-  light.mapping = EquirectangularReflectionMapping;
-  const generator = new PMREMGenerator(renderer);
-  const skyLight = generator.fromEquirectangular(light).texture;
-  generator.dispose();
-  light.dispose();
-
   return {
     visible: gltf.scene,
     collision,
-    skyPicture,
-    skyLight,
+    skyPicture: asSkyPicture(skyPicture),
+    skyLight: asSkyLight(skyLight, renderer),
     bakedLight,
     start,
     warnings,
   };
+}
+
+/**
+ * Download the sharp sky that replaces the small one, in the trailing
+ * download: first the light, which sharpens reflections on glass and metal,
+ * then the picture beyond the architecture (#14).
+ */
+export async function loadSharpSky(
+  files: EnvironmentFiles,
+  renderer: WebGLRenderer,
+  downloads: Downloads,
+  onLight: (light: Texture) => void,
+  onPicture: (picture: Texture) => void,
+) {
+  onLight(asSkyLight(await decoded(await downloads.get(files.skyLight), new HDRLoader()), renderer));
+  onPicture(asSkyPicture(await decoded(await downloads.get(files.skyPicture), new TextureLoader())));
 }

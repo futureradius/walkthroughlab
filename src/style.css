@@ -63,16 +63,43 @@ body {
   pointer-events: none;
 }
 
+/* White over the page until the viewer can move, then fading into the first frame. */
 .loading {
   position: fixed;
-  left: 50%;
-  top: 50%;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 16px;
+  background: #fff;
+  font: 15px/1.4 system-ui, sans-serif;
+  color: #333;
+  text-align: center;
+  transition: opacity 0.5s ease-out;
+}
+
+.loading--done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading p {
+  margin: 0;
+}
+
+.loading__track {
   width: min(60vw, 280px);
   height: 6px;
-  transform: translate(-50%, -50%);
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.12);
   overflow: hidden;
+}
+
+.loading__track[hidden],
+.loading__lost[hidden] {
+  display: none;
 }
 
 .loading__bar {
@@ -83,8 +110,8 @@ body {
   transition: width 0.15s linear;
 }
 
-/* The server didn't say how big the file is, so show movement instead. */
-.loading--unknown .loading__bar {
+/* The sizes are unknown, so show movement instead. */
+.loading__track--unknown .loading__bar {
   width: 35%;
   animation: loading-sweep 1.2s ease-in-out infinite alternate;
 }
@@ -98,14 +125,21 @@ body {
   }
 }
 
-.loading--failed {
-  width: auto;
-  height: auto;
-  padding: 0 16px;
-  background: none;
-  font: 15px/1.4 system-ui, sans-serif;
-  color: #333;
-  text-align: center;
+.loading__lost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.loading__lost button {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid #999;
+  border-radius: 22px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
 }
 
 .about-button {

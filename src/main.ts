@@ -1,5 +1,6 @@
 import { NeutralToneMapping, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { addAbout } from "./about";
+import { Downloads } from "./download";
 import { Gestures } from "./gestures";
 import { AmbientOcclusion } from "./occlusion";
 import { Joystick } from "./joystick";
@@ -55,8 +56,9 @@ const fps = params.has("fps")
 
 addAbout(document.body);
 
-const { steering, faces, sections, warnings } = await whileLoading(document.body, (onProgress) =>
-  openEnvironment(TEST_ENVIRONMENT, { renderer, scene, occlusion }, onProgress),
+const downloads = new Downloads();
+const { steering, faces, sections, warnings } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+  openEnvironment(TEST_ENVIRONMENT, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
 // Add ?config to the address for a panel that changes settings while walking.

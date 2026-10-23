@@ -12,7 +12,11 @@ import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 
 const MODELS = "public/models";
 const SKIES = "public/skies";
-/** Blender's raw output, kept out of git with the other source files. */
+/**
+ * Blender's raw output, kept out of git with the other source files.
+ * `npm run optimize` leaves each environment here too, before compressing
+ * its geometry, which Blender cannot read.
+ */
 const WORK = "models-source/baked";
 /** Width and height of the baked light picture, in pixels. */
 const SIZE = 2048;
@@ -43,7 +47,10 @@ function findBlender() {
 
 /** The one file with this extension in a folder, or the one that was named. */
 async function pick(folder, extension, name) {
-  const files = (await readdir(folder)).filter((file) => file.endsWith(extension));
+  // The small skies that arrive first are not for baking.
+  const files = (await readdir(folder)).filter(
+    (file) => file.endsWith(extension) && !file.endsWith(`-small${extension}`),
+  );
   if (name) return `${name.replace(extension, "")}${extension}`;
   if (files.length === 1) return files[0];
   throw new Error(
@@ -87,6 +94,9 @@ const sky = await pick(SKIES, ".hdr", skyName);
 const raw = joinPath(WORK, environment.replace(".glb", ".exr"));
 const picture = joinPath(MODELS, environment.replace(".glb", "-light.jpg"));
 await mkdir(WORK, { recursive: true });
+if (!existsSync(joinPath(WORK, environment))) {
+  throw new Error(`${WORK}/${environment} is missing; run npm run optimize first.`);
+}
 
 const started = Date.now();
 const blender = spawnSync(
@@ -97,7 +107,7 @@ const blender = spawnSync(
     "--python",
     "scripts/bake.py",
     "--",
-    resolve(MODELS, environment),
+    resolve(WORK, environment),
     resolve(SKIES, sky),
     resolve(raw),
     String(SIZE),

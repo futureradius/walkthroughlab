@@ -79,6 +79,11 @@ describe("reading a config file", () => {
     expect(readConfig(file)["something later"]).toEqual({ reach: 5 });
   });
 
+  it("reads a value of several words, such as a name, as the rest of its line", () => {
+    const config = readConfig("## Environment\n\n- name: Test Environment #1  \n- on: yes");
+    expect(config.environment).toEqual({ name: "Test Environment #1", on: true });
+  });
+
   it("reads nothing from a file without headings", () => {
     expect(readConfig("- reach: 0.2")).toEqual({});
   });
