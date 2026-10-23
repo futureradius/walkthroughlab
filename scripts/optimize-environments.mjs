@@ -2,6 +2,7 @@
 // Rhino exports (.glb) go to public/models/, skies (.exr) to public/skies/.
 // Run with `npm run optimize`, or `npm run optimize -- <environment>` when
 // models-source/ holds more than one Rhino export.
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join as joinPath } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -28,6 +29,9 @@ const MODELS = "public/models";
 const SKIES = "public/skies";
 /** Where `npm run bake` reads the environment from, before its geometry is compressed. */
 const BAKE_COPY = "models-source/baked";
+/** Tufts and the like that scatter marks copy, prepared in Blender, beside the environment. */
+const SCATTER_SOURCE = joinPath(SOURCE, "scatter");
+const SCATTER = joinPath(MODELS, "scatter");
 /** Longest side of any texture, in pixels. */
 const MAX_TEXTURE_SIZE = 1024;
 const WEBP_QUALITY = 80;
@@ -139,6 +143,16 @@ function markEnvironment(document, file) {
     throw new Error(`${file} would not open in the walkthrough; nothing was written.`);
   }
   for (const node of marks.collision) node.setExtras({ ...node.getExtras(), walkthrough: COLLISION_MESH });
+  // Scatter grows copies of scatter/<name>.glb over the surfaces on its layer.
+  for (const { kind, name, path, layer } of marks.parts) {
+    if (kind !== "scatter") continue;
+    layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "scatter", scatter: name });
+    if (!existsSync(joinPath(SCATTER_SOURCE, `${name}.glb`))) {
+      const warning = `${path}: there is no ${SCATTER_SOURCE}/${name}.glb to copy over its surfaces.`;
+      marks.warnings.push(warning);
+      console.warn(`${file}: ${warning}`);
+    }
+  }
   scene.setExtras({ ...scene.getExtras(), walkthrough: { start: marks.start, warnings: marks.warnings } });
   const kinds = new Map();
   for (const { kind } of marks.parts) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
@@ -344,13 +358,36 @@ async function reportBudget(environment, sky) {
       joinPath(SKIES, renamed(sky, "-small.jpg")),
       joinPath(SKIES, renamed(sky, "-small.hdr")),
     ]));
+  const scattered = existsSync(SCATTER) ? (await readdir(SCATTER)).map((file) => joinPath(SCATTER, file)) : [];
   const whole =
-    opening + (await megabytes([joinPath(SKIES, renamed(sky, ".jpg")), joinPath(SKIES, renamed(sky, ".hdr"))]));
+    opening +
+    (await megabytes([joinPath(SKIES, renamed(sky, ".jpg")), joinPath(SKIES, renamed(sky, ".hdr")), ...scattered]));
   const line = (what, size, budget) =>
     `${what}: about ${size.toFixed(2)} MB on the wire, of ${budget} MB${size > budget ? " - OVER BUDGET" : ""}`;
   console.log(line("Opening download, with about 0.2 MB of page code", opening, OPENING_BUDGET));
   console.log(line("Whole walkthrough", whole, WHOLE_BUDGET));
   console.log(line("Sound", 0, 3));
+}
+
+/**
+ * The small files scatter marks copy, such as a grass tuft: textures as WebP
+ * and geometry compressed, like the environment's.
+ */
+async function optimizeScatter(io) {
+  if (!existsSync(SCATTER_SOURCE)) return;
+  await mkdir(SCATTER, { recursive: true });
+  for (const file of (await readdir(SCATTER_SOURCE)).filter((name) => name.endsWith(".glb"))) {
+    const document = await io.read(joinPath(SCATTER_SOURCE, file));
+    await document.transform(
+      dedup(),
+      weld(),
+      textureCompress({ encoder: sharp, targetFormat: "webp", quality: WEBP_QUALITY, resize: [MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE] }),
+      prune(),
+      meshopt({ encoder: MeshoptEncoder, level: "medium" }),
+    );
+    await io.write(joinPath(SCATTER, file), document);
+    console.log(`scatter/${file}: ${await megabytes(joinPath(SCATTER_SOURCE, file))} -> ${await megabytes(joinPath(SCATTER, file))}`);
+  }
 }
 
 async function optimizeSky(file) {
@@ -394,4 +431,5 @@ if (environments.length + skies.length === 0) {
 }
 for (const file of environments) await optimizeEnvironment(io, file);
 for (const file of skies) await optimizeSky(file);
+await optimizeScatter(io);
 if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0]);

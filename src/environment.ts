@@ -27,7 +27,7 @@ import type { Downloads } from "./download";
 import { COLLISION_MESH, type Start } from "./marks";
 import { readConfig, type Config } from "./settings";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
-const BAKED_LIGHT_RANGE = 4;
+export const BAKED_LIGHT_RANGE = 4;
 
 /**
  * The kinds of surface every mesh of an environment is sorted into when it
@@ -40,6 +40,8 @@ export const LAYERS = {
   solid: 1,
   /** See GLOSSARY.md. */
   glass: 2,
+  /** Things that sway, such as scatter: drawn, but kept out of ambient occlusion's own work. */
+  sway: 3,
 } as const;
 
 /** The files `npm run optimize` writes for one environment and its sky. */
@@ -69,6 +71,8 @@ export interface Environment {
   start?: Start;
   /** What `npm run optimize` found wrong with the marks, for the ?config panel. */
   warnings: string[];
+  /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
+  scatter: { name: string; layer: Object3D }[];
 }
 
 /**
@@ -303,7 +307,9 @@ export async function loadEnvironment(
   // which layers are collision meshes, the start spot, and the warnings.
   const collisionLayers: Object3D[] = [];
   const lines: Object3D[] = [];
+  const scatter: Environment["scatter"] = [];
   gltf.scene.traverse((object) => {
+    if (object.userData.walkthrough === "scatter") scatter.push({ name: object.userData.scatter, layer: object });
     if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
     else if (object instanceof Line) lines.push(object);
   });
@@ -333,7 +339,14 @@ export async function loadEnvironment(
     bakedLight,
     start,
     warnings,
+    scatter,
   };
+}
+
+/** A small model such as a scatter tuft, downloaded and unpacked. */
+export async function loadModel(address: string, downloads: Downloads): Promise<Object3D> {
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  return (await loader.parseAsync(await downloads.get(address), "")).scene;
 }
 
 /**

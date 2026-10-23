@@ -1,7 +1,9 @@
 import type { Scene, WebGLRenderer } from "three";
 import { collisionMesh } from "./collision";
 import type { Downloads } from "./download";
-import { loadConfig, loadEnvironment, loadSharpSky, type EnvironmentFiles } from "./environment";
+import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type EnvironmentFiles } from "./environment";
+import { groundOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
+import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
@@ -11,6 +13,8 @@ import { Steering, STEERING_DESCRIBED } from "./steering";
 export interface EnvironmentAddress {
   files: EnvironmentFiles;
   config: string;
+  /** Where the file a scatter mark copies lies, by the mark's name, such as "grass". */
+  scatter: (name: string) => string;
 }
 
 /** The environment the link opens. */
@@ -24,6 +28,7 @@ export const TEST_ENVIRONMENT: EnvironmentAddress = {
     bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.webp`,
   },
   config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
+  scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
 };
 
 /** What the environment is opened into. */
@@ -45,6 +50,10 @@ export interface Opened {
   sections: Section[];
   /** What is wrong with the environment's marks, for the ?config panel. */
   warnings: string[];
+  /** The wind everything that sways moves in; `blow` it each frame. */
+  wind: WindSettings;
+  /** Copies grown over marked surfaces; `update` each every frame. */
+  scatters: Scatter[];
 }
 
 /**
@@ -52,10 +61,21 @@ export interface Opened {
  * there as it arrives. Ambient occlusion fades in by itself once its method
  * has arrived.
  */
-async function trail(files: EnvironmentFiles, { renderer, scene, occlusion, downloads }: Walkthrough) {
+async function trail(
+  environment: EnvironmentAddress,
+  scatters: { name: string; scatter: Scatter }[],
+  { renderer, scene, occlusion, downloads }: Walkthrough,
+) {
   await occlusion?.ready();
+  for (const { name, scatter } of scatters) {
+    try {
+      scatter.grow(tuftOf(await loadModel(environment.scatter(name), downloads)));
+    } catch (error) {
+      console.warn(`The ${name} for scatter-${name} could not be grown.`, error);
+    }
+  }
   await loadSharpSky(
-    files,
+    environment.files,
     renderer,
     downloads,
     (light) => {
@@ -140,13 +160,26 @@ export async function openEnvironment(
   const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
   // Steering's sections exist only once it does.
   const sections = steeringSections(steering);
+  // Copies grow once their file arrives; their settings are there from the start.
+  const wind = { ...WIND };
+  const scatters = loaded.scatter.map(({ name, layer }) => {
+    const scatter = new Scatter(groundOf(layer), loaded.bakedLight, LAYERS.sway);
+    scene.add(scatter.group);
+    return { name, scatter };
+  });
+  sections.push(
+    section("Wind", wind, WIND_DESCRIBED, true),
+    ...scatters.map(({ name, scatter }) => section(`scatter-${name}`, scatter.settings, SCATTER_DESCRIBED, true)),
+  );
   configure(sections, await config);
   if (occlusion) occlusion.bakedLight = loaded.bakedLight ?? null;
-  void trail(environment.files, { renderer, scene, occlusion, downloads });
+  void trail(environment, scatters, { renderer, scene, occlusion, downloads });
   return {
     steering,
     faces,
     sections: [...occlusionSections, section("Faces", faces.settings, FACES_DESCRIBED), ...sections],
     warnings: loaded.warnings,
+    wind,
+    scatters: scatters.map(({ scatter }) => scatter),
   };
 }

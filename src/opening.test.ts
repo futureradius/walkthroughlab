@@ -24,6 +24,7 @@ const ADDRESS: EnvironmentAddress = {
     bakedLight: "light.webp",
   },
   config: "config.md",
+  scatter: (name) => `${name}.glb`,
 };
 
 /** A square of floor 10 m across around the origin, 2 m up. */
@@ -85,6 +86,7 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     bakedLight: new Texture(),
     start,
     warnings: [],
+    scatter: [],
   };
 }
 
@@ -245,6 +247,7 @@ describe("opening an environment", () => {
       "Coasting",
       "Joystick",
       "Zoom",
+      "Wind",
     ]);
   });
 

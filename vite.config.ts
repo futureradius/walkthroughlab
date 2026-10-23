@@ -10,7 +10,8 @@ function sizes(): Record<string, number> {
   const found: Record<string, number> = {};
   for (const folder of MEASURED) {
     for (const file of readdirSync(join("public", folder))) {
-      found[`${folder}/${file}`] = statSync(join("public", folder, file)).size;
+      const stats = statSync(join("public", folder, file));
+      if (stats.isFile()) found[`${folder}/${file}`] = stats.size;
     }
   }
   return found;

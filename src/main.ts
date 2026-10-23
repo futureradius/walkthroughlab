@@ -10,6 +10,7 @@ import { openEnvironment, TEST_ENVIRONMENT } from "./opening";
 import { NET_DESCRIBED, SafetyNet } from "./safetynet";
 import { section } from "./settings";
 import { addTuning } from "./tuning";
+import { blow } from "./wind";
 
 /** Old phones report pixel ratios of 3 or more; rendering that many pixels is the main cost. */
 const MAX_PIXEL_RATIO = 2;
@@ -64,8 +65,13 @@ const fps = params.has("fps")
 addAbout(document.body);
 
 const downloads = new Downloads();
-const { steering, faces, sections, warnings } = await whileLoading(document.body, downloads, (onProgress, onName) =>
-  openEnvironment(TEST_ENVIRONMENT, { renderer, scene, occlusion, downloads }, onProgress, onName),
+// Add ?tuft=blades to grow the placeholder blades instead of the placeholder cards (#25).
+const tuft = params.get("tuft");
+const environment = tuft
+  ? { ...TEST_ENVIRONMENT, scatter: (name: string) => TEST_ENVIRONMENT.scatter(`${name}-${tuft}`) }
+  : TEST_ENVIRONMENT;
+const { steering, faces, sections, warnings, wind, scatters } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+  openEnvironment(environment, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
 // Add ?config to the address for a panel that changes settings while walking.
@@ -112,6 +118,8 @@ renderer.setAnimationLoop((now) => {
   camera.fov = view.fov;
   camera.updateProjectionMatrix();
   faces.update();
+  blow(wind, seconds, reducedMotion.matches);
+  for (const scatter of scatters) scatter.update(seconds);
   if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
 
