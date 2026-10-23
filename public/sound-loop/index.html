@@ -1,0 +1,580 @@
+<!doctype html>
+<!--
+  Sound loop test for issue #35. Plays the four files beside it with plain
+  Web Audio, the same way three.js does. The files are made, and checked, by
+  scripts/sound-loop-test.mjs.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sound loop test</title>
+    <style>
+      :root {
+        --bg: #f6f5f2;
+        --card: #ffffff;
+        --text: #1d1d1b;
+        --muted: #5d5c57;
+        --line: #d9d7d0;
+        --accent: #2f5fb3;
+        --accent-text: #ffffff;
+        --playing: #1f7a4a;
+        --bad: #b3261e;
+        --join: #e8a317;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161614;
+          --card: #22221f;
+          --text: #eeede8;
+          --muted: #a5a39b;
+          --line: #3a3934;
+          --accent: #6e9be6;
+          --accent-text: #0e1a2e;
+          --playing: #4fbf83;
+          --bad: #ff8a80;
+          --join: #f0b93a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      main {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 20px 16px 48px;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 8px;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+      button {
+        display: block;
+        width: 100%;
+        min-height: 64px;
+        border: 0;
+        border-radius: 14px;
+        font: inherit;
+        font-size: 1.15rem;
+        font-weight: 600;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      #start {
+        background: var(--accent);
+        color: var(--accent-text);
+        min-height: 76px;
+        margin: 16px 0;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        margin: 14px 0;
+        transition: border-color 0.15s;
+      }
+      .card.join {
+        border-color: var(--join);
+      }
+      .card h2 {
+        font-size: 1.1rem;
+        margin: 0 0 2px;
+      }
+      .card .play {
+        margin-top: 10px;
+        background: var(--accent);
+        color: var(--accent-text);
+      }
+      .card.playing .play {
+        background: var(--playing);
+      }
+      .bar {
+        height: 10px;
+        border-radius: 5px;
+        background: var(--line);
+        margin-top: 12px;
+        overflow: hidden;
+      }
+      .bar div {
+        height: 100%;
+        width: 0;
+        background: var(--playing);
+      }
+      .card.join .bar div {
+        background: var(--join);
+      }
+      .when {
+        min-height: 1.4em;
+        margin-top: 4px;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+      .facts {
+        margin: 10px 0 0;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      .facts div {
+        margin: 2px 0;
+        overflow-wrap: anywhere;
+      }
+      .bad {
+        color: var(--bad);
+        font-weight: 600;
+      }
+      #status {
+        font-size: 0.92rem;
+        color: var(--muted);
+        margin: 0 0 4px;
+      }
+      #notice {
+        display: none;
+        background: var(--join);
+        color: #1d1d1b;
+        border-radius: 12px;
+        padding: 12px;
+        font-weight: 600;
+        margin: 12px 0;
+      }
+      ul {
+        padding-left: 1.2em;
+        margin: 0 0 12px;
+      }
+      li {
+        margin: 4px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sound loop test</h1>
+      <p>
+        Each sound below repeats forever. Each time it gets back to its start (the bar fills, then
+        turns orange for a moment), listen for a <b>click</b>, a <b>tick</b>, a short <b>gap</b>,
+        or a <b>dip</b> in volume. The chord comes back to its start every 8 seconds, the wind
+        every 10. The first time comes 3 seconds after you press Play.
+      </p>
+      <ul class="muted">
+        <li>Use earphones if you can, at a comfortable volume.</li>
+        <li>
+          “With overlap” is how the walkthrough will loop its sounds. “Plain” is there to compare
+          with.
+        </li>
+        <li>
+          On an iPhone with the ringer switch set to silent you will hear nothing. That is
+          expected: flip the switch to hear the sound.
+        </li>
+        <li>
+          Also try switching to another app and back. The sound should fade out, then fade back in
+          where it left off.
+        </li>
+      </ul>
+
+      <button id="start" type="button">Tap to turn on sound</button>
+      <div id="notice"></div>
+      <p id="status">Sound is off.</p>
+      <p id="support" class="muted"></p>
+
+      <div id="cards"></div>
+
+      <p class="muted">
+        Made for issue #35. Sounds are made by <code>scripts/sound-loop-test.mjs</code>.
+      </p>
+    </main>
+
+    <script>
+      "use strict";
+
+      var OVERLAP = 0.1; // seconds of copied sound at each end of a "with overlap" file
+      var FADE_IN = 0.5;
+      var FADE_OUT = 0.2;
+      var FIRST_JOIN_AFTER = 3; // seconds from pressing Play to the first loop point
+
+      var VARIANTS = [
+        { file: "chord-overlap.webm", sound: "Chord", loop: 8, overlap: true },
+        { file: "chord-plain.webm", sound: "Chord", loop: 8, overlap: false },
+        { file: "wind-overlap.webm", sound: "Wind", loop: 10, overlap: true },
+        { file: "wind-plain.webm", sound: "Wind", loop: 10, overlap: false },
+      ];
+
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      var ctx = null;
+      var master = null;
+      var started = false;
+      var current = null; // { variant, source, gain, startTime, period }
+      var masterUp = false;
+      var hideTimer = null;
+      var needTap = false;
+
+      var startButton = document.getElementById("start");
+      var statusLine = document.getElementById("status");
+      var notice = document.getElementById("notice");
+
+      function el(tag, className, text) {
+        var e = document.createElement(tag);
+        if (className) e.className = className;
+        if (text != null) e.textContent = text;
+        return e;
+      }
+
+      function num(n) {
+        return Math.round(n).toLocaleString("en-US");
+      }
+
+      function secs(s) {
+        return s.toFixed(3) + " s";
+      }
+
+      function fact(card, text, bad) {
+        var line = el("div", bad ? "bad" : "", text);
+        card.facts.appendChild(line);
+        return line;
+      }
+
+      // Cards
+      var cardsBox = document.getElementById("cards");
+      VARIANTS.forEach(function (v) {
+        var card = el("section", "card");
+        card.appendChild(el("h2", "", v.sound + " — " + (v.overlap ? "with overlap" : "plain")));
+        card.appendChild(
+          el(
+            "div",
+            "muted",
+            v.overlap
+              ? "Has a tenth of a second of extra sound at each end, and repeats the part in between. This is how the walkthrough will do it."
+              : "Repeats the whole file, end to end, for comparison."
+          )
+        );
+        var button = el("button", "play", "Play");
+        button.type = "button";
+        button.disabled = true;
+        button.addEventListener("click", function () {
+          if (current && current.variant === v) stop();
+          else play(v);
+        });
+        card.appendChild(button);
+        var bar = el("div", "bar");
+        var fill = el("div");
+        bar.appendChild(fill);
+        card.appendChild(bar);
+        var when = el("div", "when", "");
+        card.appendChild(when);
+        var facts = el("div", "facts");
+        card.appendChild(facts);
+        cardsBox.appendChild(card);
+        v.card = { root: card, button: button, fill: fill, when: when, facts: facts };
+        fact(v.card, "Loading…");
+      });
+
+      function showStatus() {
+        if (!ctx) {
+          statusLine.textContent = "This browser has no Web Audio, so nothing here can play.";
+          statusLine.className = "bad";
+          return;
+        }
+        var words = {
+          running: "Sound is on.",
+          suspended: started ? "Sound is paused." : "Sound is off until you tap the button above.",
+          interrupted: "Sound has been paused by the phone.",
+          closed: "Sound has stopped for good. Reload the page.",
+        };
+        statusLine.textContent =
+          (words[ctx.state] || "Sound state: " + ctx.state) +
+          " This device plays sound at " +
+          num(ctx.sampleRate) +
+          " samples a second.";
+      }
+
+      function showNotice(text) {
+        notice.textContent = text || "";
+        notice.style.display = text ? "block" : "none";
+      }
+
+      function decode(data) {
+        return new Promise(function (resolve, reject) {
+          var done = false;
+          function ok(buffer) {
+            if (!done) {
+              done = true;
+              resolve(buffer);
+            }
+          }
+          function fail(error) {
+            if (!done) {
+              done = true;
+              reject(error || new Error("no reason given"));
+            }
+          }
+          try {
+            var promise = ctx.decodeAudioData(data, ok, fail);
+            if (promise && promise.then) promise.then(ok, fail);
+          } catch (error) {
+            fail(error);
+          }
+        });
+      }
+
+      function errorText(error) {
+        if (!error) return "no reason given";
+        var name = error.name && error.name !== "Error" ? error.name + ": " : "";
+        return name + (error.message || String(error));
+      }
+
+      function load(v) {
+        return fetch(v.file)
+          .then(function (response) {
+            if (!response.ok) throw new Error("download failed (" + response.status + ")");
+            return response.arrayBuffer();
+          })
+          .then(function (data) {
+            v.bytes = data.byteLength;
+            return decode(data).catch(function (error) {
+              throw new Error("this browser could not read the file (" + errorText(error) + ")");
+            });
+          })
+          .then(function (buffer) {
+            v.buffer = buffer;
+            var c = v.card;
+            c.facts.textContent = "";
+            var expectedSeconds = v.loop + (v.overlap ? 2 * OVERLAP : 0);
+            var expected = Math.round(expectedSeconds * buffer.sampleRate);
+            var off = buffer.length - expected;
+            fact(c, "File: " + v.file + ", " + num(v.bytes / 1024) + " KB");
+            fact(
+              c,
+              "Read as " + num(buffer.length) + " samples = " + secs(buffer.duration) +
+                ", at " + num(buffer.sampleRate) + " samples a second"
+            );
+            fact(
+              c,
+              off === 0
+                ? "Expected " + num(expected) + " samples = " + secs(expectedSeconds) + ": matches"
+                : "Expected " + num(expected) + " samples = " + secs(expectedSeconds) + ": " +
+                    (off > 0 ? num(off) + " too many" : num(-off) + " too few") +
+                    " (" + ((off / buffer.sampleRate) * 1000).toFixed(1) + " ms)",
+              Math.abs(off) > 1
+            );
+            if (v.overlap) {
+              fact(
+                c,
+                "Repeats " + secs(v.loop) + " = " + num(v.loop * buffer.sampleRate) +
+                  " samples, from " + secs(OVERLAP) + " to " + secs(OVERLAP + v.loop)
+              );
+            } else {
+              fact(
+                c,
+                "Repeats the whole file, " + secs(buffer.duration) + " (meant to be " +
+                  secs(v.loop) + " = " + num(v.loop * buffer.sampleRate) + " samples)"
+              );
+            }
+            c.button.disabled = !started;
+          })
+          .catch(function (error) {
+            v.card.facts.textContent = "";
+            fact(v.card, "Can't play " + v.file + ": " + error.message, true);
+          });
+      }
+
+      function rampTo(param, value, seconds) {
+        var now = ctx.currentTime;
+        param.cancelScheduledValues(now);
+        param.setValueAtTime(param.value, now);
+        param.linearRampToValueAtTime(value, now + seconds);
+      }
+
+      function play(v) {
+        if (!v.buffer || !started) return;
+        stop();
+        var now = ctx.currentTime;
+        var source = ctx.createBufferSource();
+        source.buffer = v.buffer;
+        source.loop = true;
+        var period;
+        var offset;
+        if (v.overlap) {
+          source.loopStart = OVERLAP;
+          source.loopEnd = OVERLAP + v.loop;
+          period = v.loop;
+          offset = source.loopEnd - FIRST_JOIN_AFTER;
+        } else {
+          period = v.buffer.duration;
+          offset = period - FIRST_JOIN_AFTER;
+        }
+        var gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(1, now + FADE_IN);
+        source.connect(gain);
+        gain.connect(master);
+        source.start(now, offset);
+        current = {
+          variant: v,
+          source: source,
+          gain: gain,
+          startTime: now - (period - FIRST_JOIN_AFTER),
+          period: period,
+          lastPosition: 0,
+        };
+        v.card.root.className = "card playing";
+        v.card.button.textContent = "Stop";
+        requestAnimationFrame(tick);
+      }
+
+      function stop() {
+        if (!current) return;
+        var c = current;
+        current = null;
+        rampTo(c.gain.gain, 0, FADE_OUT);
+        try {
+          c.source.stop(ctx.currentTime + FADE_OUT + 0.05);
+        } catch (error) {
+          // already stopped
+        }
+        var card = c.variant.card;
+        card.root.className = "card";
+        card.button.textContent = "Play";
+        card.fill.style.width = "0";
+        card.when.textContent = "";
+      }
+
+      var joinUntil = 0;
+      function tick() {
+        if (!current) return;
+        var c = current;
+        // What is heard now, allowing for the time sound takes to reach the speaker.
+        var heard = ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
+        var position = (((heard - c.startTime) % c.period) + c.period) % c.period;
+        if (heard >= c.startTime + c.period && position < c.lastPosition) {
+          joinUntil = performance.now() + 400;
+        }
+        c.lastPosition = position;
+        var card = c.variant.card;
+        card.fill.style.width = ((position / c.period) * 100).toFixed(2) + "%";
+        var joining = performance.now() < joinUntil;
+        card.root.className = "card playing" + (joining ? " join" : "");
+        card.when.textContent = joining
+          ? "Back at the start: listen now"
+          : "Back at the start in " + (c.period - position).toFixed(1) + " s";
+        requestAnimationFrame(tick);
+      }
+
+      function fadeMasterIn() {
+        if (masterUp) return;
+        masterUp = true;
+        rampTo(master.gain, 1, FADE_IN);
+      }
+
+      function resumeSound() {
+        var attempt = ctx.resume ? ctx.resume() : null;
+        return Promise.resolve(attempt).then(function () {
+          if (ctx.state !== "running") throw new Error(ctx.state);
+          needTap = false;
+          showNotice("");
+          fadeMasterIn();
+        });
+      }
+
+      function start() {
+        if (!ctx) return;
+        // Old iPhones only let sound start from a sound begun during a tap.
+        var silence = ctx.createBufferSource();
+        silence.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        silence.connect(ctx.destination);
+        silence.start(0);
+        resumeSound()
+          .then(function () {
+            started = true;
+            startButton.style.display = "none";
+            VARIANTS.forEach(function (v) {
+              v.card.button.disabled = !v.buffer;
+            });
+            showStatus();
+          })
+          .catch(function (error) {
+            showNotice("Sound did not turn on (" + errorText(error) + "). Tap the button again.");
+          });
+      }
+
+      // Pause sound when the page goes off screen, as the walkthrough will.
+      document.addEventListener("visibilitychange", function () {
+        if (!ctx || !started) return;
+        if (document.hidden) {
+          masterUp = false;
+          rampTo(master.gain, 0, FADE_OUT);
+          clearTimeout(hideTimer);
+          hideTimer = setTimeout(function () {
+            if (document.hidden && ctx.suspend) ctx.suspend().catch(function () {});
+          }, FADE_OUT * 1000 + 50);
+        } else {
+          clearTimeout(hideTimer);
+          resumeSound().catch(function () {
+            needTap = true;
+            showNotice("Tap anywhere to bring the sound back.");
+          });
+        }
+      });
+
+      // If the phone would not let sound come back by itself, try again on the next tap.
+      function retryOnTap() {
+        if (!needTap || document.hidden) return;
+        resumeSound().catch(function () {});
+      }
+      document.addEventListener("touchend", retryOnTap);
+      document.addEventListener("click", retryOnTap);
+
+      if (Ctx) {
+        try {
+          ctx = new Ctx();
+        } catch (error) {
+          ctx = null;
+          statusLine.textContent = "Sound could not be set up: " + errorText(error);
+          statusLine.className = "bad";
+        }
+      }
+      if (ctx) {
+        master = ctx.createGain();
+        master.gain.value = 0;
+        master.connect(ctx.destination);
+        ctx.onstatechange = function () {
+          showStatus();
+          if (ctx.state === "running" && started && !document.hidden && !needTap) fadeMasterIn();
+        };
+        startButton.addEventListener("click", start);
+        VARIANTS.forEach(load);
+      } else {
+        startButton.disabled = true;
+        VARIANTS.forEach(function (v) {
+          v.card.facts.textContent = "";
+          fact(v.card, "Can't play: this browser has no Web Audio.", true);
+        });
+      }
+      showStatus();
+
+      var probe = document.createElement("audio");
+      var says = probe.canPlayType ? probe.canPlayType('audio/webm; codecs="opus"') : "";
+      document.getElementById("support").textContent =
+        "Asked if it can play this kind of file (Opus in WebM), this browser answers: " +
+        (says === "probably" ? "yes" : says === "maybe" ? "maybe" : "no") + ".";
+    </script>
+  </body>
+</html>
