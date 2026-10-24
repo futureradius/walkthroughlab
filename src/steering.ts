@@ -5,6 +5,7 @@ import {
   levelling,
   WALKING,
   WALKING_DESCRIBED,
+  type Footing,
   type Intent,
   type Terrain,
   type Viewpoint,
@@ -183,6 +184,17 @@ export class Steering {
   constructor(private readonly place: Place) {
     this.viewpoint = place.start;
     this.eyes = place.start.floor + this.settings.walking.eyeHeight;
+  }
+
+  /** Where the viewer stands. */
+  get footing(): Footing {
+    const { x, z, floor } = this.viewpoint;
+    return { x, z, floor };
+  }
+
+  /** Something that moves, such as a door, pushes the viewer to here. */
+  shove(to: Footing) {
+    this.viewpoint = { ...this.viewpoint, ...to };
   }
 
   /** A free look drag began, which catches a coasting view. */

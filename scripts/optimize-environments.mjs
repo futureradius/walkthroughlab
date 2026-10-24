@@ -21,7 +21,7 @@ import { FloatType } from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { MeshoptEncoder } from "meshoptimizer";
 import * as watlas from "watlas";
-import { COLLISION_MESH, readMarks } from "../src/marks.ts";
+import { COLLISION_MESH, normalise, readMarks, swingOf } from "../src/marks.ts";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
@@ -249,11 +249,87 @@ function markEnvironment(document, file) {
       console.warn(`${file}: ${warning}`);
     }
   }
+  // Doors move by themselves; an elevator's are moved by it, which comes with #26.
+  for (const { kind, path, layer } of marks.parts) {
+    if (!kind.startsWith("door-") || path.includes("›")) continue;
+    const door = doorMotion(kind, layer, (text) => {
+      marks.warnings.push(`${path}: ${text}`);
+      console.warn(`${file}: ${path}: ${text}`);
+    });
+    if (door) layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "door", door });
+  }
   scene.setExtras({ ...scene.getExtras(), walkthrough: { start: marks.start, warnings: marks.warnings } });
   const kinds = new Map();
   for (const { kind } of marks.parts) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
   const found = [...kinds].map(([kind, count]) => `${count} ${kind}`).join(", ");
   console.log(`${file}: marks found: ${found || "none"}; ${marks.warnings.length} warnings`);
+}
+
+/** Every corner of every surface under a node, in world space. */
+function cornersUnder(node) {
+  const corners = [];
+  const visit = (each) => {
+    const matrix = each.getWorldMatrix();
+    for (const primitive of each.getMesh()?.listPrimitives() ?? []) {
+      if (primitive.getMode() !== TRIANGLES) continue;
+      const position = primitive.getAttribute("POSITION");
+      for (let i = 0, p = [0, 0, 0]; i < position.getCount(); i++) {
+        position.getElement(i, p);
+        corners.push([0, 1, 2].map((r) => matrix[r] * p[0] + matrix[4 + r] * p[1] + matrix[8 + r] * p[2] + matrix[12 + r]));
+      }
+    }
+    each.listChildren().forEach(visit);
+  };
+  visit(node);
+  return corners;
+}
+
+/**
+ * How a door moves, worked out from its lines and its closed leaves, for the
+ * walkthrough: each leaf's hinge and how far it turns, or how far it slides;
+ * and where the door is, to know when the viewer comes near (#7).
+ */
+function doorMotion(kind, layer, warn) {
+  const named = (from, name) => from.layers.find((inner) => normalise(inner.name) === name);
+  const leaves = kind === "door-sliding" && layer.layers.some((inner) => normalise(inner.name).startsWith("leaf-"))
+    ? layer.layers.filter((inner) => normalise(inner.name).startsWith("leaf-"))
+    : [layer];
+  const parts = [];
+  const all = [];
+  for (const leaf of leaves) {
+    const [line] = leaf.lines;
+    const model = named(leaf, "model");
+    if (!line || !model) return undefined;
+    const corners = cornersUnder(model.node);
+    all.push(...corners);
+    const part = { leaf: leaf === layer ? null : leaf.name };
+    if (kind === "door-hinged") {
+      const pivot = [line[0][0], line[0][2]];
+      // The free edge is the leaf's point furthest from the hinge.
+      let edge = pivot, reach = 0;
+      for (const [x, , z] of corners) {
+        const far = Math.hypot(x - pivot[0], z - pivot[1]);
+        if (far > reach) [edge, reach] = [[x, z], far];
+      }
+      const { angle, halfTurn } = swingOf(pivot, edge, line.slice(1).map(([x, , z]) => [x, z]));
+      if (halfTurn) warn("its line turns it 180°, so which way is unclear; add a corner to say which way.");
+      Object.assign(part, { pivot, angle, reach });
+    } else {
+      const end = line[line.length - 1];
+      part.offset = [end[0] - line[0][0], end[2] - line[0][2]];
+    }
+    parts.push(part);
+  }
+  if (all.length === 0) return undefined;
+  const low = [0, 1, 2].map((k) => Math.min(...all.map((c) => c[k])));
+  const high = [0, 1, 2].map((k) => Math.max(...all.map((c) => c[k])));
+  return {
+    kind: kind === "door-hinged" ? "hinged" : "sliding",
+    parts,
+    centre: [(low[0] + high[0]) / 2, (low[2] + high[2]) / 2],
+    bottom: low[1],
+    top: high[1],
+  };
 }
 
 /**

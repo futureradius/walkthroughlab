@@ -78,7 +78,7 @@ const environment = {
   ...(tuft ? { scatter: (name: string) => TEST_ENVIRONMENT.scatter(`${name}-${tuft}`) } : {}),
   ...(Number.isFinite(atZ) ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180 } } : {}),
 };
-const { steering, faces, sections, warnings, wind, scatters, surfaces } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+const { steering, faces, sections, warnings, wind, scatters, surfaces, doors } = await whileLoading(document.body, downloads, (onProgress, onName) =>
   openEnvironment(environment, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
@@ -122,6 +122,7 @@ renderer.setAnimationLoop((now) => {
 
   const readings = { knob: joystick.knob, keys: keyboard.keys };
   const view = steering.step(readings, seconds, screenSize());
+  doors.update(seconds);
   camera.position.set(view.x, view.y, view.z);
   camera.rotation.y = -view.heading;
   camera.rotation.x = view.pitch;

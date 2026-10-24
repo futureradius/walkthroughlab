@@ -1,5 +1,6 @@
 import type { Scene, WebGLRenderer } from "three";
-import { collisionMesh } from "./collision";
+import { BODY, collisionMesh } from "./collision";
+import { Door, DOOR_DESCRIBED, HINGED_DOOR, SLIDING_DOOR } from "./doors";
 import type { Downloads } from "./download";
 import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type EnvironmentFiles } from "./environment";
 import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
@@ -59,6 +60,8 @@ export interface Opened {
   scatters: Scatter[];
   /** Surfaces that may show relief or shine; `apply` them every frame. */
   surfaces: Surfaces;
+  /** Doors that open by themselves; move them on every frame, after steering. */
+  doors: { update(seconds: number): void };
 }
 
 /**
@@ -152,7 +155,14 @@ export async function openEnvironment(
   scene.background = loaded.skyPicture;
   scene.environment = loaded.skyLight;
   for (const warning of loaded.warnings) console.warn(warning);
-  const { terrain, floorAt } = collisionMesh(loaded.collision);
+  // Doors' walls move, so collision asks them where they stand each time.
+  const hinged = { ...HINGED_DOOR };
+  const sliding = { ...SLIDING_DOOR };
+  const doors = loaded.doors.map(
+    ({ motion, leaves }) => new Door(motion, leaves, motion.kind === "hinged" ? hinged : sliding),
+  );
+  const collision = collisionMesh(loaded.collision, BODY, () => doors.flatMap((door) => door.walls()));
+  const { terrain, floorAt } = collision;
   if (!loaded.start) {
     throw new Error("The environment has no start spot; run `npm run optimize` again.");
   }
@@ -173,6 +183,9 @@ export async function openEnvironment(
     scene.add(scatter.group);
     return { name, scatter };
   });
+  const kinds = new Set(loaded.doors.map(({ motion }) => motion.kind));
+  if (kinds.has("hinged")) sections.push(section("door-hinged", hinged, DOOR_DESCRIBED, true));
+  if (kinds.has("sliding")) sections.push(section("door-sliding", sliding, DOOR_DESCRIBED, true));
   sections.push(
     section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
@@ -190,5 +203,10 @@ export async function openEnvironment(
     wind,
     scatters: scatters.map(({ scatter }) => scatter),
     surfaces,
+    doors: {
+      update: (seconds) => {
+        for (const door of doors) door.update(seconds, collision, steering);
+      },
+    },
   };
 }

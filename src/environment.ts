@@ -24,7 +24,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { Downloads } from "./download";
-import { COLLISION_MESH, type Start } from "./marks";
+import type { DoorMotion, Leaf } from "./doors";
+import { COLLISION_MESH, normalise, type Start } from "./marks";
 import { withReliefAndShine, type Shiny } from "./materials";
 import { readConfig, type Config } from "./settings";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
@@ -74,6 +75,8 @@ export interface Environment {
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
   scatter: { name: string; layer: Object3D }[];
+  /** Each door that moves by itself: how, and its leaves, their collision meshes kept out of `collision`. */
+  doors: { motion: DoorMotion; leaves: Leaf[] }[];
   /** Surfaces that may show relief or shine, and glass, for Surfaces to switch and tune. */
   shiny: Shiny[];
   glass: MeshStandardMaterial[];
@@ -93,6 +96,12 @@ export async function loadConfig(address: string): Promise<Config> {
     console.warn("The config file could not be downloaded, so settings keep their usual values.", error);
     return {};
   }
+}
+
+/** Whether an object sits somewhere under another. */
+function isInside(object: Object3D, ancestor: Object3D): boolean {
+  for (let at = object.parent; at; at = at.parent) if (at === ancestor) return true;
+  return false;
 }
 
 /** Corner positions of every triangle under an object, in world space. */
@@ -329,15 +338,30 @@ export async function loadEnvironment(
   const collisionLayers: Object3D[] = [];
   const lines: Object3D[] = [];
   const scatter: Environment["scatter"] = [];
+  const doorLayers: Object3D[] = [];
   gltf.scene.traverse((object) => {
+    if (object.userData.walkthrough === "door") doorLayers.push(object);
     if (object.userData.walkthrough === "scatter") scatter.push({ name: object.userData.scatter, layer: object });
     if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
     else if (object instanceof Line) lines.push(object);
   });
-  if (collisionLayers.length === 0) {
+  // A door's collision mesh moves with it, so it stays out of the still one.
+  const inDoor = (object: Object3D) => doorLayers.some((door) => door !== object && isInside(object, door));
+  const doors = doorLayers.map((door) => {
+    const motion = door.userData.door as DoorMotion;
+    const child = (of: Object3D, name: string) => of.children.find((inner) => normalise(inner.userData.name ?? "") === name);
+    const leaves = motion.parts.map(({ leaf }) => {
+      const layer = (leaf ? child(door, normalise(leaf)) : door) ?? door;
+      const walls = child(layer, COLLISION_MESH);
+      return { model: child(layer, "model"), walls: walls ? trianglesOf(walls) : new Float32Array() };
+    });
+    return { motion, leaves };
+  });
+  const still = collisionLayers.filter((layer) => !inDoor(layer));
+  if (still.length === 0) {
     throw new Error("The environment has no collision mesh; run `npm run optimize` again.");
   }
-  const collision = Float32Array.from(collisionLayers.flatMap((layer) => Array.from(trianglesOf(layer))));
+  const collision = Float32Array.from(still.flatMap((layer) => Array.from(trianglesOf(layer))));
   // Collision meshes stop the viewpoint unseen, and lines are only marks.
   for (const object of [...collisionLayers, ...lines]) object.removeFromParent();
   const { start, warnings = [] } = gltf.scene.userData.walkthrough ?? {};
@@ -361,6 +385,7 @@ export async function loadEnvironment(
     start,
     warnings,
     scatter,
+    doors,
     shiny,
     glass,
   };

@@ -264,3 +264,28 @@ function checkLine<T>(layer: Layer<T>, kind: Kind, path: string, warn: (path: st
   if (kind === "door-hinged" && !isFlat(line)) warn(path, "its line is not flat; the hinge runs upright through its start.");
   if (kind === "door-sliding" && line.length > 2) warn(path, "its line is a polyline; a sliding door moves along a straight line.");
 }
+
+/** A spot on the floor plan: x and z. */
+export type Spot = readonly [number, number];
+
+/**
+ * How far a hinged door turns, in radians, positive turning from +x towards
+ * +z: from where its free edge is when closed, through each corner of its
+ * line in turn, each step the shorter way (#12). `halfTurn` says a straight
+ * line ends at or near 180°, where the shorter way is unclear.
+ */
+export function swingOf(pivot: Spot, closedEdge: Spot, corners: Spot[]): { angle: number; halfTurn: boolean } {
+  const bearing = (spot: Spot) => Math.atan2(spot[1] - pivot[1], spot[0] - pivot[0]);
+  let from = bearing(closedEdge);
+  let angle = 0;
+  for (const corner of corners) {
+    const to = bearing(corner);
+    let turn = to - from;
+    while (turn > Math.PI) turn -= 2 * Math.PI;
+    while (turn <= -Math.PI) turn += 2 * Math.PI;
+    angle += turn;
+    from = to;
+  }
+  const halfTurn = corners.length === 1 && Math.abs(Math.abs(angle) - Math.PI) < (10 * Math.PI) / 180;
+  return { angle, halfTurn };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headingOf, normalise, readMarks, type Layer, type Point } from "./marks";
+import { headingOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
 
 /** A layer as the export carries it; its node is its own name, to find it again. */
 function layer(name: string, contents: { layers?: Layer<string>[]; lines?: Point[][]; surfaces?: number } = {}): Layer<string> {
@@ -121,5 +121,25 @@ describe("reading marks", () => {
     const marks = readMarks([layer("Walkthrough", { layers: [surfaces("collision mesh"), start(), layer("start", { lines: [flat([0, 0], [0, -1])] })] })]);
     expect(marks.start!.x).toBe(16.62);
     expect(marks.warnings).toEqual(["start: there is more than one start layer; only the first is used."]);
+  });
+});
+
+describe("how far a hinged door turns", () => {
+  it("turns the short way to a straight line, either side", () => {
+    expect(swingOf([0, 0], [1, 0], [[0, 1]]).angle).toBeCloseTo(Math.PI / 2);
+    expect(swingOf([0, 0], [1, 0], [[0, -1]]).angle).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it("turns 135° for the test environment's folding door", () => {
+    // door-hinged-2: hinge at 4.41, 7.88, leaf reaching to 3.40, line to 5.13, 7.17.
+    const { angle } = swingOf([4.41, 7.88], [3.4, 7.83], [[5.13, 7.17]]);
+    expect(Math.abs(angle)).toBeCloseTo((135 * Math.PI) / 180, 1);
+  });
+
+  it("follows a polyline's corners past 180°, and reports a straight line at 180° as unclear", () => {
+    const { angle, halfTurn } = swingOf([0, 0], [1, 0], [[0, 1], [-1, 0], [0, -1]]);
+    expect(angle).toBeCloseTo((3 * Math.PI) / 2);
+    expect(halfTurn).toBe(false);
+    expect(swingOf([0, 0], [1, 0], [[-1, 0.05]]).halfTurn).toBe(true);
   });
 });

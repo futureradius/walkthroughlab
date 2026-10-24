@@ -21,7 +21,7 @@ const SEAM = 1e-6;
 const PUSH_ROUNDS = 3;
 
 /** Nine numbers: the x, y, z of three corners. */
-type Triangle = ArrayLike<number>;
+export type Triangle = ArrayLike<number>;
 type Point = [x: number, y: number, z: number];
 
 export interface CollisionMesh {
@@ -32,6 +32,8 @@ export interface CollisionMesh {
   terrain: Terrain;
   /** Height of the floor at a spot, choosing the level closest to `near`. */
   floorAt(x: number, z: number, near: number): number | undefined;
+  /** Where the body at a footing would have to go to be clear of these walls alone. */
+  clearOf(walls: Triangle[], at: Footing): [x: number, z: number];
 }
 
 function isFloor(t: Triangle): boolean {
@@ -94,10 +96,14 @@ function clip(polygon: Point[], height: number, keepAbove: boolean): Point[] {
   return kept;
 }
 
-/** Build the walking rules for a collision mesh from its triangles. */
+/**
+ * Build the walking rules for a collision mesh from its triangles, and the
+ * walls of things that move, such as doors, as they stand at the moment.
+ */
 export function collisionMesh(
   triangles: ArrayLike<number>,
   body: Body = BODY,
+  moving: () => Triangle[] = () => [],
 ): CollisionMesh {
   const floors: Triangle[] = [];
   const walls: Triangle[] = [];
@@ -152,13 +158,13 @@ export function collisionMesh(
     return best;
   }
 
-  /** Move a spot away from every wall the body would touch at this floor height. */
-  function pushOut(x: number, z: number, floor: number): [x: number, z: number] {
+  /** Move a spot away from every one of these walls the body would touch at this floor height. */
+  function pushOut(x: number, z: number, floor: number, among: Iterable<Triangle>): [x: number, z: number] {
     const low = floor + body.maxStep;
     const high = floor + body.height;
     for (let round = 0; round < PUSH_ROUNDS; round++) {
       let pushed = false;
-      for (const t of walls) {
+      for (const t of among) {
         if (Math.max(t[1], t[4], t[7]) <= low) continue;
         if (Math.min(t[1], t[4], t[7]) >= high) continue;
         if (Math.min(t[0], t[3], t[6]) - x > body.radius) continue;
@@ -187,7 +193,8 @@ export function collisionMesh(
   }
 
   function step(from: Footing, x: number, z: number): Footing | undefined {
-    const [clearX, clearZ] = pushOut(x, z, from.floor);
+    const moved = moving();
+    const [clearX, clearZ] = pushOut(x, z, from.floor, moved.length > 0 ? [...walls, ...moved] : walls);
     const floor = floorUnder(clearX, clearZ, from.floor + body.maxStep);
     if (floor === undefined) return undefined;
     if (floor >= from.floor - body.maxStep) return { x: clearX, z: clearZ, floor };
@@ -198,6 +205,7 @@ export function collisionMesh(
 
   return {
     floorAt,
+    clearOf: (among, at) => pushOut(at.x, at.z, at.floor, among),
     // A refused step is retried along each axis so the viewer slides along
     // an edge instead of sticking to it.
     terrain: (from, x, z) =>
