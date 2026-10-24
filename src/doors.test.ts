@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BODY, collisionMesh } from "./collision";
-import { Door, HINGED_DOOR, type DoorMotion } from "./doors";
+import { Door, type DoorMotion, type DoorSettings } from "./doors";
 import type { Footing } from "./motion";
 
 /** A floor 20 m across at height 0, as two triangles. */
@@ -10,6 +10,9 @@ const FLOOR = [-10, 0, -10, 10, 0, -10, 10, 0, 10, -10, 0, -10, 10, 0, 10, -10, 
 const wall = (x1: number, z1: number, x2: number, z2: number) => [
   x1, 0, z1, x2, 0, z2, x2, 2, z2, x1, 0, z1, x2, 2, z2, x1, 2, z1,
 ];
+
+/** Settings the tests count on, whatever the usual ones are. */
+const SETTINGS: DoorSettings = { seconds: 1.2, near: 1.5, wait: 3 };
 
 /** A door 1 m wide, hinged at the origin, closed along +x, turning a quarter turn towards +z. */
 const MOTION: DoorMotion = {
@@ -22,7 +25,7 @@ const MOTION: DoorMotion = {
 
 /** A door, the collision it lives in, and a viewer it can push. */
 function scene(stand: Footing, still: number[] = []) {
-  const door = new Door(MOTION, [{ model: undefined, walls: Float32Array.from(wall(0, 0, 1, 0)) }], { ...HINGED_DOOR });
+  const door = new Door(MOTION, [{ model: undefined, walls: Float32Array.from(wall(0, 0, 1, 0)) }], { ...SETTINGS });
   const collision = collisionMesh(Float32Array.from([...FLOOR, ...still]), BODY, () => door.walls());
   const viewer = { footing: stand, shove(to: Footing) { this.footing = to; } };
   const run = (seconds: number) => {
@@ -42,12 +45,12 @@ const freeEdge = (door: Door) => {
 describe("a door", () => {
   it("opens as the viewer comes near, and closes once they have been away a while", () => {
     const { door, viewer, run } = scene({ x: 0.5, z: -1.2, floor: 0 });
-    run(HINGED_DOOR.seconds + 0.1);
+    run(SETTINGS.seconds + 0.1);
     const [x, z] = freeEdge(door);
     expect(x).toBeCloseTo(0, 1);
     expect(z).toBeCloseTo(1, 1);
     viewer.footing = { x: 6, z: -6, floor: 0 };
-    run(HINGED_DOOR.wait + HINGED_DOOR.seconds + 0.2);
+    run(SETTINGS.wait + SETTINGS.seconds + 0.2);
     expect(freeEdge(door)[0]).toBeCloseTo(1, 1);
   });
 
@@ -62,7 +65,7 @@ describe("a door", () => {
 
   it("pushes a viewer standing where it swings", () => {
     const { door, viewer, run } = scene({ x: 0.7, z: 0.5, floor: 0 });
-    run(HINGED_DOOR.seconds + 0.1);
+    run(SETTINGS.seconds + 0.1);
     expect(freeEdge(door)[1]).toBeCloseTo(1, 1);
     // The leaf now lies along +z at x = 0, from z = 0 to 1; the viewer was
     // pushed ahead of it, round its swing, and stands clear of it.

@@ -13,8 +13,8 @@ export interface DoorSettings {
   wait: number;
 }
 
-export const HINGED_DOOR: DoorSettings = { seconds: 1.2, near: 1.5, wait: 3 };
-export const SLIDING_DOOR: DoorSettings = { seconds: 1, near: 1.5, wait: 3 };
+export const HINGED_DOOR: DoorSettings = { seconds: 0.7, near: 3.5, wait: 5 };
+export const SLIDING_DOOR: DoorSettings = { seconds: 0.7, near: 3.5, wait: 5 };
 
 export const DOOR_DESCRIBED: Described<DoorSettings> = {
   seconds: number({

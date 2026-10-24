@@ -95,6 +95,11 @@ Movement is done until the finish line (#8).
 
 ## Viewer interaction
 
+- **A warning when a door's swing cuts through a wall**, worked out by
+  optimize from the leaf's sweep and the collision mesh. (#7)
+- **The closed door's baked shadow in an open doorway**: if it gives a door
+  away, leave the door out of the bake or give it a second bake for its open
+  state (ADR 0003). Fine as it is for the finish line. (#7)
 - **Opening a door by tapping it**, as an option beside doors that open by
   themselves as the viewer comes near. (#7)
 
