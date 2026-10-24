@@ -11,6 +11,7 @@ import { ALL_EXTENSIONS, EXTTextureWebP } from "@gltf-transform/extensions";
 import {
   cloneDocument,
   dedup,
+  getBounds,
   join,
   mergeDocuments,
   meshopt,
@@ -477,9 +478,16 @@ async function readProp(io, file) {
   // The walkthrough sways a prop's baked parts by its own settings.
   for (const material of document.getRoot().listMaterials()) material.setExtras({ ...material.getExtras(), prop: name });
   const sways = low[0] <= high[0];
-  const warnings = sways && unpainted
-    ? [`props/${file}: its ${SWAY}… parts have no sway paint, so they sway by how high they are; see docs/props.md to paint them.`]
-    : [];
+  const warnings = [];
+  if (sways && unpainted) {
+    warnings.push(`props/${file}: its ${SWAY}… parts have no sway paint, so they sway by how high they are; see docs/props.md to paint them.`);
+  }
+  // Its origin should be where it stands, so that is where its line puts it.
+  const { min, max } = getBounds(document.getRoot().listScenes()[0]);
+  const away = Math.hypot((min[0] + max[0]) / 2, (min[2] + max[2]) / 2);
+  if (away > Math.max(1, (max[0] - min[0]) / 2, (max[2] - min[2]) / 2)) {
+    warnings.push(`props/${file}: it stands ${away.toFixed(1)} m from its origin, so each copy lands that far from its line; move it so the origin is where it stands.`);
+  }
   for (const warning of warnings) console.warn(warning);
   return { name, file, document, crown: sways ? { low, high } : undefined, warnings };
 }
@@ -773,6 +781,7 @@ function packBakedLight(document) {
   const copies = new Map();
   /** Each part laid out, and the picture its patches are in, to check once all are done. */
   const laidOut = [];
+  let dropped = 0;
   /** The material to use for this one in this picture: itself the first time, a copy after. */
   const materialFor = (material, picture) => {
     let byPicture = copies.get(material);
@@ -796,6 +805,11 @@ function packBakedLight(document) {
       if (!byPicture.has(picture)) byPicture.set(picture, []);
       byPicture.get(picture).push(indices[t], indices[t + 1], indices[t + 2]);
     }
+    // The layout leaves out triangles too small to hold any light, which
+    // are too small to see as well, so they go.
+    dropped += (byPicture.get(-1)?.length ?? 0) / 3;
+    byPicture.delete(-1);
+    if (byPicture.size === 0) node.getMesh().removePrimitive(primitive);
     const source = primitive;
     // Taken before the first half is given its picture's material, which may be a copy.
     const material = source.getMaterial();
@@ -831,6 +845,7 @@ function packBakedLight(document) {
     }
   });
   atlas.delete();
+  if (dropped > 0) console.log(`${dropped} triangles too small to hold baked light were dropped`);
   // A material that named the wrong picture would show another surface's light.
   for (const [part, picture] of laidOut) {
     if (part.getMaterial().getExtras().lightPicture !== picture) {
