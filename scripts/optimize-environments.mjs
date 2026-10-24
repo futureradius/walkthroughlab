@@ -7,13 +7,12 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join as joinPath } from "node:path";
 import { gzipSync } from "node:zlib";
 import { NodeIO } from "@gltf-transform/core";
-import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
+import { ALL_EXTENSIONS, EXTTextureWebP } from "@gltf-transform/extensions";
 import {
   dedup,
   join,
   meshopt,
   prune,
-  textureCompress,
   unwrapPrimitives,
   weld,
 } from "@gltf-transform/functions";
@@ -99,6 +98,25 @@ function simplifyMaterials(document) {
     if (!DROPPED_EXTENSIONS.includes(name)) continue;
     if (!(anyGlass && KEPT_ON_GLASS.includes(name))) extension.dispose();
   }
+}
+
+/**
+ * Every texture as WebP, at most MAX_TEXTURE_SIZE across: a third smaller
+ * than JPEG for the same look, and every phone that matters reads it (#23).
+ * Colour is kept at full resolution rather than WebP's usual half, which
+ * smudged faint green and red blotches into near-grey textures such as a
+ * light tile, and bent the slopes of normal maps, for about 5 % more (#6).
+ */
+async function compressTextures(document) {
+  const textures = document.getRoot().listTextures();
+  for (const texture of textures) {
+    const image = await sharp(texture.getImage(), { limitInputPixels: false })
+      .resize(MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: WEBP_QUALITY, smartSubsample: true })
+      .toBuffer();
+    texture.setImage(image).setMimeType("image/webp").setURI(texture.getURI().replace(/.[^.]+$/, ".webp"));
+  }
+  if (textures.length > 0) document.createExtension(EXTTextureWebP).setRequired(true);
 }
 
 /**
@@ -391,16 +409,9 @@ async function optimizeEnvironment(io, file) {
     // Lines are marks, each saying something of its own, so never merge them:
     // two lines on one layer would become one polyline.
     join({ filter: (node) => !node.getMesh()?.listPrimitives().some((primitive) => primitive.getMode() !== TRIANGLES) }),
-    textureCompress({
-      encoder: sharp,
-      // A third smaller than JPEG for the same look, and every phone that
-      // matters reads it (#23).
-      targetFormat: "webp",
-      quality: WEBP_QUALITY,
-      resize: [MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE],
-    }),
     prune(),
   );
+  await compressTextures(document);
   markEnvironment(document, file);
   // A second set of texture coordinates in which no two surfaces overlap, so
   // `npm run bake` can paint each one's light into a single shared picture.
@@ -459,13 +470,9 @@ async function optimizeScatter(io) {
   await mkdir(SCATTER, { recursive: true });
   for (const file of (await readdir(SCATTER_SOURCE)).filter((name) => name.endsWith(".glb"))) {
     const document = await io.read(joinPath(SCATTER_SOURCE, file));
-    await document.transform(
-      dedup(),
-      weld(),
-      textureCompress({ encoder: sharp, targetFormat: "webp", quality: WEBP_QUALITY, resize: [MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE] }),
-      prune(),
-      meshopt({ encoder: MeshoptEncoder, level: "medium" }),
-    );
+    await document.transform(dedup(), weld(), prune());
+    await compressTextures(document);
+    await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
     await io.write(joinPath(SCATTER, file), document);
     console.log(`scatter/${file}: ${await megabytes(joinPath(SCATTER_SOURCE, file))} -> ${await megabytes(joinPath(SCATTER, file))}`);
   }
