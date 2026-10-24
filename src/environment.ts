@@ -28,6 +28,7 @@ import type { DoorMotion, Leaf } from "./doors";
 import type { ElevatorParts } from "./elevators";
 import { COLLISION_MESH, normalise, type Start } from "./marks";
 import { withReliefAndShine, type Shiny } from "./materials";
+import { propSway, withSway, type PropCopy } from "./props";
 import { readConfig, type Config } from "./settings";
 import { handsOwnLight } from "./sunlit";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
@@ -44,7 +45,7 @@ export const LAYERS = {
   solid: 1,
   /** See GLOSSARY.md. */
   glass: 2,
-  /** Things that sway, such as scatter: drawn, but kept out of ambient occlusion's own work. */
+  /** Things that sway, such as scatter and props' leaves: drawn, but kept out of ambient occlusion's own work. */
   sway: 3,
 } as const;
 
@@ -80,6 +81,8 @@ export interface Environment {
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
   scatter: { name: string; layer: Object3D }[];
+  /** Each prop mark's name, such as "tree", where its copies are, and whether it has parts that sway, drawn there once they arrive. */
+  props: { name: string; copies: PropCopy[]; sways: boolean }[];
   /** Each door that moves by itself: how, and its leaves, their collision meshes kept out of `collision`. */
   doors: { motion: DoorMotion; leaves: Leaf[] }[];
   /** Each elevator: its route, car, doors and buttons, their collision meshes kept out of `collision`. */
@@ -231,6 +234,7 @@ export function prepareSurfaces(
   anisotropy: number,
 ): { shiny: Shiny[]; glass: MeshStandardMaterial[] } {
   const baked = new Map<Material, { plain: Material; rich?: MeshStandardMaterial }>();
+  const swaying = new Map<Material, Material>();
   const glass = new Set<MeshStandardMaterial>();
   const shiny: Shiny[] = [];
   let bakedGlass = 0;
@@ -248,7 +252,11 @@ export function prepareSurfaces(
       if (object.geometry.hasAttribute("uv1")) bakedGlass++;
       return;
     }
-    object.layers.enable(LAYERS.solid);
+    // A prop's part painted to sway, such as a trunk, keeps its baked light
+    // as it moves, which ambient occlusion would leave behind (#28).
+    const sways = object.geometry.hasAttribute("_sway");
+    if (sways) object.geometry.setAttribute("sway", object.geometry.getAttribute("_sway"));
+    object.layers.enable(sways ? LAYERS.sway : LAYERS.solid);
     // Its own baked light picture, which ambient occlusion measures it by.
     handsOwnLight(object);
     // Only surfaces the bake painted carry the second set of coordinates,
@@ -262,6 +270,13 @@ export function prepareSurfaces(
         if (!rich) material.dispose();
         made = { plain: withBakedLight(material, picture), rich };
         baked.set(material, made);
+      }
+      if (sways) {
+        // Plain always: relief and shine would need swaying too.
+        let swayed = swaying.get(made.plain);
+        if (!swayed) swaying.set(made.plain, (swayed = withSway(made.plain.clone(), propSway(material.userData.prop ?? ""))));
+        object.material = swayed;
+        return;
       }
       // Plain until the settings say otherwise; see Surfaces.
       object.material = made.plain;
@@ -367,12 +382,17 @@ export async function loadEnvironment(
   const collisionLayers: Object3D[] = [];
   const lines: Object3D[] = [];
   const scatter: Environment["scatter"] = [];
+  const props: Environment["props"] = [];
   const doorLayers: Object3D[] = [];
   const elevatorLayers: Object3D[] = [];
   gltf.scene.traverse((object) => {
     if (object.userData.walkthrough === "door") doorLayers.push(object);
     if (object.userData.walkthrough === "elevator") elevatorLayers.push(object);
     if (object.userData.walkthrough === "scatter") scatter.push({ name: object.userData.scatter, layer: object });
+    if (object.userData.walkthrough === "prop") {
+      const { prop: name, copies, sways } = object.userData;
+      props.push({ name, copies, sways });
+    }
     if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
     else if (object instanceof Line) lines.push(object);
   });
@@ -426,6 +446,7 @@ export async function loadEnvironment(
     start,
     warnings,
     scatter,
+    props,
     doors,
     elevators,
     shiny,
@@ -433,7 +454,7 @@ export async function loadEnvironment(
   };
 }
 
-/** A small model such as a scatter tuft, downloaded and unpacked. */
+/** A small model such as a scatter tuft or a prop's leaves, downloaded and unpacked. */
 export async function loadModel(address: string, downloads: Downloads): Promise<Object3D> {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   return (await loader.parseAsync(await downloads.get(address), "")).scene;

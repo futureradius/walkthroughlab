@@ -1,5 +1,6 @@
 import {
   BoxGeometry,
+  BufferAttribute,
   CustomBlending,
   Group,
   Layers,
@@ -114,6 +115,22 @@ describe("sorting surfaces", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     prepared([mesh(glassMaterial()), mesh(solidMaterial(), true)]);
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("sways a prop's baked part painted to sway, keeping its baked light, out of ambient occlusion's work", () => {
+    const bakedLight = new Texture();
+    const bark = solidMaterial();
+    bark.userData.prop = "tree";
+    const [trunk, still] = [mesh(bark, true), mesh(bark, true)];
+    trunk.geometry.setAttribute("_sway", new BufferAttribute(new Float32Array(trunk.geometry.getAttribute("position").count), 1));
+    prepared([trunk, still], bakedLight);
+    expect(layersOf(trunk).kinds).toEqual(["sway"]);
+    expect(trunk.geometry.hasAttribute("sway")).toBe(true);
+    expect((trunk.material as MeshBasicMaterial).lightMap).toBe(bakedLight);
+    expect((trunk.material as Material).customProgramCacheKey()).toBe("sway");
+    // The same material without paint stands still, as before.
+    expect(layersOf(still).kinds).toEqual(["solid"]);
+    expect(still.material).not.toBe(trunk.material);
   });
 
   it("converts a material shared by several meshes once", () => {

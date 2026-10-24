@@ -5,6 +5,7 @@ import { buttonUnder, Elevator, ELEVATOR, ELEVATOR_DESCRIBED } from "./elevators
 import type { Downloads } from "./download";
 import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type EnvironmentFiles } from "./environment";
 import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
+import { Crowns, leavesOf, PROP, PROP_DESCRIBED, propSway, STILL_PROP_DESCRIBED } from "./props";
 import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
@@ -18,6 +19,8 @@ export interface EnvironmentAddress {
   config: string;
   /** Where the file a scatter mark copies lies, by the mark's name, such as "grass". */
   scatter: (name: string) => string;
+  /** Where the swaying parts of a prop lie, by its mark's name, such as "tree". */
+  prop: (name: string) => string;
   /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, heading, and near which floor height. */
   at?: { x: number; z: number; heading: number; y?: number };
 }
@@ -34,6 +37,7 @@ export const TEST_ENVIRONMENT: EnvironmentAddress = {
   },
   config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
   scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
+  prop: (name) => `${import.meta.env.BASE_URL}models/props/${name}.glb`,
 };
 
 /** What the environment is opened into. */
@@ -59,6 +63,8 @@ export interface Opened {
   wind: WindSettings;
   /** Copies grown over marked surfaces; `update` each every frame. */
   scatters: Scatter[];
+  /** Props' swaying parts, such as trees' crowns; move them on every frame. */
+  props: { update(seconds: number): void };
   /** Surfaces that may show relief or shine; `apply` them every frame. */
   surfaces: Surfaces;
   /** Doors that open by themselves; move them on every frame, after steering. */
@@ -75,6 +81,7 @@ export interface Opened {
 async function trail(
   environment: EnvironmentAddress,
   scatters: { name: string; scatter: Scatter }[],
+  swaying: { name: string; crowns: Crowns }[],
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
   await occlusion?.ready();
@@ -83,6 +90,13 @@ async function trail(
       scatter.grow(tuftOf(await loadModel(environment.scatter(name), downloads)));
     } catch (error) {
       console.warn(`The ${name} for scatter-${name} could not be grown.`, error);
+    }
+  }
+  for (const { name, crowns } of swaying) {
+    try {
+      crowns.grow(leavesOf(await loadModel(environment.prop(name), downloads)));
+    } catch (error) {
+      console.warn(`The swaying parts of prop-${name} could not be drawn.`, error);
     }
   }
   await loadSharpSky(
@@ -193,6 +207,13 @@ export async function openEnvironment(
     scene.add(scatter.group);
     return { name, scatter };
   });
+  // A prop's settings are there from the start, its swaying parts once they arrive.
+  const props = loaded.props.map(({ name, copies, sways }) => {
+    const settings = { ...PROP };
+    const crowns = sways ? new Crowns(copies, loaded.bakedLight, propSway(name), LAYERS.sway) : undefined;
+    if (crowns) scene.add(crowns.group);
+    return { name, settings, crowns };
+  });
   const kinds = new Set(loaded.doors.map(({ motion }) => motion.kind));
   if (kinds.has("hinged")) sections.push(section("door-hinged", hinged, DOOR_DESCRIBED, true));
   if (kinds.has("sliding") || elevators.length > 0) sections.push(section("door-sliding", sliding, DOOR_DESCRIBED, true));
@@ -201,10 +222,16 @@ export async function openEnvironment(
     section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
     ...scatters.map(({ name, scatter }) => section(`scatter-${name}`, scatter.settings, SCATTER_DESCRIBED, true)),
+    ...props.map(({ name, settings, crowns }) =>
+      crowns
+        ? section(`prop-${name}`, settings, PROP_DESCRIBED, true)
+        : section(`prop-${name}`, settings, STILL_PROP_DESCRIBED, true),
+    ),
   );
   configure(sections, await config);
   surfaces.apply(true);
-  void trail(environment, scatters, { renderer, scene, occlusion, downloads });
+  const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
+  void trail(environment, scatters, swaying, { renderer, scene, occlusion, downloads });
   return {
     steering,
     faces,
@@ -212,6 +239,14 @@ export async function openEnvironment(
     warnings: loaded.warnings,
     wind,
     scatters: scatters.map(({ scatter }) => scatter),
+    props: {
+      update: (seconds) => {
+        for (const { name, settings, crowns } of props) {
+          propSway(name).value = settings.sway;
+          crowns?.update(seconds);
+        }
+      },
+    },
     surfaces,
     doors: {
       update: (seconds) => {

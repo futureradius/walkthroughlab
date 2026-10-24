@@ -25,6 +25,7 @@ const ADDRESS: EnvironmentAddress = {
   },
   config: "config.md",
   scatter: (name) => `${name}.glb`,
+  prop: (name) => `props/${name}.glb`,
 };
 
 /** A square of floor 10 m across around the origin, 2 m up. */
@@ -87,6 +88,7 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     start,
     warnings: [],
     scatter: [],
+    props: [],
     doors: [],
     elevators: [],
     shiny: [],

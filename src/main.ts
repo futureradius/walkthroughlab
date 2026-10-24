@@ -82,7 +82,7 @@ const environment = {
     ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180, y: Number.isFinite(atHeight) ? atHeight : undefined } }
     : {}),
 };
-const { steering, faces, sections, warnings, wind, scatters, surfaces, doors, elevators } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+const { steering, faces, sections, warnings, wind, scatters, props, surfaces, doors, elevators } = await whileLoading(document.body, downloads, (onProgress, onName) =>
   openEnvironment(environment, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
@@ -146,6 +146,7 @@ renderer.setAnimationLoop((now) => {
   faces.update();
   blow(wind, seconds, reducedMotion.matches);
   for (const scatter of scatters) scatter.update(seconds, camera.position);
+  props.update(seconds);
   surfaces.apply(net!.current.shine);
   if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
