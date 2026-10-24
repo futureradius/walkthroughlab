@@ -140,7 +140,6 @@ export interface OcclusionWorkings {
     width: number,
     height: number,
     settings: OcclusionSettings,
-    bakedLight: Texture | null,
   ): Darkening;
 }
 
@@ -348,8 +347,6 @@ const FADE_IN_SECONDS = 1;
 export class AmbientOcclusion {
   readonly settings: OcclusionSettings = { ...OCCLUSION };
 
-  /** The environment's baked light, which tells sunlit surfaces from shaded ones. */
-  bakedLight: Texture | null = null;
   /** Called when a method has arrived, which stalls a frame or two. */
   onArrival: () => void = () => {};
 
@@ -488,7 +485,7 @@ export class AmbientOcclusion {
     camera.layers.set(LAYERS.solid);
     const background = scene.background;
     scene.background = null;
-    const darkening = workings.work(renderer, width, height, settings, this.bakedLight);
+    const darkening = workings.work(renderer, width, height, settings);
     scene.background = background;
     const { uniforms } = this.darken.material as ShaderMaterial;
     if (settings.blur !== "off") {

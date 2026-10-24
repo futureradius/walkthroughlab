@@ -2,7 +2,6 @@ import {
   WebGLRenderTarget,
   type PerspectiveCamera,
   type Scene,
-  type Texture,
   type WebGLRenderer,
 } from "three";
 import { N8AOPass } from "n8ao";
@@ -58,7 +57,6 @@ export class N8 implements OcclusionWorkings {
     width: number,
     height: number,
     settings: OcclusionSettings,
-    bakedLight: Texture | null,
   ) {
     const { scene, pass, enlarged } = this;
     // The pass can only enlarge to twice the size, guided by a picture of
@@ -76,7 +74,7 @@ export class N8 implements OcclusionWorkings {
     pass.configuration.aoSamples = settings.samples;
     pass.configuration.denoiseIterations = settings.smooth ? 2 : 0;
 
-    const depths = this.depths.draw(renderer, scene, this.camera, width * scale, height * scale, bakedLight);
+    const depths = this.depths.draw(renderer, scene, this.camera, width * scale, height * scale);
     pass.render(renderer, enlarged, null, 0, false);
     return {
       occlusion: (this.enlarging ? enlarged : pass.accumulationRenderTarget).texture,

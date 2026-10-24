@@ -1,3 +1,5 @@
+import type { Material, Object3D, Texture } from "three";
+
 /**
  * Sunlit surfaces are let off ambient occlusion, which only dims light from
  * all around, while a surface in the sun gets nearly all its light from one
@@ -44,3 +46,25 @@ export const LET_OFF = /* glsl */ `
     float inSun = smoothstep(sunlit - 0.05, sunlit + 0.05, measured.a);
     return mix(light, 1.0, spare * inSun);
   }`;
+
+/**
+ * The baked light picture of the surface being drawn, for a drawing that
+ * measures brightness: there may be several pictures, so each surface hands
+ * over its own just before it is drawn (#27). See `handsOwnLight`.
+ */
+export const BAKED_LIGHT = { value: null as Texture | null };
+
+/** Mark a drawing, which must be a ShaderMaterial, as one that measures brightness. */
+export function measuring<M extends Material>(material: M): M {
+  material.userData.measuresLight = true;
+  return material;
+}
+
+/** Have a surface hand its own baked light picture to whatever measuring drawing draws it. */
+export function handsOwnLight(mesh: Object3D) {
+  mesh.onBeforeRender = (_renderer, _scene, _camera, _geometry, material) => {
+    if (!material.userData.measuresLight) return;
+    BAKED_LIGHT.value = (mesh.userData.bakedLight as Texture | undefined) ?? null;
+    (material as Material & { uniformsNeedUpdate: boolean }).uniformsNeedUpdate = true;
+  };
+}

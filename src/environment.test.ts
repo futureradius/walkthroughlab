@@ -28,7 +28,7 @@ function prepared(meshes: Mesh[], bakedLight: Texture | null = new Texture()) {
   const model = new Group();
   // The loader nests meshes under the groups of Rhino's layers.
   model.add(new Group().add(...meshes));
-  prepareSurfaces(model, bakedLight ?? undefined, 4);
+  prepareSurfaces(model, bakedLight ? [bakedLight] : [], 4);
   return meshes;
 }
 
@@ -75,6 +75,18 @@ describe("sorting surfaces", () => {
     expect(baked.material).toBeInstanceOf(MeshBasicMaterial);
     expect((baked.material as MeshBasicMaterial).lightMap).toBe(bakedLight);
     expect((baked.material as MeshBasicMaterial).depthWrite).toBe(true);
+  });
+
+  it("gives each surface the baked light picture its material names, and keeps it on the surface for ambient occlusion", () => {
+    const pictures = [new Texture(), new Texture()];
+    const second = solidMaterial();
+    second.userData.lightPicture = 1;
+    const model = new Group().add(mesh(solidMaterial(), true), mesh(second, true));
+    prepareSurfaces(model, pictures, 4);
+    const [first, other] = model.children as Mesh[];
+    expect((first.material as MeshBasicMaterial).lightMap).toBe(pictures[0]);
+    expect((other.material as MeshBasicMaterial).lightMap).toBe(pictures[1]);
+    expect(other.userData.bakedLight).toBe(pictures[1]);
   });
 
   it("leaves a solid surface as it is without baked coordinates or a baked light picture", () => {

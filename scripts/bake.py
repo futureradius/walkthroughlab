@@ -108,9 +108,20 @@ def in_collision_layer(thing):
     return under(thing, COLLISION_MESH)
 
 
-picture = bpy.data.images.new(
-    "BakedLight", int(size), int(size), alpha=False, float_buffer=True
-)
+# One picture for each `lightPicture` that `npm run optimize` noted on the
+# materials: it laid out each surface in the picture its material names.
+pictures = {}
+
+
+def picture_for(material):
+    number = int(material.get("lightPicture", 0))
+    if number not in pictures:
+        pictures[number] = bpy.data.images.new(
+            f"BakedLight{number}", int(size), int(size), alpha=False, float_buffer=True
+        )
+    return pictures[number]
+
+
 targets = []
 painted = set()
 for thing in scene.objects:
@@ -137,7 +148,7 @@ for thing in scene.objects:
             continue
         painted.add(material.name)
         target = material.node_tree.nodes.new("ShaderNodeTexImage")
-        target.image = picture
+        target.image = picture_for(material)
         material.node_tree.nodes.active = target
     targets.append(thing)
 
@@ -158,7 +169,8 @@ bpy.ops.object.bake(
     use_clear=True,
 )
 
-picture.filepath_raw = output
-picture.file_format = "OPEN_EXR"
-picture.save()
-print(f"bake: painted {len(targets)} surfaces into {output}")
+for number, picture in sorted(pictures.items()):
+    picture.filepath_raw = output.replace("{}", str(number))
+    picture.file_format = "OPEN_EXR"
+    picture.save()
+print(f"bake: painted {len(targets)} surfaces into {len(pictures)} pictures")

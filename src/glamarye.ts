@@ -34,7 +34,6 @@ import {
   WebGLRenderTarget,
   type PerspectiveCamera,
   type Scene,
-  type Texture,
   type WebGLRenderer,
 } from "three";
 import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
@@ -197,7 +196,6 @@ export class Glamarye implements OcclusionWorkings {
     width: number,
     height: number,
     settings: OcclusionSettings,
-    bakedLight: Texture | null,
   ) {
     const { scene, output, material } = this;
     if (output.width !== width || output.height !== height) output.setSize(width, height);
@@ -220,7 +218,7 @@ export class Glamarye implements OcclusionWorkings {
     uniforms.shade.value = settings.shade;
     uniforms.shine.value = settings.shine;
 
-    const depths = this.depths.draw(renderer, scene, this.camera, width, height, bakedLight);
+    const depths = this.depths.draw(renderer, scene, this.camera, width, height);
     renderer.setRenderTarget(output);
     this.quad.render(renderer);
     return {

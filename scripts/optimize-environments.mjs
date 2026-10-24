@@ -13,7 +13,6 @@ import {
   join,
   meshopt,
   prune,
-  unwrapPrimitives,
   weld,
 } from "@gltf-transform/functions";
 import sharp from "sharp";
@@ -385,12 +384,134 @@ function bakedPrimitives(document) {
       const material = primitive.getMaterial();
       // Glass shows the sky live, in reflections, instead.
       if (material?.getAlphaMode() === "BLEND") continue;
-      primitives.push(primitive);
+      primitives.push({ primitive, node });
     }
     node.listChildren().forEach(visit);
   };
   for (const scene of document.getRoot().listScenes()) scene.listChildren().forEach(visit);
   return primitives;
+}
+
+/** Width and height of each baked light picture, in pixels: SIZE in scripts/bake.mjs. */
+const PICTURE_SIZE = 2048;
+/** Metres each pixel of baked light covers (#27). */
+const PIXEL = 0.03;
+/** A single surface larger than this, in square metres, such as open ground, gets pixels twice as large (#27). */
+const BIG_SURFACE = 200;
+/** Pixels left between neighbouring patches, which the bake's margin fills, so light never bleeds across. */
+const PADDING = 4;
+
+/** A primitive's corners in world space, and its area in square metres. */
+function worldCorners(primitive, node) {
+  const matrix = node.getWorldMatrix();
+  const position = primitive.getAttribute("POSITION");
+  const corners = new Float32Array(position.getCount() * 3);
+  for (let i = 0, p = [0, 0, 0]; i < position.getCount(); i++) {
+    position.getElement(i, p);
+    for (let r = 0; r < 3; r++) corners[i * 3 + r] = matrix[r] * p[0] + matrix[4 + r] * p[1] + matrix[8 + r] * p[2] + matrix[12 + r];
+  }
+  const index = primitive.getIndices();
+  const count = index ? index.getCount() : position.getCount();
+  const at = (i) => (index ? index.getScalar(i) : i) * 3;
+  let area = 0;
+  for (let t = 0; t + 2 < count; t += 3) {
+    const [a, b, c] = [at(t), at(t + 1), at(t + 2)];
+    const u = [0, 1, 2].map((k) => corners[b + k] - corners[a + k]);
+    const v = [0, 1, 2].map((k) => corners[c + k] - corners[a + k]);
+    area += Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2;
+  }
+  return { corners, area };
+}
+
+/**
+ * Lay out every baked surface in as many baked light pictures as it takes,
+ * each PICTURE_SIZE across, at PIXEL metres a pixel, or twice that on big
+ * surfaces, with PADDING between patches so light never bleeds from one into
+ * the next (#27). A surface's patches may land in different pictures, so it
+ * is split into one primitive per picture, and each material used in more
+ * than one picture is copied, so that a material always says which picture
+ * holds its light: `lightPicture` in its extras, for the bake and the
+ * walkthrough. Returns how many pictures there are.
+ */
+function packBakedLight(document) {
+  const baked = bakedPrimitives(document);
+  if (baked.length === 0) return 0;
+  const atlas = new watlas.Atlas();
+  for (const { primitive, node } of baked) {
+    const { corners, area } = worldCorners(primitive, node);
+    // Smaller in the layout means fewer pixels.
+    if (area > BIG_SURFACE) for (let i = 0; i < corners.length; i++) corners[i] *= 0.5;
+    const index = primitive.getIndices();
+    const declaration = {
+      vertexCount: corners.length / 3,
+      vertexPositionData: corners,
+      vertexPositionStride: 12,
+    };
+    if (index) {
+      declaration.indexCount = index.getCount();
+      declaration.indexData = Uint32Array.from(index.getArray());
+    }
+    atlas.addMesh(declaration);
+  }
+  atlas.generate({}, { resolution: PICTURE_SIZE, texelsPerUnit: 1 / PIXEL, padding: PADDING, bilinear: true });
+  const pictures = atlas.atlasCount;
+  const copies = new Map();
+  /** The material to use for this one in this picture: itself the first time, a copy after. */
+  const materialFor = (material, picture) => {
+    let byPicture = copies.get(material);
+    if (!byPicture) copies.set(material, (byPicture = new Map()));
+    if (!byPicture.has(picture)) {
+      const made = byPicture.size === 0 ? material : material.clone().setName(`${material.getName()} ${picture + 1}`);
+      made.setExtras({ ...made.getExtras(), lightPicture: picture });
+      byPicture.set(picture, made);
+    }
+    return byPicture.get(picture);
+  };
+  baked.forEach(({ primitive, node }, m) => {
+    const laid = atlas.getMesh(m);
+    const vertices = Array.from({ length: laid.vertexCount }, (_, j) => laid.getVertex(j));
+    const indices = new Uint32Array(laid.indexCount);
+    laid.getIndexArray(indices);
+    // Triangles by the picture their patch landed in.
+    const byPicture = new Map();
+    for (let t = 0; t < indices.length; t += 3) {
+      const picture = vertices[indices[t]].atlasIndex;
+      if (!byPicture.has(picture)) byPicture.set(picture, []);
+      byPicture.get(picture).push(indices[t], indices[t + 1], indices[t + 2]);
+    }
+    const source = primitive;
+    const attributes = source.listSemantics().map((semantic) => [semantic, source.getAttribute(semantic)]);
+    const ownCoordinates = attributes.some(([semantic]) => semantic === "TEXCOORD_0");
+    let first = true;
+    for (const [picture, triangles] of byPicture) {
+      // Only the corners this picture's triangles use, renumbered.
+      const used = [...new Set(triangles)];
+      const renumber = new Map(used.map((old, i) => [old, i]));
+      const target = first ? source : source.clone();
+      for (const [semantic, accessor] of attributes) {
+        if (semantic === "TEXCOORD_1") continue;
+        const size = accessor.getElementSize();
+        const array = new (accessor.getArray().constructor)(used.length * size);
+        const element = [];
+        used.forEach((old, i) => array.set(accessor.getElement(vertices[old].xref, element), i * size));
+        target.setAttribute(semantic, document.createAccessor().setType(accessor.getType()).setArray(array).setNormalized(accessor.getNormalized()).setBuffer(accessor.getBuffer()));
+      }
+      const light = new Float32Array(used.length * 2);
+      used.forEach((old, i) => light.set([vertices[old].uv[0] / PICTURE_SIZE, vertices[old].uv[1] / PICTURE_SIZE], i * 2));
+      const lightCoordinates = document.createAccessor().setType("VEC2").setArray(light).setBuffer(attributes[0][1].getBuffer());
+      target.setAttribute("TEXCOORD_1", lightCoordinates);
+      // Coordinates are numbered without gaps: a surface without its own
+      // texture coordinates takes the light's as its first set too, or
+      // Blender reads it as having no light coordinates and skips it.
+      if (!ownCoordinates) target.setAttribute("TEXCOORD_0", lightCoordinates);
+      target.setIndices(document.createAccessor().setType("SCALAR").setArray(Uint32Array.from(triangles, (old) => renumber.get(old))).setBuffer(attributes[0][1].getBuffer()));
+      target.setMaterial(materialFor(source.getMaterial(), picture));
+      if (!first) node.getMesh().addPrimitive(target);
+      first = false;
+    }
+  });
+  atlas.delete();
+  return pictures;
 }
 
 /** Shrink a panorama of linear colour rows by averaging blocks of pixels. */
@@ -529,8 +650,12 @@ async function optimizeEnvironment(io, file) {
   await compressTextures(document);
   markEnvironment(document, file);
   // A second set of texture coordinates in which no two surfaces overlap, so
-  // `npm run bake` can paint each one's light into a single shared picture.
-  unwrapPrimitives(bakedPrimitives(document), { watlas, texcoord: 1, overwrite: true });
+  // `npm run bake` can paint each one's light into the baked light pictures.
+  const pictures = packBakedLight(document);
+  console.log(
+    `${file}: baked light in ${pictures} picture${pictures === 1 ? "" : "s"} of ${PICTURE_SIZE} px, ` +
+      `${PIXEL * 100} cm a pixel, ${PIXEL * 200} cm on surfaces over ${BIG_SURFACE} m²`,
+  );
   // Blender can't read compressed geometry, so the bake gets its own copy.
   await mkdir(BAKE_COPY, { recursive: true });
   await io.write(joinPath(BAKE_COPY, file), document);
@@ -556,12 +681,14 @@ async function reportBudget(environment, sky) {
     for (const path of paths) bytes += await onTheWire(path).catch(() => 0);
     return bytes / 1024 / 1024;
   };
-  const baked = joinPath(MODELS, renamed(environment, "-light.webp"));
+  // Every baked light picture the last bake wrote.
+  const stem = renamed(environment, "-light-");
+  const baked = (await readdir(MODELS)).filter((file) => file.startsWith(stem)).map((file) => joinPath(MODELS, file));
   const opening =
     CODE_ESTIMATE +
     (await megabytes([
       joinPath(MODELS, environment),
-      baked,
+      ...baked,
       joinPath(SKIES, renamed(sky, "-small.jpg")),
       joinPath(SKIES, renamed(sky, "-small.hdr")),
     ]));

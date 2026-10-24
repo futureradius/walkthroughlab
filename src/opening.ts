@@ -30,7 +30,7 @@ export const TEST_ENVIRONMENT: EnvironmentAddress = {
     smallSkyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.hdr`,
     skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
     skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
-    bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light.webp`,
+    bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light-`,
   },
   config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
   scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
@@ -189,7 +189,7 @@ export async function openEnvironment(
   // Copies grow once their file arrives; their settings are there from the start.
   const wind = { ...WIND };
   const scatters = loaded.scatter.map(({ name, layer }) => {
-    const scatter = new Scatter(groundsOf(layer), loaded.bakedLight, LAYERS.sway);
+    const scatter = new Scatter(groundsOf(layer), LAYERS.sway);
     scene.add(scatter.group);
     return { name, scatter };
   });
@@ -204,7 +204,6 @@ export async function openEnvironment(
   );
   configure(sections, await config);
   surfaces.apply(true);
-  if (occlusion) occlusion.bakedLight = loaded.bakedLight ?? null;
   void trail(environment, scatters, { renderer, scene, occlusion, downloads });
   return {
     steering,

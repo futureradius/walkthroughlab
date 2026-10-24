@@ -1,15 +1,15 @@
 import {
   DoubleSide,
+  ShaderMaterial,
   type Material,
   type PerspectiveCamera,
   type Scene,
-  type Texture,
   type WebGLRenderer,
   type WebGLRenderTarget,
 } from "three";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import type { OcclusionSettings, OcclusionWorkings } from "./occlusion";
-import { MEASURE } from "./sunlit";
+import { BAKED_LIGHT, MEASURE, measuring } from "./sunlit";
 
 /** The pass keeps the step that draws each of its stages to itself. */
 interface PassInternals {
@@ -24,7 +24,6 @@ interface PassInternals {
 export class Gtao implements OcclusionWorkings {
   private readonly pass: GTAOPass;
   private readonly internals: PassInternals;
-  private readonly light = { value: null as Texture | null };
   private smooth = true;
 
   constructor(scene: Scene, camera: PerspectiveCamera) {
@@ -38,34 +37,34 @@ export class Gtao implements OcclusionWorkings {
       if (material === this.pass.pdMaterial && !this.smooth) return;
       renderPass(renderer, material, ...rest);
     };
-    // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
-    this.pass.normalMaterial.side = DoubleSide;
-    // The picture of which way surfaces face has a spare channel, which
-    // carries how brightly the baked light falls on each of them.
-    this.pass.normalMaterial.onBeforeCompile = (shader) => {
-      shader.uniforms.bakedLight = this.light;
-      shader.vertexShader = shader.vertexShader.replace(
-        "void main() {",
-        /* glsl */ `
-        ${MEASURE.vertexHead}
+    // The picture of which way surfaces face, as three.js's own draws it,
+    // with its spare channel carrying how brightly the baked light falls on
+    // each surface. A ShaderMaterial, so each surface can hand over its own
+    // baked light picture (#27).
+    this.pass.normalMaterial = measuring(
+      new ShaderMaterial({
+        uniforms: { bakedLight: BAKED_LIGHT },
+        vertexShader: /* glsl */ `
+          ${MEASURE.vertexHead}
+          varying vec3 vNormal;
 
-        void main() {
-          ${MEASURE.vertexMain}`,
-      );
-      shader.fragmentShader =
-        shader.fragmentShader.replace(
-          "void main() {",
-          /* glsl */ `
+          void main() {
+            ${MEASURE.vertexMain}
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`,
+        fragmentShader: /* glsl */ `
           ${MEASURE.fragmentHead}
+          varying vec3 vNormal;
 
-          void facing() {`,
-        ) +
-        /* glsl */ `
-        void main() {
-          facing();
-          gl_FragColor.a = brightness();
-        }`;
-    };
+          void main() {
+            // Rhino doesn't care which way a face points; see \`prepare\` in environment.ts.
+            vec3 normal = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+            gl_FragColor = vec4(normal * 0.5 + 0.5, brightness());
+          }`,
+        side: DoubleSide,
+      }),
+    ) as unknown as typeof this.pass.normalMaterial;
   }
 
   work(
@@ -73,7 +72,6 @@ export class Gtao implements OcclusionWorkings {
     width: number,
     height: number,
     settings: OcclusionSettings,
-    bakedLight: Texture | null,
   ) {
     const { pass } = this;
     if (pass.width !== width || pass.height !== height) pass.setSize(width, height);
@@ -85,7 +83,6 @@ export class Gtao implements OcclusionWorkings {
       samples: settings.samples,
     });
     this.smooth = settings.smooth;
-    this.light.value = bakedLight;
     // The pass reads neither buffer when its output is off.
     pass.render(renderer, null!, null!, 0, false);
     return {

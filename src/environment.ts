@@ -29,6 +29,7 @@ import type { ElevatorParts } from "./elevators";
 import { COLLISION_MESH, normalise, type Start } from "./marks";
 import { withReliefAndShine, type Shiny } from "./materials";
 import { readConfig, type Config } from "./settings";
+import { handsOwnLight } from "./sunlit";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 export const BAKED_LIGHT_RANGE = 4;
 
@@ -55,7 +56,10 @@ export interface EnvironmentFiles {
   smallSkyLight: string;
   skyPicture: string;
   skyLight: string;
-  /** Written by `npm run bake`; without it the sky lights the surfaces live. */
+  /**
+   * Where the baked light pictures `npm run bake` writes begin, numbered on
+   * from 0; without them the sky lights the surfaces live.
+   */
   bakedLight?: string;
 }
 
@@ -68,8 +72,8 @@ export interface Environment {
   skyPicture: Texture;
   /** The sky as the light that falls on the architecture and reflects in it, likewise. */
   skyLight: Texture;
-  /** The baked light picture, if the environment has one. */
-  bakedLight?: Texture;
+  /** The baked light pictures, if the environment has them, in order; each material says which is its. */
+  bakedLight: Texture[];
   /** Where the viewpoint begins, drawn in the model. */
   start?: Start;
   /** What `npm run optimize` found wrong with the marks, for the ?config panel. */
@@ -223,7 +227,7 @@ function couldBeRich(material: MeshStandardMaterial): boolean {
  */
 export function prepareSurfaces(
   model: Object3D,
-  bakedLight: Texture | undefined,
+  bakedLight: Texture[],
   anisotropy: number,
 ): { shiny: Shiny[]; glass: MeshStandardMaterial[] } {
   const baked = new Map<Material, { plain: Material; rich?: MeshStandardMaterial }>();
@@ -245,17 +249,18 @@ export function prepareSurfaces(
       return;
     }
     object.layers.enable(LAYERS.solid);
-    // Only surfaces the bake painted carry the second set of coordinates.
-    if (
-      bakedLight &&
-      material instanceof MeshStandardMaterial &&
-      object.geometry.hasAttribute("uv1")
-    ) {
+    // Its own baked light picture, which ambient occlusion measures it by.
+    handsOwnLight(object);
+    // Only surfaces the bake painted carry the second set of coordinates,
+    // in the picture their material names.
+    const picture = bakedLight[(material.userData.lightPicture as number | undefined) ?? 0];
+    if (picture && material instanceof MeshStandardMaterial && object.geometry.hasAttribute("uv1")) {
+      object.userData.bakedLight = picture;
       let made = baked.get(material);
       if (!made) {
-        const rich = couldBeRich(material) ? withReliefAndShine(material, bakedLight, BAKED_LIGHT_RANGE) : undefined;
+        const rich = couldBeRich(material) ? withReliefAndShine(material, picture, BAKED_LIGHT_RANGE) : undefined;
         if (!rich) material.dispose();
-        made = { plain: withBakedLight(material, bakedLight), rich };
+        made = { plain: withBakedLight(material, picture), rich };
         baked.set(material, made);
       }
       // Plain until the settings say otherwise; see Surfaces.
@@ -327,10 +332,15 @@ export async function loadEnvironment(
   onProgress: (fraction: number | undefined) => void,
 ): Promise<Environment> {
   const sizes = await sizesOf(downloads);
-  const addresses = [files.model, files.smallSkyLight, files.smallSkyPicture, files.bakedLight].filter(
-    (address): address is string => address !== undefined,
-  );
   const base = import.meta.env.BASE_URL;
+  // As many baked light pictures as the list of files holds.
+  const pictures = files.bakedLight
+    ? Object.keys(sizes)
+        .filter((file) => (base + file).startsWith(files.bakedLight!))
+        .sort((a, b) => Number(/(\d+)\.\w+$/.exec(a)?.[1]) - Number(/(\d+)\.\w+$/.exec(b)?.[1]))
+        .map((file) => base + file)
+    : [];
+  const addresses = [files.model, files.smallSkyLight, files.smallSkyPicture, ...pictures];
   const totals = addresses.map((address) => sizes[address.slice(base.length)]);
   const arrived = addresses.map(() => 0);
   const known = totals.every((total) => total > 0);
@@ -340,7 +350,7 @@ export async function loadEnvironment(
     onProgress(known ? Math.min(1, arrived.reduce((sum, part) => sum + part, 0) / whole) : undefined);
   };
   onProgress(known ? 0 : undefined);
-  const [model, light, picture, baked] = await Promise.all(
+  const [model, light, picture, ...baked] = await Promise.all(
     addresses.map((address, index) => downloads.get(address, track(index))),
   );
 
@@ -349,7 +359,7 @@ export async function loadEnvironment(
     loader.parseAsync(model, ""),
     decoded(light, new HDRLoader()),
     decoded(picture, new TextureLoader()),
-    baked ? decoded(baked, new TextureLoader()) : undefined,
+    Promise.all(baked.map((bytes) => decoded(bytes, new TextureLoader()))),
   ]);
 
   // `npm run optimize` read the marks and noted what they say in the file:
@@ -398,12 +408,12 @@ export async function loadEnvironment(
   const { start, warnings = [] } = gltf.scene.userData.walkthrough ?? {};
 
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-  if (bakedLight) {
-    bakedLight.colorSpace = SRGBColorSpace;
+  for (const each of bakedLight) {
+    each.colorSpace = SRGBColorSpace;
     // Laid out like the environment's own textures, top row first.
-    bakedLight.flipY = false;
+    each.flipY = false;
     // The second set of texture coordinates, written by `npm run optimize`.
-    bakedLight.channel = 1;
+    each.channel = 1;
   }
   const { shiny, glass } = prepareSurfaces(gltf.scene, bakedLight, anisotropy);
 

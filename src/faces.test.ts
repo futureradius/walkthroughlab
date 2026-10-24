@@ -8,7 +8,7 @@ function environment() {
   const glass = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x80c0ff, transparent: true }));
   const wall = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xc0b0a0 }));
   const model = new Group().add(glass, wall);
-  prepareSurfaces(model, undefined, 4);
+  prepareSurfaces(model, [], 4);
   return { model, glass: glass.material, wall: wall.material };
 }
 

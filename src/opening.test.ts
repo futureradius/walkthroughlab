@@ -83,7 +83,7 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     collision: FLOOR,
     skyPicture: new Texture(),
     skyLight: new Texture(),
-    bakedLight: new Texture(),
+    bakedLight: [new Texture()],
     start,
     warnings: [],
     scatter: [],
@@ -229,15 +229,14 @@ describe("opening an environment", () => {
     expect(warn).toHaveBeenCalledWith("door-hinged-2: no collision mesh");
   });
 
-  it("puts the environment, its sky and its baked light in place", async () => {
+  it("puts the environment and its sky in place", async () => {
     const loaded = environment();
     vi.mocked(loadEnvironment).mockResolvedValue(loaded);
-    const { scene, occlusion, opening } = open();
+    const { scene, opening } = open();
     await opening;
     expect(scene.children).toContain(loaded.visible);
     expect(scene.background).toBe(loaded.skyPicture);
     expect(scene.environment).toBe(loaded.skyLight);
-    expect(occlusion.bakedLight).toBe(loaded.bakedLight);
   });
 
   it("gives the sections in the panel's order", async () => {

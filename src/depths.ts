@@ -6,10 +6,9 @@ import {
   WebGLRenderTarget,
   type PerspectiveCamera,
   type Scene,
-  type Texture,
   type WebGLRenderer,
 } from "three";
-import { MEASURE } from "./sunlit";
+import { BAKED_LIGHT, MEASURE, measuring } from "./sunlit";
 
 /**
  * Draws how far away each surface is, for whatever works from the depths
@@ -22,10 +21,9 @@ export class Depths {
   readonly target = new WebGLRenderTarget(1, 1, {
     depthTexture: new DepthTexture(1, 1, UnsignedIntType),
   });
-  private readonly light = { value: null as Texture | null };
   /** Drawn in place of every surface. */
-  private readonly material = new ShaderMaterial({
-    uniforms: { bakedLight: this.light },
+  private readonly material = measuring(new ShaderMaterial({
+    uniforms: { bakedLight: BAKED_LIGHT },
     vertexShader: /* glsl */ `
       ${MEASURE.vertexHead}
 
@@ -41,7 +39,7 @@ export class Depths {
       }`,
     // Rhino doesn't care which way a face points; see `prepare` in environment.ts.
     side: DoubleSide,
-  });
+  }));
 
   /** Draw the scene as the camera sees it, at this size. */
   draw(
@@ -50,11 +48,9 @@ export class Depths {
     camera: PerspectiveCamera,
     width: number,
     height: number,
-    bakedLight: Texture | null,
   ): WebGLRenderTarget {
     const { target } = this;
     if (target.width !== width || target.height !== height) target.setSize(width, height);
-    this.light.value = bakedLight;
     const override = scene.overrideMaterial;
     scene.overrideMaterial = this.material;
     renderer.setRenderTarget(target);

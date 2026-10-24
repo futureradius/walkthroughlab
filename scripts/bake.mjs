@@ -4,7 +4,7 @@
 // public/models/ or public/skies/ hold more than one.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join as joinPath, resolve } from "node:path";
 import sharp from "sharp";
 import { FloatType } from "three";
@@ -95,8 +95,10 @@ async function writeLightPicture(from, to) {
 const [environmentName, skyName] = process.argv.slice(2);
 const environment = await pick(MODELS, ".glb", environmentName);
 const sky = await pick(SKIES, ".hdr", skyName);
-const raw = joinPath(WORK, environment.replace(".glb", ".exr"));
-const picture = joinPath(MODELS, environment.replace(".glb", "-light.webp"));
+// One raw picture from Blender, and one light picture, for each of the
+// baked light pictures `npm run optimize` laid the surfaces out in (#27).
+const raw = joinPath(WORK, environment.replace(".glb", "-{}.exr"));
+const lightPicture = (number) => joinPath(MODELS, environment.replace(".glb", `-light-${number}.webp`));
 await mkdir(WORK, { recursive: true });
 if (!existsSync(joinPath(WORK, environment))) {
   throw new Error(`${WORK}/${environment} is missing; run npm run optimize first.`);
@@ -125,15 +127,26 @@ for (const line of blender.stdout?.split(/\r?\n/) ?? []) {
   if (line.startsWith("bake:")) console.log(line);
 }
 if (blender.error) throw blender.error;
-if (blender.status !== 0 || !existsSync(raw)) {
+if (blender.status !== 0 || !existsSync(raw.replace("{}", "0"))) {
   console.error(blender.stdout?.split(/\r?\n/).slice(-30).join("\n"));
   throw new Error("Blender did not finish the bake.");
 }
 
-const clipped = await writeLightPicture(raw, picture);
-const megabytes = ((await stat(picture)).size / 1024 / 1024).toFixed(2);
+// Pictures left from an earlier bake with more of them would be downloaded for nothing.
+const stem = environment.replace(".glb", "-light");
+for (const old of await readdir(MODELS)) if (old.startsWith(stem)) await rm(joinPath(MODELS, old));
+let bytes = 0;
+let clipped = 0;
+let number = 0;
+for (; existsSync(raw.replace("{}", String(number))); number++) {
+  clipped = Math.max(clipped, await writeLightPicture(raw.replace("{}", String(number)), lightPicture(number)));
+  bytes += (await stat(lightPicture(number))).size;
+  await rm(raw.replace("{}", String(number)));
+}
 const minutes = ((Date.now() - started) / 60000).toFixed(1);
-console.log(`${environment} under ${sky}: ${picture}, ${megabytes} MB, baked in ${minutes} min`);
+console.log(
+  `${environment} under ${sky}: ${number} light pictures, ${(bytes / 1024 / 1024).toFixed(2)} MB, baked in ${minutes} min`,
+);
 if (clipped > 0.5) {
-  console.log(`${clipped.toFixed(1)}% of the light was brighter than the picture can hold and was clipped.`);
+  console.log(`${clipped.toFixed(1)}% of the light was brighter than the pictures can hold and was clipped.`);
 }

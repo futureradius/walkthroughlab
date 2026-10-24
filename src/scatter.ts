@@ -177,6 +177,8 @@ export interface Ground {
   /** The surface's texture, if any, and its colour, which the texture is multiplied by. */
   map?: Texture | null;
   colour?: Color;
+  /** The baked light picture the surface's light is in, if it was baked. */
+  light?: Texture;
 }
 
 /** Where each copy stands, how it is turned and sized, and where it falls in the pictures of its ground. */
@@ -272,7 +274,14 @@ export function groundsOf(layer: Object3D): Ground[] {
       colourCorners?.set([own.getX(at), own.getY(at)], i * 2);
     }
     const material = object.material as MeshBasicMaterial;
-    grounds.push({ corners, lightCorners, colourCorners, map: material.map, colour: material.color });
+    grounds.push({
+      corners,
+      lightCorners,
+      colourCorners,
+      map: material.map,
+      colour: material.color,
+      light: object.userData.bakedLight as Texture | undefined,
+    });
   });
   return grounds;
 }
@@ -461,7 +470,6 @@ export class Scatter {
   readonly group = new Group();
 
   private readonly grounds: Ground[];
-  private readonly bakedLight: Texture | undefined;
   private readonly layer: number;
   private tuft?: Tuft;
   private patches: Patch[] = [];
@@ -470,9 +478,8 @@ export class Scatter {
   private reduced = REDUCED[0];
 
   /** `layer` is the camera layer copies are drawn on besides the usual one. */
-  constructor(grounds: Ground[], bakedLight: Texture | undefined, layer: number) {
+  constructor(grounds: Ground[], layer: number) {
     this.grounds = grounds;
-    this.bakedLight = bakedLight;
     this.layer = layer;
   }
 
@@ -525,13 +532,13 @@ export class Scatter {
       vertexColors: tuft.geometry.hasAttribute("color"),
       defines: {
         ...(tuft.map ? { USE_MAP: "" } : {}),
-        ...(this.bakedLight && ground.lightCorners ? { BAKED: "" } : {}),
+        ...(ground.light && ground.lightCorners ? { BAKED: "" } : {}),
         ...(map ? { GROUND_MAP: "" } : {}),
       },
       uniforms: {
         ...windUniforms,
         map: { value: tuft.map },
-        bakedLight: { value: this.bakedLight ?? null },
+        bakedLight: { value: ground.light ?? null },
         lightRange: { value: BAKED_LIGHT_RANGE },
         groundMap: { value: map },
         groundMapTransform: { value: map ? map.matrix : new Matrix3() },
