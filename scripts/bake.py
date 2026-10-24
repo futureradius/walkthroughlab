@@ -95,12 +95,17 @@ print(f"bake: {metal} metal materials baked for their light only")
 scene.cycles.transparent_max_bounces = 32
 
 
-def in_collision_layer(thing):
+def under(thing, mark):
+    """Whether `npm run optimize` noted this mark on the object or a layer above it."""
     while thing is not None:
-        if thing.get("walkthrough") == COLLISION_MESH:
+        if thing.get("walkthrough") == mark:
             return True
         thing = thing.parent
     return False
+
+
+def in_collision_layer(thing):
+    return under(thing, COLLISION_MESH)
 
 
 picture = bpy.data.images.new(
@@ -115,6 +120,13 @@ for thing in scene.objects:
         # Its invisible walls must not cast shadows.
         thing.hide_render = True
         continue
+    if under(thing, "elevator-door"):
+        # An elevator's doors open whenever the viewer sees inside the car,
+        # so light passes them as if open; they are still baked themselves.
+        thing.visible_shadow = False
+        thing.visible_diffuse = False
+        thing.visible_glossy = False
+        thing.visible_transmission = False
     if len(thing.data.uv_layers) < 2:
         continue
     # Paint into the second set of coordinates; textures keep using the first.

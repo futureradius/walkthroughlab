@@ -18,8 +18,8 @@ export interface EnvironmentAddress {
   config: string;
   /** Where the file a scatter mark copies lies, by the mark's name, such as "grass". */
   scatter: (name: string) => string;
-  /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, and heading. */
-  at?: { x: number; z: number; heading: number };
+  /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, heading, and near which floor height. */
+  at?: { x: number; z: number; heading: number; y?: number };
 }
 
 /** The environment the link opens. */
@@ -175,7 +175,9 @@ export async function openEnvironment(
     throw new Error("The environment has no start spot; run `npm run optimize` again.");
   }
   // The start line is drawn near the floor the viewer stands on.
-  const { x, y, z, heading } = environment.at ? { ...environment.at, y: loaded.start.y } : loaded.start;
+  const { x, y, z, heading } = environment.at
+    ? { ...environment.at, y: environment.at.y ?? loaded.start.y }
+    : loaded.start;
   const floor = floorAt(x, z, y);
   if (floor === undefined) {
     throw new Error("The start spot is not over the collision mesh.");
