@@ -95,6 +95,9 @@ Movement is done until the finish line (#8).
 
 ## Viewer interaction
 
+- **Opening a door by tapping it**, as an option beside doors that open by
+  themselves as the viewer comes near. (#7)
+
 - **Trampling grass, dust in the air, and ripples from the viewer.** See
   `docs/research/particles-and-engine-switch.md` for how they could work on
   the current stack. (#11)
