@@ -1,4 +1,4 @@
-import { NeutralToneMapping, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { NeutralToneMapping, PerspectiveCamera, Raycaster, Scene, Vector2, WebGLRenderer } from "three";
 import { addAbout } from "./about";
 import { Downloads } from "./download";
 import { Gestures } from "./gestures";
@@ -9,6 +9,7 @@ import { whileLoading } from "./loading";
 import { openEnvironment, TEST_ENVIRONMENT } from "./opening";
 import { NET_DESCRIBED, SafetyNet } from "./safetynet";
 import { section } from "./settings";
+import { onTap } from "./taps";
 import { addTuning } from "./tuning";
 import { blow } from "./wind";
 
@@ -78,7 +79,7 @@ const environment = {
   ...(tuft ? { scatter: (name: string) => TEST_ENVIRONMENT.scatter(`${name}-${tuft}`) } : {}),
   ...(Number.isFinite(atZ) ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180 } } : {}),
 };
-const { steering, faces, sections, warnings, wind, scatters, surfaces, doors } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+const { steering, faces, sections, warnings, wind, scatters, surfaces, doors, elevators } = await whileLoading(document.body, downloads, (onProgress, onName) =>
   openEnvironment(environment, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
@@ -110,6 +111,13 @@ if (params.has("config")) {
 const joystick = new Joystick(document.body);
 const keyboard = new Keyboard();
 new Gestures(canvas, steering);
+// A tap or click exactly on an elevator's button presses it.
+const raycaster = new Raycaster();
+onTap(canvas, (x, y) => {
+  const { width, height } = canvas.getBoundingClientRect();
+  raycaster.setFromCamera(new Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1), camera);
+  elevators.tap(raycaster);
+});
 let frames = 0;
 let lowest = Infinity;
 let applied = net.current;
@@ -123,6 +131,7 @@ renderer.setAnimationLoop((now) => {
   const readings = { knob: joystick.knob, keys: keyboard.keys };
   const view = steering.step(readings, seconds, screenSize());
   doors.update(seconds);
+  elevators.update(seconds);
   camera.position.set(view.x, view.y, view.z);
   camera.rotation.y = -view.heading;
   camera.rotation.x = view.pitch;

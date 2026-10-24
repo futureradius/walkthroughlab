@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headingOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
+import { buttonOf, headingOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
 
 /** A layer as the export carries it; its node is its own name, to find it again. */
 function layer(name: string, contents: { layers?: Layer<string>[]; lines?: Point[][]; surfaces?: number } = {}): Layer<string> {
@@ -141,5 +141,30 @@ describe("how far a hinged door turns", () => {
     expect(angle).toBeCloseTo((3 * Math.PI) / 2);
     expect(halfTurn).toBe(false);
     expect(swingOf([0, 0], [1, 0], [[-1, 0.05]]).halfTurn).toBe(true);
+  });
+});
+
+describe("elevator buttons", () => {
+  const route: Point[] = [[0, 0, 0], [0, 3.5, 0], [0, 6.5, 0]];
+  const elevator = (...inside: Layer<string>[]) =>
+    layer("elevator-1", {
+      lines: [route],
+      layers: [layer("model", { surfaces: 1, layers: inside.filter(({ name }) => !name.includes("call")) }), surfaces("collision mesh"), ...inside.filter(({ name }) => name.includes("call"))],
+    });
+
+  it("reads call buttons and car buttons by the stop they go to", () => {
+    expect(buttonOf("button-call-2")).toEqual({ call: true, stop: 2 });
+    expect(buttonOf("Button - 3")).toEqual({ call: false, stop: 3 });
+    expect(buttonOf("button-up")).toBeUndefined();
+    const marks = readMarks(model(elevator(surfaces("button-call-1"), surfaces("button-call-3"), surfaces("button-1"), surfaces("button-2"))));
+    expect(marks.warnings).toEqual([]);
+  });
+
+  it("reports a button for a stop the elevator doesn't have, and a button outside an elevator", () => {
+    const marks = readMarks(model(elevator(surfaces("button-4")), surfaces("button-call-1")));
+    expect(marks.warnings).toEqual([
+      "elevator-1 › model › button-4: the elevator has 3 stops, so there is no stop 4.",
+      expect.stringMatching(/^button-call-1: is not a kind of mark.*Buttons belong inside an elevator/),
+    ]);
   });
 });

@@ -69,6 +69,9 @@ export interface Leaf {
   walls: Float32Array;
 }
 
+/** Where a door that is not carried anywhere stays. */
+const STILL = new Matrix4();
+
 /** Starts and stops gently, never jerks. */
 const ease = (share: number) => share * share * (3 - 2 * share);
 /** How far a push may fall short of where it was meant to go and still count, in metres. */
@@ -104,10 +107,21 @@ export class Door {
   private target = 0;
   private awayFor = Infinity;
   private current: Triangle[];
+  /** Whether something else, an elevator, says when the door opens, rather than the viewer coming near. */
+  private readonly told: boolean;
+  /** Where the door has been carried to, as by an elevator's car, from where it was modelled. */
+  private readonly carried: () => Matrix4;
 
-  constructor(motion: DoorMotion, leaves: Leaf[], settings: DoorSettings) {
+  constructor(
+    motion: DoorMotion,
+    leaves: Leaf[],
+    settings: DoorSettings,
+    { told = false, carried = () => STILL }: { told?: boolean; carried?: () => Matrix4 } = {},
+  ) {
     this.motion = motion;
     this.settings = settings;
+    this.told = told;
+    this.carried = carried;
     this.leaves = leaves.map((leaf) => {
       leaf.model?.updateWorldMatrix(true, false);
       const closed: Float32Array[] = [];
@@ -125,6 +139,31 @@ export class Door {
   /** The door's walls as it stands now. */
   walls(): Triangle[] {
     return this.current;
+  }
+
+  /** Open, when told to. */
+  open() {
+    this.target = 1;
+  }
+
+  /** Close, when told to; it goes back open if it meets the viewer. */
+  close() {
+    this.target = 0;
+  }
+
+  /** Whether it is shut and staying shut. */
+  get shut(): boolean {
+    return this.openness === 0 && this.target === 0;
+  }
+
+  /** Whether it has finished opening. */
+  get opened(): boolean {
+    return this.openness === 1;
+  }
+
+  /** Take in where it has been carried to, so its walls are where it is seen. */
+  follow() {
+    this.current = this.wallsAt(this.openness);
   }
 
   /** Whether the viewer is near enough to open it, on the door's own floor. */
@@ -147,8 +186,9 @@ export class Door {
     const walls: Triangle[] = [];
     const turned = new Matrix4();
     const corner = new Vector3();
+    const carried = this.carried();
     this.leaves.forEach(({ closed }, i) => {
-      motionOf(this.motion.parts[i], ease(share), turned);
+      motionOf(this.motion.parts[i], ease(share), turned).premultiply(carried);
       for (const triangle of closed) {
         const moved = new Float32Array(9);
         for (let c = 0; c < 9; c += 3) corner.fromArray(triangle, c).applyMatrix4(turned).toArray(moved, c);
@@ -172,7 +212,9 @@ export class Door {
   /** Move on by one frame: open or close, pushing the viewer, or stop where they can't be pushed. */
   update(seconds: number, collision: CollisionMesh, viewer: { footing: Footing; shove(to: Footing): void }) {
     const at = viewer.footing;
-    if (this.near(at)) {
+    if (this.told) {
+      // Told when to open; a closing door that meets the viewer still goes back open.
+    } else if (this.near(at)) {
       this.target = 1;
       this.awayFor = 0;
     } else {

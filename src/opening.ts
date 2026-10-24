@@ -1,6 +1,7 @@
-import type { Scene, WebGLRenderer } from "three";
+import type { Raycaster, Scene, WebGLRenderer } from "three";
 import { BODY, collisionMesh } from "./collision";
 import { Door, DOOR_DESCRIBED, HINGED_DOOR, SLIDING_DOOR } from "./doors";
+import { buttonUnder, Elevator, ELEVATOR, ELEVATOR_DESCRIBED } from "./elevators";
 import type { Downloads } from "./download";
 import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type EnvironmentFiles } from "./environment";
 import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
@@ -62,6 +63,8 @@ export interface Opened {
   surfaces: Surfaces;
   /** Doors that open by themselves; move them on every frame, after steering. */
   doors: { update(seconds: number): void };
+  /** Elevators: move them on every frame, after steering, and tell them of taps. */
+  elevators: { update(seconds: number): void; tap(raycaster: Raycaster): void };
 }
 
 /**
@@ -161,7 +164,12 @@ export async function openEnvironment(
   const doors = loaded.doors.map(
     ({ motion, leaves }) => new Door(motion, leaves, motion.kind === "hinged" ? hinged : sliding),
   );
-  const collision = collisionMesh(loaded.collision, BODY, () => doors.flatMap((door) => door.walls()));
+  const lifting = { ...ELEVATOR };
+  const elevators = loaded.elevators.map((parts) => new Elevator(parts, lifting, sliding));
+  const collision = collisionMesh(loaded.collision, BODY, () => [
+    ...doors.flatMap((door) => door.walls()),
+    ...elevators.flatMap((elevator) => elevator.triangles()),
+  ]);
   const { terrain, floorAt } = collision;
   if (!loaded.start) {
     throw new Error("The environment has no start spot; run `npm run optimize` again.");
@@ -185,7 +193,8 @@ export async function openEnvironment(
   });
   const kinds = new Set(loaded.doors.map(({ motion }) => motion.kind));
   if (kinds.has("hinged")) sections.push(section("door-hinged", hinged, DOOR_DESCRIBED, true));
-  if (kinds.has("sliding")) sections.push(section("door-sliding", sliding, DOOR_DESCRIBED, true));
+  if (kinds.has("sliding") || elevators.length > 0) sections.push(section("door-sliding", sliding, DOOR_DESCRIBED, true));
+  if (elevators.length > 0) sections.push(section("elevator", lifting, ELEVATOR_DESCRIBED, true));
   sections.push(
     section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
@@ -206,6 +215,17 @@ export async function openEnvironment(
     doors: {
       update: (seconds) => {
         for (const door of doors) door.update(seconds, collision, steering);
+      },
+    },
+    elevators: {
+      update: (seconds) => {
+        for (const elevator of elevators) elevator.update(seconds, collision, steering);
+      },
+      tap: (raycaster) => {
+        for (const elevator of elevators) {
+          const button = buttonUnder(raycaster, scene, elevator.pressable);
+          if (button) elevator.press(button);
+        }
       },
     },
   };

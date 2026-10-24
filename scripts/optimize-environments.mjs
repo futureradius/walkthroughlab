@@ -21,7 +21,7 @@ import { FloatType } from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { MeshoptEncoder } from "meshoptimizer";
 import * as watlas from "watlas";
-import { COLLISION_MESH, normalise, readMarks, swingOf } from "../src/marks.ts";
+import { buttonOf, COLLISION_MESH, normalise, readMarks, swingOf } from "../src/marks.ts";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
@@ -258,6 +258,12 @@ function markEnvironment(document, file) {
     });
     if (door) layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "door", door });
   }
+  for (const { kind, path, layer } of marks.parts) {
+    if (kind === "elevator") markElevator(layer, (text) => {
+      marks.warnings.push(`${path}: ${text}`);
+      console.warn(`${file}: ${path}: ${text}`);
+    });
+  }
   scene.setExtras({ ...scene.getExtras(), walkthrough: { start: marks.start, warnings: marks.warnings } });
   const kinds = new Map();
   for (const { kind } of marks.parts) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
@@ -330,6 +336,39 @@ function doorMotion(kind, layer, warn) {
     bottom: low[1],
     top: high[1],
   };
+}
+
+/**
+ * Note on an elevator what the walkthrough needs to run it (#26): its route,
+ * whose corners and far end are its stops; each floor door's stop, the one
+ * nearest the door's foot; its car doors; and each button's stop.
+ */
+function markElevator(layer, warn) {
+  const [route] = layer.lines;
+  if (!route) return;
+  const extras = (node, more) => node.setExtras({ ...node.getExtras(), ...more });
+  extras(layer.node, { walkthrough: "elevator", elevator: { route } });
+  const model = layer.layers.find((inner) => normalise(inner.name) === "model");
+  for (const inner of [...layer.layers, ...(model?.layers ?? [])]) {
+    const plain = normalise(inner.name);
+    const button = buttonOf(plain);
+    if (button) {
+      extras(inner.node, { walkthrough: "button", button });
+      continue;
+    }
+    if (!plain.startsWith("door-sliding-")) continue;
+    const door = doorMotion("door-sliding", inner, warn);
+    if (!door) continue;
+    if (model?.layers.includes(inner)) {
+      extras(inner.node, { walkthrough: "elevator-door", door, car: true });
+    } else {
+      let stop = 0;
+      route.forEach(([, y], i) => {
+        if (Math.abs(y - door.bottom) < Math.abs(route[stop][1] - door.bottom)) stop = i;
+      });
+      extras(inner.node, { walkthrough: "elevator-door", door, stop: stop + 1 });
+    }
+  }
 }
 
 /**

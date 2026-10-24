@@ -25,6 +25,7 @@ import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { Downloads } from "./download";
 import type { DoorMotion, Leaf } from "./doors";
+import type { ElevatorParts } from "./elevators";
 import { COLLISION_MESH, normalise, type Start } from "./marks";
 import { withReliefAndShine, type Shiny } from "./materials";
 import { readConfig, type Config } from "./settings";
@@ -77,6 +78,8 @@ export interface Environment {
   scatter: { name: string; layer: Object3D }[];
   /** Each door that moves by itself: how, and its leaves, their collision meshes kept out of `collision`. */
   doors: { motion: DoorMotion; leaves: Leaf[] }[];
+  /** Each elevator: its route, car, doors and buttons, their collision meshes kept out of `collision`. */
+  elevators: ElevatorParts[];
   /** Surfaces that may show relief or shine, and glass, for Surfaces to switch and tune. */
   shiny: Shiny[];
   glass: MeshStandardMaterial[];
@@ -96,6 +99,22 @@ export async function loadConfig(address: string): Promise<Config> {
     console.warn("The config file could not be downloaded, so settings keep their usual values.", error);
     return {};
   }
+}
+
+/** The layer of this name directly under another. */
+function childNamed(of: Object3D, name: string): Object3D | undefined {
+  return of.children.find((inner) => normalise(inner.userData.name ?? "") === name);
+}
+
+/** A door's motion, as `npm run optimize` noted it, and its leaves: what is seen of each, and its closed collision mesh. */
+function doorOf(door: Object3D): { motion: DoorMotion; leaves: Leaf[] } {
+  const motion = door.userData.door as DoorMotion;
+  const leaves = motion.parts.map(({ leaf }) => {
+    const layer = (leaf ? childNamed(door, normalise(leaf)) : door) ?? door;
+    const walls = childNamed(layer, COLLISION_MESH);
+    return { model: childNamed(layer, "model"), walls: walls ? trianglesOf(walls) : new Float32Array() };
+  });
+  return { motion, leaves };
 }
 
 /** Whether an object sits somewhere under another. */
@@ -339,25 +358,37 @@ export async function loadEnvironment(
   const lines: Object3D[] = [];
   const scatter: Environment["scatter"] = [];
   const doorLayers: Object3D[] = [];
+  const elevatorLayers: Object3D[] = [];
   gltf.scene.traverse((object) => {
     if (object.userData.walkthrough === "door") doorLayers.push(object);
+    if (object.userData.walkthrough === "elevator") elevatorLayers.push(object);
     if (object.userData.walkthrough === "scatter") scatter.push({ name: object.userData.scatter, layer: object });
     if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
     else if (object instanceof Line) lines.push(object);
   });
   // A door's collision mesh moves with it, so it stays out of the still one.
-  const inDoor = (object: Object3D) => doorLayers.some((door) => door !== object && isInside(object, door));
-  const doors = doorLayers.map((door) => {
-    const motion = door.userData.door as DoorMotion;
-    const child = (of: Object3D, name: string) => of.children.find((inner) => normalise(inner.userData.name ?? "") === name);
-    const leaves = motion.parts.map(({ leaf }) => {
-      const layer = (leaf ? child(door, normalise(leaf)) : door) ?? door;
-      const walls = child(layer, COLLISION_MESH);
-      return { model: child(layer, "model"), walls: walls ? trianglesOf(walls) : new Float32Array() };
+  // Doors' and elevators' collision meshes move with them, so they stay out of the still one.
+  const movers = [...doorLayers, ...elevatorLayers];
+  const moves = (object: Object3D) => movers.some((mover) => mover !== object && isInside(object, mover));
+  const doors = doorLayers.map(doorOf);
+  const elevators = elevatorLayers.map((layer): ElevatorParts => {
+    const model = childNamed(layer, "model");
+    const walls = childNamed(layer, COLLISION_MESH);
+    const doorsIn = (of: Object3D | undefined) =>
+      (of?.children ?? []).filter((inner) => inner.userData.walkthrough === "elevator-door");
+    const buttons: ElevatorParts["buttons"] = [];
+    layer.traverse((object) => {
+      if (object.userData.walkthrough === "button") buttons.push({ object, ...object.userData.button });
     });
-    return { motion, leaves };
+    return {
+      route: layer.userData.elevator.route,
+      car: { model, walls: walls ? trianglesOf(walls) : new Float32Array() },
+      carDoors: doorsIn(model).map(doorOf),
+      floorDoors: doorsIn(layer).map((door) => ({ stop: door.userData.stop as number, ...doorOf(door) })),
+      buttons,
+    };
   });
-  const still = collisionLayers.filter((layer) => !inDoor(layer));
+  const still = collisionLayers.filter((layer) => !moves(layer));
   if (still.length === 0) {
     throw new Error("The environment has no collision mesh; run `npm run optimize` again.");
   }
@@ -386,6 +417,7 @@ export async function loadEnvironment(
     warnings,
     scatter,
     doors,
+    elevators,
     shiny,
     glass,
   };

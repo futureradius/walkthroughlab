@@ -194,6 +194,8 @@ export class Steering {
 
   /** Something that moves, such as a door, pushes the viewer to here. */
   shove(to: Footing) {
+    // Carried up or down, as by an elevator's car, the eyes go along at once.
+    this.eyes += to.floor - this.viewpoint.floor;
     this.viewpoint = { ...this.viewpoint, ...to };
   }
 

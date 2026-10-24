@@ -97,19 +97,34 @@ function clip(polygon: Point[], height: number, keepAbove: boolean): Point[] {
 }
 
 /**
- * Build the walking rules for a collision mesh from its triangles, and the
- * walls of things that move, such as doors, as they stand at the moment.
+ * Build the walking rules for a collision mesh from its triangles, and those
+ * of things that move, such as doors and an elevator's car, as they stand at
+ * the moment: their walls stop the viewer and their floors carry them.
  */
 export function collisionMesh(
   triangles: ArrayLike<number>,
   body: Body = BODY,
   moving: () => Triangle[] = () => [],
 ): CollisionMesh {
-  const floors: Triangle[] = [];
-  const walls: Triangle[] = [];
+  const stillFloors: Triangle[] = [];
+  const stillWalls: Triangle[] = [];
   for (let i = 0; i + 9 <= triangles.length; i += 9) {
     const triangle = Array.prototype.slice.call(triangles, i, i + 9);
-    (isFloor(triangle) ? floors : walls).push(triangle);
+    (isFloor(triangle) ? stillFloors : stillWalls).push(triangle);
+  }
+  let floors = stillFloors;
+  let walls = stillWalls;
+  /** Take in where moving things stand now, before working anything out. */
+  function look() {
+    const moved = moving();
+    if (moved.length === 0) {
+      floors = stillFloors;
+      walls = stillWalls;
+      return;
+    }
+    floors = [...stillFloors];
+    walls = [...stillWalls];
+    for (const triangle of moved) (isFloor(triangle) ? floors : walls).push(triangle);
   }
 
   function floorAt(x: number, z: number, near: number): number | undefined {
@@ -193,8 +208,7 @@ export function collisionMesh(
   }
 
   function step(from: Footing, x: number, z: number): Footing | undefined {
-    const moved = moving();
-    const [clearX, clearZ] = pushOut(x, z, from.floor, moved.length > 0 ? [...walls, ...moved] : walls);
+    const [clearX, clearZ] = pushOut(x, z, from.floor, walls);
     const floor = floorUnder(clearX, clearZ, from.floor + body.maxStep);
     if (floor === undefined) return undefined;
     if (floor >= from.floor - body.maxStep) return { x: clearX, z: clearZ, floor };
@@ -204,13 +218,20 @@ export function collisionMesh(
   }
 
   return {
-    floorAt,
+    floorAt: (x, z, near) => {
+      look();
+      return floorAt(x, z, near);
+    },
     clearOf: (among, at) => pushOut(at.x, at.z, at.floor, among),
     // A refused step is retried along each axis so the viewer slides along
     // an edge instead of sticking to it.
-    terrain: (from, x, z) =>
-      step(from, x, z) ??
-      step(from, x, from.z) ??
-      step(from, from.x, z) ?? { x: from.x, z: from.z, floor: from.floor },
+    terrain: (from, x, z) => {
+      look();
+      return (
+        step(from, x, z) ??
+        step(from, x, from.z) ??
+        step(from, from.x, z) ?? { x: from.x, z: from.z, floor: from.floor }
+      );
+    },
   };
 }

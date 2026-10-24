@@ -170,9 +170,12 @@ function readPart<T>(
 ) {
   const kind = kindOf(layer.name);
   if (!kind) {
-    const hint = normalise(layer.name).startsWith("door")
+    const plain = normalise(layer.name);
+    const hint = plain.startsWith("door")
       ? " A door is door-hinged-… or door-sliding-…."
-      : ` Marks begin with ${KINDS.join(", ")}, "collision mesh" or "start".`;
+      : plain.startsWith("button")
+        ? " Buttons belong inside an elevator: button-call-… beside its floor doors, button-… in its car's model."
+        : ` Marks begin with ${KINDS.join(", ")}, "collision mesh" or "start".`;
     warn(path, `is not a kind of mark, so its things stay still.${hint}`);
     return;
   }
@@ -216,8 +219,13 @@ function checkMoving<T>(
     if (plain === COLLISION_MESH) continue;
     if (plain === MODEL) {
       if (kind === "elevator") {
-        // Car doors sit in the car's model and travel with it.
-        for (const door of inner.layers) readCarDoor(door, `${path} › ${MODEL} › ${door.name}`, marks, warn);
+        // Car doors and buttons sit in the car's model and travel with it.
+        for (const inside of inner.layers) {
+          const where = `${path} › ${MODEL} › ${inside.name}`;
+          const button = buttonOf(inside.name);
+          if (button && !button.call) checkButton(inside, where, layer.lines[0]?.length ?? 0, warn);
+          else readCarDoor(inside, where, marks, warn);
+        }
       }
       continue;
     }
@@ -230,8 +238,28 @@ function checkMoving<T>(
       readPart(inner, `${path} › ${inner.name}`, marks, warn);
       continue;
     }
+    if (kind === "elevator" && buttonOf(inner.name)?.call) {
+      checkButton(inner, `${path} › ${inner.name}`, layer.lines[0]?.length ?? 0, warn);
+      continue;
+    }
     warn(`${path} › ${inner.name}`, "is not read here, so its things stay still.");
   }
+}
+
+/**
+ * An elevator's button layer: `button-call-N` beside its floor doors calls
+ * the car to stop N, `button-N` in its car sends the car there, counting
+ * stops along the route from where it starts (#26).
+ */
+export function buttonOf(name: string): { call: boolean; stop: number } | undefined {
+  const found = /^button-(call-)?(\d+)$/.exec(normalise(name));
+  return found ? { call: found[1] !== undefined, stop: Number(found[2]) } : undefined;
+}
+
+function checkButton<T>(layer: Layer<T>, path: string, stops: number, warn: (path: string, text: string) => void) {
+  const { stop } = buttonOf(layer.name)!;
+  if (layer.surfaces === 0) warn(path, "has nothing on it to press.");
+  if (stop < 1 || stop > stops) warn(path, `the elevator has ${stops} stops, so there is no stop ${stop}.`);
 }
 
 function readCarDoor<T>(
@@ -241,7 +269,7 @@ function readCarDoor<T>(
   warn: (path: string, text: string) => void,
 ) {
   if (kindOf(layer.name)?.kind !== "door-sliding") {
-    warn(path, "inside an elevator's model, only car doors are read: door-sliding-….");
+    warn(path, "inside an elevator's model, only car doors (door-sliding-…) and buttons (button-…) are read.");
     return;
   }
   readPart(layer, path, marks, warn);
