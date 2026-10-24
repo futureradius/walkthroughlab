@@ -401,6 +401,27 @@ const BIG_SURFACE = 200;
 /** Pixels left between neighbouring patches, which the bake's margin fills, so light never bleeds across. */
 const PADDING = 4;
 
+/**
+ * Give every node its own mesh. Optimize merges identical objects to save
+ * download, so two blocks alike share one mesh, placed twice; but each copy
+ * gets light of its own, so each needs its own patch of the baked light
+ * pictures, or the two would paint over each other (#27).
+ */
+function unshareMeshes(document) {
+  const seen = new Set();
+  for (const node of document.getRoot().listNodes()) {
+    const mesh = node.getMesh();
+    if (!mesh) continue;
+    if (!seen.has(mesh)) {
+      seen.add(mesh);
+      continue;
+    }
+    const own = document.createMesh(mesh.getName());
+    for (const primitive of mesh.listPrimitives()) own.addPrimitive(primitive.clone());
+    node.setMesh(own);
+  }
+}
+
 /** A primitive's corners in world space, and its area in square metres. */
 function worldCorners(primitive, node) {
   const matrix = node.getWorldMatrix();
@@ -434,6 +455,7 @@ function worldCorners(primitive, node) {
  * walkthrough. Returns how many pictures there are.
  */
 function packBakedLight(document) {
+  unshareMeshes(document);
   const baked = bakedPrimitives(document);
   if (baked.length === 0) return 0;
   const atlas = new watlas.Atlas();
@@ -456,6 +478,8 @@ function packBakedLight(document) {
   atlas.generate({}, { resolution: PICTURE_SIZE, texelsPerUnit: 1 / PIXEL, padding: PADDING, bilinear: true });
   const pictures = atlas.atlasCount;
   const copies = new Map();
+  /** Each part laid out, and the picture its patches are in, to check once all are done. */
+  const laidOut = [];
   /** The material to use for this one in this picture: itself the first time, a copy after. */
   const materialFor = (material, picture) => {
     let byPicture = copies.get(material);
@@ -480,6 +504,8 @@ function packBakedLight(document) {
       byPicture.get(picture).push(indices[t], indices[t + 1], indices[t + 2]);
     }
     const source = primitive;
+    // Taken before the first half is given its picture's material, which may be a copy.
+    const material = source.getMaterial();
     const attributes = source.listSemantics().map((semantic) => [semantic, source.getAttribute(semantic)]);
     const ownCoordinates = attributes.some(([semantic]) => semantic === "TEXCOORD_0");
     let first = true;
@@ -505,12 +531,19 @@ function packBakedLight(document) {
       // Blender reads it as having no light coordinates and skips it.
       if (!ownCoordinates) target.setAttribute("TEXCOORD_0", lightCoordinates);
       target.setIndices(document.createAccessor().setType("SCALAR").setArray(Uint32Array.from(triangles, (old) => renumber.get(old))).setBuffer(attributes[0][1].getBuffer()));
-      target.setMaterial(materialFor(source.getMaterial(), picture));
+      target.setMaterial(materialFor(material, picture));
       if (!first) node.getMesh().addPrimitive(target);
+      laidOut.push([target, picture]);
       first = false;
     }
   });
   atlas.delete();
+  // A material that named the wrong picture would show another surface's light.
+  for (const [part, picture] of laidOut) {
+    if (part.getMaterial().getExtras().lightPicture !== picture) {
+      throw new Error(`${part.getMaterial().getName()}: names baked light picture ${part.getMaterial().getExtras().lightPicture}, but its patches are in ${picture}.`);
+    }
+  }
   return pictures;
 }
 
