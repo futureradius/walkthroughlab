@@ -132,9 +132,12 @@ renderer.setAnimationLoop((now) => {
   previous = now;
 
   const readings = { knob: joystick.knob, keys: keyboard.keys };
-  const view = steering.step(readings, seconds, screenSize());
+  // Doors and elevators move first, carrying or pushing the viewer, so the
+  // view is worked out from where the car already is this frame: a frame
+  // behind, the car jitters against the eyes as it rides.
   doors.update(seconds);
   elevators.update(seconds);
+  const view = steering.step(readings, seconds, screenSize());
   camera.position.set(view.x, view.y, view.z);
   camera.rotation.y = -view.heading;
   camera.rotation.x = view.pitch;

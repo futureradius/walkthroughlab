@@ -76,6 +76,15 @@ Movement is done until the finish line (#8).
   viewpoint with each step. Suggested while deciding how running works
   (3a1ae8a) and left out of that step on purpose. (#17)
 
+- **Feeling acceleration**: the head, the camera, dips slightly as an
+  elevator speeds up going up and rises slightly as it speeds up going down,
+  and sways sideways in a curve, so a ride is felt as well as seen, for
+  elevators now and later for riding traffic such as metro cars round a
+  bend. Asked for by the author after riding the first elevator. (#26)
+- **Smoother elevator rides**, if any stutter is left after the car moves
+  before the view is worked out (#26): for instance, the viewer standing in
+  the car's own coordinates while riding, as some games do.
+
 ## Movement in place
 
 - **Vertex animation textures for curtains and flags.** A looping animation,
