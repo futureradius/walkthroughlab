@@ -1,5 +1,5 @@
 import type { Material, Mesh, MeshStandardMaterial } from "three";
-import { fixed, number, type Described } from "./settings";
+import { fixed, number, toggle, type Described } from "./settings";
 
 /**
  * How surfaces with relief or shine are shown: each material gets one of four
@@ -9,6 +9,8 @@ import { fixed, number, type Described } from "./settings";
  * where less light reaches than under open sky; both is both.
  */
 export interface MaterialSettings {
+  /** Whether relief and shine are shown at all: off to measure what they cost. */
+  on: boolean;
   /** Roughness below which a surface reflects the sky; metal always does. */
   shineBelow: number;
   /** Strength of reflections, glass's included, as a share of what they would be. */
@@ -17,9 +19,14 @@ export interface MaterialSettings {
   relief: number;
 }
 
-export const MATERIALS: MaterialSettings = { shineBelow: 0.5, reflection: 1, relief: 1 };
+export const MATERIALS: MaterialSettings = { on: true, shineBelow: 0.5, reflection: 1, relief: 1 };
 
 export const MATERIALS_DESCRIBED: Described<MaterialSettings> = {
+  on: toggle({
+    label: "Relief and shine",
+    about: "Off shows every surface plain, as the safety net's no-shine step does, to measure what relief and shine cost.",
+    panelOnly: true,
+  }),
   shineBelow: number({
     label: "Shines below",
     min: 0,
@@ -135,7 +142,8 @@ export class Surfaces {
    * touched.
    */
   apply(shineAllowed: boolean) {
-    const { shineBelow, reflection, relief } = this.settings;
+    const { on, shineBelow, reflection, relief } = this.settings;
+    shineAllowed &&= on;
     shared.shineBelow.value = shineBelow;
     shared.reflection.value = reflection;
     shared.reliefStrength.value = relief;

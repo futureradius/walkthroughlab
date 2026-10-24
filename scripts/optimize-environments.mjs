@@ -101,15 +101,25 @@ function simplifyMaterials(document) {
   }
 }
 
-/** A texture whose every channel varies less than this, out of 255, is taken as one value (#6, #11). */
+/**
+ * A texture is taken as one value when every channel varies less than FLAT
+ * on average, out of 255, and its darkest and lightest pixels lie within
+ * FLAT_RANGE: thin details such as grout lines barely move the average but
+ * stretch the range (#6, #11).
+ */
 const FLAT = 4;
+const FLAT_RANGE = 24;
 /** A material rough everywhere beyond this never shines, so its roughness map is not needed. */
 const ALWAYS_ROUGH = 0.9;
 
 /** Each channel's average and spread in a texture, from 0 to 1. */
 async function channelsOf(texture) {
   const { channels } = await sharp(texture.getImage()).stats();
-  return channels.map(({ mean, stdev, min }) => ({ mean: mean / 255, flat: stdev < FLAT, min: min / 255 }));
+  return channels.map(({ mean, stdev, min, max }) => ({
+    mean: mean / 255,
+    flat: stdev < FLAT && max - min <= FLAT_RANGE,
+    min: min / 255,
+  }));
 }
 
 /**
