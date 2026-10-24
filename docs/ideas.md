@@ -11,6 +11,11 @@ up, it becomes an issue and leaves this log.
   with small moving waves; water that flows or falls is for later. (#11)
 - **Trains and cars as traffic**, and how an author sets them up in Rhino.
   Birds are the only traffic on the finish line. (#11)
+- **Elevators with doors on more than one side**, opening only the car door
+  facing that stop's floor door. On the finish line every car door opens at
+  every stop. (#26)
+- **A shared call button for a bank of elevators**, sending whichever car
+  is nearest. On the finish line each car has its own buttons. (#26)
 - **Windows and shutters as moving parts.** Doors and elevators are the only
   moving parts on the finish line. (#11)
 - **More than one environment behind one link.** One link opens one
