@@ -170,6 +170,14 @@ Measured on the test environment, from smallest change to biggest. (#23)
   returning to a walkthrough left open in another tab; the walkthrough then
   needs reloading. Not yet looked into. (#14)
 
+## Comparing with renders
+
+- **Named views for comparing with a render**: a layer such as `view-1` with
+  one flat line, like the start spot, and a named view of the same spot saved
+  in Rhino, so the walkthrough opened at that view can be set side by side
+  with a render of it. After the finish line; the readiness check's fixed
+  route (#34) uses named views of its own. (#27)
+
 ## Author conveniences
 
 The map keeps these off the finish line: other authors are a principle, not a

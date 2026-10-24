@@ -9,7 +9,8 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "optimize": "node scripts/optimize-environments.mjs",
-    "bake": "node scripts/bake.mjs"
+    "bake": "node scripts/bake.mjs",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {
     "marked": "^18.1.0",
