@@ -108,6 +108,15 @@ def in_collision_layer(thing):
     return under(thing, COLLISION_MESH)
 
 
+def casts_no_shadow(thing):
+    """Whether `npm run optimize` noted this as part of a prop that casts no shadow."""
+    while thing is not None:
+        if thing.get("castsNoShadow"):
+            return True
+        thing = thing.parent
+    return False
+
+
 # One picture for each `lightPicture` that `npm run optimize` noted on the
 # materials: it laid out each surface in the picture its material names.
 pictures = {}
@@ -131,6 +140,15 @@ for thing in scene.objects:
         # Its invisible walls must not cast shadows.
         thing.hide_render = True
         continue
+    if under(thing, "probe") or casts_no_shadow(thing):
+        # A light probe above a prop's crown measures the light there for its
+        # leaves (#28), and must not shade anything itself; nor must a prop
+        # whose config file says it casts no shadow.
+        thing.visible_shadow = False
+    if under(thing, "probe"):
+        thing.visible_diffuse = False
+        thing.visible_glossy = False
+        thing.visible_transmission = False
     if under(thing, "elevator-door"):
         # An elevator's doors open whenever the viewer sees inside the car,
         # so light passes them as if open; they are still baked themselves.

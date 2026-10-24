@@ -2,15 +2,17 @@
 // Rhino exports (.glb) go to public/models/, skies (.exr) to public/skies/.
 // Run with `npm run optimize`, or `npm run optimize -- <environment>` when
 // models-source/ holds more than one Rhino export.
-import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join as joinPath } from "node:path";
 import { gzipSync } from "node:zlib";
-import { NodeIO } from "@gltf-transform/core";
+import { NodeIO, PropertyType } from "@gltf-transform/core";
 import { ALL_EXTENSIONS, EXTTextureWebP } from "@gltf-transform/extensions";
 import {
+  cloneDocument,
   dedup,
   join,
+  mergeDocuments,
   meshopt,
   prune,
   weld,
@@ -21,6 +23,7 @@ import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { MeshoptEncoder } from "meshoptimizer";
 import * as watlas from "watlas";
 import { buttonOf, COLLISION_MESH, normalise, readMarks, swingOf } from "../src/marks.ts";
+import { readConfig } from "../src/settings.ts";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
@@ -30,6 +33,18 @@ const BAKE_COPY = "models-source/baked";
 /** Tufts and the like that scatter marks copy, prepared in Blender, beside the environment. */
 const SCATTER_SOURCE = joinPath(SOURCE, "scatter");
 const SCATTER = joinPath(MODELS, "scatter");
+/** Things prop marks place, prepared in Blender, beside the environment (#28). */
+const PROPS_SOURCE = joinPath(SOURCE, "props");
+/** The parts of each prop that sway, which arrive after the viewer can move. */
+const PROPS = joinPath(MODELS, "props");
+/** A prop's parts whose material's name begins with this sway and are lit live (#28). */
+const SWAY = "sway-";
+/** How far a prop's most swaying part moves in a full gust of a strong wind, as a share of the prop's height. */
+const BEND = 0.06;
+/** Side of the light probe above each crown, in metres at the prop's own size. */
+const PROBE_SIZE = 0.4;
+/** How far above the top of its crown a light probe lies, likewise. */
+const PROBE_ABOVE = 0.2;
 /** Longest side of any texture, in pixels. */
 const MAX_TEXTURE_SIZE = 1024;
 const WEBP_QUALITY = 80;
@@ -84,8 +99,11 @@ function simplifyMaterials(document) {
     }
 
     const [red, green, blue] = material.getBaseColorFactor();
+    // A prop's leaves keep their picture's clear parts cut away.
+    const cutOut = isSwaying(material) && material.getBaseColorTexture() !== null;
+    if (cutOut && material.getAlphaMode() === "OPAQUE") material.setAlphaCutoff(0.5);
     // BLEND is what marks a material as glass from here on.
-    material.setAlphaMode(isGlass ? "BLEND" : "OPAQUE");
+    material.setAlphaMode(isGlass ? "BLEND" : cutOut ? "MASK" : "OPAQUE");
     material.setBaseColorFactor([red, green, blue, 1]);
     // Rhino asks for no mipmaps, which makes distant textures shimmer.
     material.getBaseColorTextureInfo()?.setMinFilter(LINEAR_MIPMAP_LINEAR);
@@ -151,7 +169,7 @@ async function flattenTextures(document, file) {
   for (const material of document.getRoot().listMaterials()) {
     const name = material.getName() || "(unnamed)";
     const colour = material.getBaseColorTexture();
-    if (colour && !material.getAlphaMode().startsWith("BLEND")) {
+    if (colour && material.getAlphaMode() === "OPAQUE") {
       const [r, g, b] = await channelsOf(colour);
       if (r.flat && g.flat && b.flat) {
         const [fr, fg, fb, fa] = material.getBaseColorFactor();
@@ -240,6 +258,11 @@ function markEnvironment(document, file) {
   for (const node of marks.collision) node.setExtras({ ...node.getExtras(), walkthrough: COLLISION_MESH });
   // Scatter grows copies of scatter/<name>.glb over the surfaces on its layer.
   for (const { kind, name, path, layer } of marks.parts) {
+    if (kind === "prop" && !existsSync(joinPath(PROPS_SOURCE, `${name}.glb`))) {
+      const warning = `${path}: there is no ${PROPS_SOURCE}/${name}.glb to place.`;
+      marks.warnings.push(warning);
+      console.warn(`${file}: ${warning}`);
+    }
     if (kind !== "scatter") continue;
     layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "scatter", scatter: name });
     if (!existsSync(joinPath(SCATTER_SOURCE, `${name}.glb`))) {
@@ -268,6 +291,7 @@ function markEnvironment(document, file) {
   for (const { kind } of marks.parts) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
   const found = [...kinds].map(([kind, count]) => `${count} ${kind}`).join(", ");
   console.log(`${file}: marks found: ${found || "none"}; ${marks.warnings.length} warnings`);
+  return marks;
 }
 
 /** Every corner of every surface under a node, in world space. */
@@ -368,6 +392,275 @@ function markElevator(layer, warn) {
       extras(inner.node, { walkthrough: "elevator-door", door, stop: stop + 1 });
     }
   }
+}
+
+/** Whether a material is one of a prop's parts that sway, `sway-…`, which are lit live (#28). */
+const isSwaying = (material) => normalise(material?.getName() ?? "").startsWith(SWAY);
+/** Whether a node of a prop is its collision mesh, which stops the viewpoint unseen. */
+const isCollision = (node) => normalise(node.getName()).startsWith(COLLISION_MESH);
+
+/** Every triangle primitive of a prop, with the node it hangs from and whether it is in a collision mesh. */
+function primitivesOfProp(document) {
+  const found = [];
+  const visit = (node, collision) => {
+    const inCollision = collision || isCollision(node);
+    for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+      if (primitive.getMode() === TRIANGLES) found.push({ primitive, node, collision: inCollision });
+    }
+    node.listChildren().forEach((child) => visit(child, inCollision));
+  };
+  for (const scene of document.getRoot().listScenes()) scene.listChildren().forEach((node) => visit(node, false));
+  return found;
+}
+
+/**
+ * Read a prop prepared in Blender and make it ready to place: its materials
+ * and textures treated as the environment's, and on every part that sways,
+ * how far each corner moves in a full gust of a strong wind, in metres at the
+ * prop's own size, as `_SWAY`. That comes from the sway painted on it, black
+ * still and white the most, or for an unpainted `sway-` part from how high
+ * it is and how far from the upright through the origin; an unpainted part
+ * that is not `sway-` stands still (#28).
+ */
+async function readProp(io, file) {
+  const name = normalise(file.replace(/\.glb$/, ""));
+  const document = await io.read(joinPath(PROPS_SOURCE, file));
+  simplifyMaterials(document);
+  await flattenTextures(document, `props/${file}`);
+  await document.transform(dedup(), weld(), prune());
+  await compressTextures(document);
+  const parts = primitivesOfProp(document).filter(({ collision }) => !collision);
+  const cornersOf = new Map(parts.map(({ primitive, node }) => [primitive, worldCorners(primitive, node).corners]));
+  let height = 0.01;
+  let reach = 0.01;
+  const low = [Infinity, Infinity, Infinity];
+  const high = [-Infinity, -Infinity, -Infinity];
+  for (const { primitive } of parts) {
+    const corners = cornersOf.get(primitive);
+    const swaying = isSwaying(primitive.getMaterial());
+    for (let i = 0; i < corners.length; i += 3) {
+      height = Math.max(height, corners[i + 1]);
+      if (!swaying) continue;
+      reach = Math.max(reach, Math.hypot(corners[i], corners[i + 2]));
+      for (let k = 0; k < 3; k++) {
+        low[k] = Math.min(low[k], corners[i + k]);
+        high[k] = Math.max(high[k], corners[i + k]);
+      }
+    }
+  }
+  let unpainted = false;
+  const buffer = document.getRoot().listBuffers()[0];
+  for (const { primitive } of parts) {
+    const paint = primitive.getAttribute("COLOR_0");
+    const swaying = isSwaying(primitive.getMaterial());
+    if (!paint && !swaying) continue;
+    unpainted ||= !paint;
+    const corners = cornersOf.get(primitive);
+    const moves = new Float32Array(corners.length / 3);
+    for (let i = 0, colour = []; i < moves.length; i++) {
+      let share;
+      if (paint) {
+        paint.getElement(i, colour);
+        share = (colour[0] + colour[1] + colour[2]) / 3;
+      } else {
+        const up = Math.max(0, Math.min(1, corners[i * 3 + 1] / height));
+        const out = Math.min(1, Math.hypot(corners[i * 3], corners[i * 3 + 2]) / reach);
+        share = up * (0.5 + 0.5 * out);
+      }
+      moves[i] = share * BEND * height;
+    }
+    // Paint says how a part moves, never what colour it is.
+    primitive.setAttribute("COLOR_0", null);
+    primitive.setAttribute("_SWAY", document.createAccessor().setType("SCALAR").setArray(moves).setBuffer(buffer));
+  }
+  await document.transform(prune({ keepAttributes: true }));
+  // The walkthrough sways a prop's baked parts by its own settings.
+  for (const material of document.getRoot().listMaterials()) material.setExtras({ ...material.getExtras(), prop: name });
+  const sways = low[0] <= high[0];
+  const warnings = sways && unpainted
+    ? [`props/${file}: its ${SWAY}… parts have no sway paint, so they sway by how high they are; see docs/props.md to paint them.`]
+    : [];
+  for (const warning of warnings) console.warn(warning);
+  return { name, file, document, crown: sways ? { low, high } : undefined, warnings };
+}
+
+/** Every prop in models-source/props/, by the name its marks use. */
+async function readProps(io) {
+  const props = new Map();
+  if (!existsSync(PROPS_SOURCE)) return props;
+  for (const file of (await readdir(PROPS_SOURCE)).filter((name) => name.endsWith(".glb"))) {
+    const prop = await readProp(io, file);
+    props.set(prop.name, prop);
+  }
+  return props;
+}
+
+/**
+ * A copy of a prop's node and everything under it, holding only the
+ * primitives `keep` picks, given whether they are in a collision mesh; a
+ * collision mesh is noted as one. Null if nothing is left.
+ */
+function copyOf(document, node, keep, collision = false) {
+  const inCollision = collision || isCollision(node);
+  const copy = document
+    .createNode(node.getName())
+    .setTranslation(node.getTranslation())
+    .setRotation(node.getRotation())
+    .setScale(node.getScale());
+  if (inCollision && !collision) copy.setExtras({ walkthrough: COLLISION_MESH });
+  const kept = (node.getMesh()?.listPrimitives() ?? []).filter(
+    (primitive) => primitive.getMode() === TRIANGLES && keep(primitive, inCollision),
+  );
+  if (kept.length > 0) {
+    // Each copy's own primitives, as each gets its own patch of baked light.
+    const mesh = document.createMesh(node.getMesh().getName());
+    for (const primitive of kept) mesh.addPrimitive(primitive.clone());
+    copy.setMesh(mesh);
+  }
+  for (const child of node.listChildren()) {
+    const inner = copyOf(document, child, keep, inCollision);
+    if (inner) copy.addChild(inner);
+  }
+  if (copy.getMesh() || copy.listChildren().length > 0) return copy;
+  copy.dispose();
+  return null;
+}
+
+/** What of a prop the environment holds: everything but its swaying parts. */
+const stillPart = (primitive, collision) => collision || !isSwaying(primitive.getMaterial());
+/** Its crown: the swaying parts, which the bake needs only for their shadow. */
+const crownPart = (primitive, collision) => !collision && isSwaying(primitive.getMaterial());
+
+function disposeTree(node) {
+  for (const child of node.listChildren()) disposeTree(child);
+  node.dispose();
+}
+
+/** A small square facing up at a spot, which the bake lights like any surface and viewers never see. */
+function probeAt(document, material, [x, y, z]) {
+  const h = PROBE_SIZE / 2;
+  const buffer = document.getRoot().listBuffers()[0];
+  const accessor = (type, array) => document.createAccessor().setType(type).setArray(array).setBuffer(buffer);
+  const primitive = document
+    .createPrimitive()
+    .setAttribute("POSITION", accessor("VEC3", new Float32Array([x - h, y, z - h, x - h, y, z + h, x + h, y, z - h, x + h, y, z + h])))
+    .setAttribute("NORMAL", accessor("VEC3", new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0])))
+    .setIndices(accessor("SCALAR", new Uint32Array([0, 1, 2, 2, 1, 3])))
+    .setMaterial(material);
+  return document
+    .createNode("light probe")
+    .setMesh(document.createMesh("light probe").addPrimitive(primitive))
+    .setExtras({ walkthrough: "probe" });
+}
+
+/** Keep everything in one buffer, as a .glb holds only one; merging brings the prop's along. */
+function oneBuffer(document) {
+  const [first, ...rest] = document.getRoot().listBuffers();
+  for (const accessor of document.getRoot().listAccessors()) accessor.setBuffer(first);
+  for (const buffer of rest) buffer.dispose();
+}
+
+/** Throw away meshes, materials and textures nothing uses any more, keeping every layer and attribute. */
+const tidy = () =>
+  prune({
+    propertyTypes: [PropertyType.MESH, PropertyType.PRIMITIVE, PropertyType.ACCESSOR, PropertyType.MATERIAL, PropertyType.TEXTURE],
+    keepAttributes: true,
+  });
+
+/**
+ * Place a copy of its prop at every line of each prop mark (#28), under the
+ * mark's layer: its still parts, to be baked like the environment, and its
+ * collision mesh. A prop with parts that sway gets a light probe above its
+ * crown, which the bake lights and its leaves take their light from. A prop
+ * whose config file section says `shadow: no` is noted for the bake to cast
+ * no shadow.
+ */
+function placeProps(document, marks, props, config) {
+  const placed = [];
+  let probeMaterial;
+  for (const { kind, name, layer, copies } of marks.parts) {
+    const prop = props.get(name);
+    if (kind !== "prop" || !prop || copies.length === 0) continue;
+    marks.warnings.push(...prop.warnings);
+    const shadow = config[`prop-${name}`]?.shadow !== false;
+    const merged = mergeDocuments(document, prop.document);
+    oneBuffer(document);
+    // The prop's scene came along; its nodes are what each copy is made from.
+    const scene = merged.get(prop.document.getRoot().listScenes()[0]);
+    const templates = scene.listChildren();
+    for (const template of templates) scene.removeChild(template);
+    scene.dispose();
+    probeMaterial ??= document.createMaterial("light probe").setRoughnessFactor(1).setMetallicFactor(0);
+    const placing = copies.map(({ at, turn, size }, i) => {
+      const node = document
+        .createNode(`${name} ${i + 1}`)
+        .setTranslation([...at])
+        .setRotation([0, Math.sin(turn / 2), 0, Math.cos(turn / 2)])
+        .setScale([size, size, size]);
+      if (!shadow) node.setExtras({ castsNoShadow: true });
+      for (const template of templates) {
+        const part = copyOf(document, template, stillPart);
+        if (part) node.addChild(part);
+      }
+      let probe;
+      if (prop.crown) {
+        const { low, high } = prop.crown;
+        probe = probeAt(document, probeMaterial, [(low[0] + high[0]) / 2, high[1] + PROBE_ABOVE, (low[2] + high[2]) / 2]);
+        node.addChild(probe);
+      }
+      layer.node.addChild(node);
+      return { node, probe, note: { at, turn, size } };
+    });
+    placed.push({ prop, layer, shadow, templates, placing });
+  }
+  noteProps(placed);
+  return placed;
+}
+
+/**
+ * Note on each prop mark's layer where its copies are, for the walkthrough,
+ * which draws the swaying parts there; once the baked light is laid out, also
+ * where each copy's light probe lies in it.
+ */
+function noteProps(placed) {
+  for (const { prop, layer, placing } of placed) {
+    for (const { probe, note } of placing) {
+      const [primitive] = probe?.getMesh().listPrimitives() ?? [];
+      const light = primitive?.getAttribute("TEXCOORD_1");
+      if (!light) continue;
+      const spot = [0, 0];
+      for (let i = 0, uv = []; i < light.getCount(); i++) {
+        light.getElement(i, uv);
+        spot[0] += uv[0] / light.getCount();
+        spot[1] += uv[1] / light.getCount();
+      }
+      note.probe = { picture: primitive.getMaterial().getExtras().lightPicture ?? 0, spot };
+    }
+    layer.node.setExtras({
+      ...layer.node.getExtras(),
+      walkthrough: "prop",
+      prop: prop.name,
+      sways: prop.crown !== undefined,
+      copies: placing.map(({ note }) => note),
+    });
+  }
+}
+
+/** Give the bake each copy's crown, which casts its still shadow, unless its prop casts none. */
+function addCrowns(document, placed) {
+  const crowns = [];
+  for (const { shadow, templates, placing } of placed) {
+    if (!shadow) continue;
+    for (const { node } of placing) {
+      for (const template of templates) {
+        const crown = copyOf(document, template, crownPart);
+        if (!crown) continue;
+        node.addChild(crown);
+        crowns.push(crown);
+      }
+    }
+  }
+  return crowns;
 }
 
 /**
@@ -665,7 +958,7 @@ const megabytes = async (path) =>
   `${((await stat(path)).size / 1024 / 1024).toFixed(2)} MB`;
 const renamed = (file, extension) => file.replace(/\.[^.]+$/, extension);
 
-async function optimizeEnvironment(io, file) {
+async function optimizeEnvironment(io, file, props) {
   const from = joinPath(SOURCE, file);
   const to = joinPath(MODELS, file);
   const document = await io.read(from);
@@ -681,17 +974,30 @@ async function optimizeEnvironment(io, file) {
     prune(),
   );
   await compressTextures(document);
-  markEnvironment(document, file);
+  const marks = markEnvironment(document, file);
+  const configFile = joinPath(MODELS, renamed(file, "-config.md"));
+  const config = existsSync(configFile) ? readConfig(await readFile(configFile, "utf8")) : {};
+  const placed = placeProps(document, marks, props, config);
+  await document.transform(tidy());
   // A second set of texture coordinates in which no two surfaces overlap, so
   // `npm run bake` can paint each one's light into the baked light pictures.
   const pictures = packBakedLight(document);
+  noteProps(placed);
   console.log(
     `${file}: baked light in ${pictures} picture${pictures === 1 ? "" : "s"} of ${PICTURE_SIZE} px, ` +
       `${PIXEL * 100} cm a pixel, ${PIXEL * 200} cm on surfaces over ${BIG_SURFACE} m²`,
   );
   // Blender can't read compressed geometry, so the bake gets its own copy.
   await mkdir(BAKE_COPY, { recursive: true });
+  const crowns = addCrowns(document, placed);
   await io.write(joinPath(BAKE_COPY, file), document);
+  // Crowns arrive after the viewer can move, from props/, and probes are never seen.
+  for (const node of crowns) disposeTree(node);
+  for (const { templates, placing } of placed) {
+    for (const template of templates) disposeTree(template);
+    for (const { probe } of placing) if (probe) disposeTree(probe);
+  }
+  await document.transform(tidy());
   // Geometry stored compressed, a few times smaller (#23).
   await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
   await io.write(to, document);
@@ -725,7 +1031,9 @@ async function reportBudget(environment, sky) {
       joinPath(SKIES, renamed(sky, "-small.jpg")),
       joinPath(SKIES, renamed(sky, "-small.hdr")),
     ]));
-  const scattered = existsSync(SCATTER) ? (await readdir(SCATTER)).map((file) => joinPath(SCATTER, file)) : [];
+  const scattered = [SCATTER, PROPS].flatMap((folder) =>
+    existsSync(folder) ? readdirSync(folder).map((file) => joinPath(folder, file)) : [],
+  );
   const whole =
     opening +
     (await megabytes([joinPath(SKIES, renamed(sky, ".jpg")), joinPath(SKIES, renamed(sky, ".hdr")), ...scattered]));
@@ -751,6 +1059,30 @@ async function optimizeScatter(io) {
     await io.write(joinPath(SCATTER, file), document);
     console.log(`scatter/${file}: ${await megabytes(joinPath(SCATTER_SOURCE, file))} -> ${await megabytes(joinPath(SCATTER, file))}`);
   }
+}
+
+/**
+ * The parts of each prop that sway, which the walkthrough downloads after the
+ * viewer can move and draws at every copy, compressed like the environment
+ * (#28). A prop without them has no file here: all of it is in the environment.
+ */
+async function writeProps(io, props) {
+  await mkdir(PROPS, { recursive: true });
+  const written = new Set();
+  for (const prop of props.values()) {
+    if (!prop.crown) continue;
+    const document = cloneDocument(prop.document);
+    for (const { primitive, node, collision } of primitivesOfProp(document)) {
+      if (collision || !isSwaying(primitive.getMaterial())) node.getMesh().removePrimitive(primitive);
+    }
+    await document.transform(prune({ keepAttributes: true }), meshopt({ encoder: MeshoptEncoder, level: "medium" }));
+    const to = joinPath(PROPS, `${prop.name}.glb`);
+    await io.write(to, document);
+    written.add(`${prop.name}.glb`);
+    console.log(`props/${prop.file}: swaying parts ${await megabytes(to)}`);
+  }
+  // Left from props that are gone or no longer sway, they would be downloaded for nothing.
+  for (const old of await readdir(PROPS)) if (!written.has(old)) await rm(joinPath(PROPS, old));
 }
 
 async function optimizeSky(file) {
@@ -792,7 +1124,9 @@ if (environments.length > 1) {
 if (environments.length + skies.length === 0) {
   console.log(`No .glb or .exr files in ${SOURCE}/`);
 }
-for (const file of environments) await optimizeEnvironment(io, file);
+const props = await readProps(io);
+for (const file of environments) await optimizeEnvironment(io, file, props);
 for (const file of skies) await optimizeSky(file);
 await optimizeScatter(io);
+await writeProps(io, props);
 if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0]);

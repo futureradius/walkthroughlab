@@ -37,6 +37,18 @@ export interface Part<T> {
   /** How messages name it, such as `elevator-1 › door-sliding-2`. */
   path: string;
   layer: Layer<T>;
+  /** For a prop, each copy its lines place. */
+  copies?: Copy[];
+}
+
+/** Where one copy of a prop stands, which way it faces, and how large it is, from its line (#28). */
+export interface Copy {
+  /** Where the prop's origin goes: the start of the line. */
+  at: Point;
+  /** Radians the prop is turned about the upright, from facing +z, its front in Blender, towards +x. */
+  turn: number;
+  /** Its size as a share of its own: the line's length in metres. */
+  size: number;
 }
 
 /** Everything the marks of one model say. */
@@ -183,6 +195,10 @@ function readPart<T>(
     warn(path, `has no name after its kind; call it ${kind.kind}-1. Its things stay still until then.`);
     return;
   }
+  if (kind.kind === "prop") {
+    marks.parts.push({ kind: kind.kind, name: kind.name, path, layer, copies: copiesOf(layer, path, warn) });
+    return;
+  }
   marks.parts.push({ kind: kind.kind, name: kind.name, path, layer });
   if (MOVING.includes(kind.kind)) checkMoving(layer, kind.kind, path, marks, warn);
 }
@@ -273,6 +289,38 @@ function readCarDoor<T>(
     return;
   }
   readPart(layer, path, marks, warn);
+}
+
+/**
+ * One copy of a prop for each line on its layer: from where it stands, the
+ * way its front faces, as long in metres as its size, 1 m for its own (#28).
+ */
+export function copiesOf<T>(layer: Layer<T>, path: string, warn: (path: string, text: string) => void): Copy[] {
+  const what = "one horizontal line per copy, from where it stands the way its front faces, 1 m long for its own size";
+  if (layer.lines.length === 0) warn(path, `has no line; draw ${what}. Nothing is placed until then.`);
+  if (layer.surfaces > 0) warn(path, "only its lines are read; the things drawn on it are shown as they are, not as the prop.");
+  const copies: Copy[] = [];
+  let sloped = 0, polylines = 0, empty = 0;
+  for (const line of layer.lines) {
+    if (line.length > 2) polylines++;
+    const [from, to] = line;
+    if (!to) {
+      empty++;
+      continue;
+    }
+    if (!isFlat([from, to])) sloped++;
+    const [dx, dz] = [to[0] - from[0], to[2] - from[2]];
+    const size = Math.hypot(dx, dz);
+    if (size < FLAT) {
+      empty++;
+      continue;
+    }
+    copies.push({ at: from, turn: Math.atan2(dx, dz), size });
+  }
+  if (sloped > 0) warn(path, `${sloped} of its lines are not horizontal; only their length and direction across the floor count.`);
+  if (polylines > 0) warn(path, `${polylines} of its lines are polylines; only their first stretch is used.`);
+  if (empty > 0) warn(path, `${empty} of its lines have no length across the floor, so they place nothing.`);
+  return copies;
 }
 
 /** The line that says how a door or elevator moves. */

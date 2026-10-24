@@ -9,3 +9,11 @@ An author tells the walkthrough what things are (the collision mesh, the start s
 - Every drawn mark is a line or polyline: points, arcs and smooth curves do not survive export, and hidden objects and turned-off layers are not exported.
 - The optimize step must keep the things on a marked layer apart instead of merging them, since each line or object there can mean one copy, one source or one cloth.
 - Numbers and yes-or-no choices never go in a name; they sit in the config file under a heading that repeats the mark.
+
+## Amended 2026-10-24: props
+
+Props are prepared in Blender, not Rhino, so what a prop's parts are is said in its own file (#28):
+
+- **`sway-…` materials** mark the parts of a prop that sway, such as `sway-leaves`: the second material-name mark beside `water`, because which parts of a tree sway is a matter of its surfaces, and Blender has no Walkthrough layer. The word after `sway-` is only a name with no settings of its own, so `## sway-…` headings in the config file stay with the Rhino `sway-` layers of curtains and flags (#31). How much each part sways is painted as vertex colour.
+- **A `collision mesh` object** in the prop's file is copied into the collision mesh at each copy, named as the layers that hold collision in Rhino.
+- **A prop's line is measured**: its length is the copy's size, 1 m for the prop's own, so one line says where, which way and how large. That is a length drawn, not a number written in a name.

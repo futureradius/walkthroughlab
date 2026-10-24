@@ -87,6 +87,9 @@ Movement is done until the finish line (#8).
 
 ## Movement in place
 
+- **`sway-` materials in the Rhino model**, so a climbing plant or a hedge
+  drawn in Rhino sways like a prop's leaves, without becoming a prop. (#28)
+
 - **Vertex animation textures for curtains and flags.** A looping animation,
   such as a cloth simulated in Blender, stored frame by frame in a picture the
   walkthrough plays back. Birds flap by a simple formula instead; this is the

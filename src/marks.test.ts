@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buttonOf, headingOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
+import { buttonOf, copiesOf, headingOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
 
 /** A layer as the export carries it; its node is its own name, to find it again. */
 function layer(name: string, contents: { layers?: Layer<string>[]; lines?: Point[][]; surfaces?: number } = {}): Layer<string> {
@@ -121,6 +121,46 @@ describe("reading marks", () => {
     const marks = readMarks([layer("Walkthrough", { layers: [surfaces("collision mesh"), start(), layer("start", { lines: [flat([0, 0], [0, -1])] })] })]);
     expect(marks.start!.x).toBe(16.62);
     expect(marks.warnings).toEqual(["start: there is more than one start layer; only the first is used."]);
+  });
+});
+
+describe("prop copies", () => {
+  it("places a copy where each line starts, facing along it, as large as it is long", () => {
+    const marks = readMarks(model(layer("prop-tree", { lines: [flat([2, 3], [2, 5], 1.5), flat([0, 0], [0.5, 0])] })));
+    expect(marks.warnings).toEqual([]);
+    const [first, second] = marks.parts[0].copies!;
+    expect(first.at).toEqual([2, 1.5, 3]);
+    // Its front, +z in the prop's file, faces +z.
+    expect(first.turn).toBeCloseTo(0);
+    expect(first.size).toBeCloseTo(2);
+    // A quarter turn, from +z towards +x.
+    expect(second.turn).toBeCloseTo(Math.PI / 2);
+    expect(second.size).toBeCloseTo(0.5);
+  });
+
+  it("flattens a sloped line, uses a polyline's first stretch, and skips a line with no length across", () => {
+    const warnings: string[] = [];
+    const warn = (path: string, text: string) => warnings.push(`${path}: ${text}`);
+    const copies = copiesOf(
+      layer("prop-chair", {
+        lines: [
+          [[0, 0, 0], [3, 4, 4]],
+          [[0, 0, 0], [0, 0, -1], [5, 0, -1]],
+          [[1, 0, 1], [1, 2, 1]],
+        ],
+      }),
+      "prop-chair",
+      warn,
+    );
+    expect(copies.map(({ size }) => size)).toEqual([5, 1]);
+    expect(copies[1].turn).toBeCloseTo(Math.PI);
+    expect(warnings).toHaveLength(3);
+  });
+
+  it("warns about a prop layer without lines, and things drawn on it", () => {
+    const marks = readMarks(model(layer("prop-table", { surfaces: 2 })));
+    expect(marks.parts[0].copies).toEqual([]);
+    expect(marks.warnings).toHaveLength(2);
   });
 });
 

@@ -81,7 +81,7 @@ Many copies of one thing, such as a grass tuft, a pebble, a fallen leaf or a tre
 _Avoid_: Instancing, foliage, particles, scattered texture
 
 **Prop**:
-A thing prepared once as its own small file and placed by hand wherever the author marks it in an environment, such as a chair, a table, a potted plant or a single tree. One prop can be placed many times; some sway, most stand still.
+A thing prepared once as its own small file and placed by hand wherever the author marks it in an environment, such as a chair, a table, a potted plant or a single tree. Each copy is one horizontal line in the model: from where it stands, the way its front faces, as long as its size, 1 m for its own. One prop can be placed many times; most stand still, and the parts of some, in a material named `sway-…` such as a tree's leaves, sway.
 _Avoid_: Asset, object, block, instance
 
 **Test environment**:
