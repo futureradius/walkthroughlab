@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Lamp calculator</title>
+    <link rel="stylesheet" href="/src/lamp-calculator.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Lamp calculator</h1>
+      <p class="lead">
+        What to set in Rhino for a lamp: the colour to paste for a temperature, and the intensity for the lumen of the
+        real fixture. The sums are the ones <code>npm run optimize</code> lists lamps with.
+      </p>
+
+      <section>
+        <h2>Colour</h2>
+        <label class="row">
+          <span>Temperature</span>
+          <span class="field"><input id="kelvin" type="number" min="1700" max="12000" step="50" inputmode="numeric" /> K</span>
+        </label>
+        <input id="kelvin-slider" type="range" min="1700" max="12000" step="50" aria-label="Temperature" />
+        <label class="row">
+          <span>Hex to paste</span>
+          <span class="field">
+            <span id="swatch" class="swatch"></span>
+            <input id="hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" />
+            <button id="copy-hex" type="button">Copy</button>
+          </span>
+        </label>
+        <p id="colour-note" class="note"></p>
+      </section>
+
+      <section>
+        <h2>Glowing area</h2>
+        <label class="row">
+          <span>Area</span>
+          <span class="field">
+            <input id="area" type="number" min="0" step="any" inputmode="decimal" />
+            <select id="area-unit" aria-label="Unit">
+              <option value="0.000001">mm²</option>
+              <option value="0.0001">cm²</option>
+              <option value="1">m²</option>
+            </select>
+          </span>
+        </label>
+        <p class="note">
+          The side that glows only, its front (<code>Dir</code> shows it); a closed solid's whole outside. Rhino's
+          <code>Area</code> command measures it.
+        </p>
+      </section>
+
+      <section>
+        <h2>Brightness</h2>
+        <label class="row">
+          <span>Lumen</span>
+          <span class="field"><input id="lumen" type="number" min="0" step="any" inputmode="decimal" /> lm</span>
+        </label>
+        <label class="row">
+          <span>Intensity</span>
+          <span class="field"><input id="strength" type="number" min="0" step="any" inputmode="decimal" /></span>
+        </label>
+        <p class="note">Intensity is the emission material's intensity, or the multiplier of a Physically Based one's emission. Change either number and the other follows.</p>
+        <p id="dim-note" class="note warn" hidden></p>
+      </section>
+
+      <section class="how">
+        <h2>How it is worked out</h2>
+        <p>lumen = intensity × luminance × 683 × π × area in m²</p>
+        <p>
+          Luminance is how bright the colour is once Rhino's Raytraced view raises it to the power 2.2, from 0 to 1.
+          Colours are those of a glowing hot body (Mitchell Charity's table, CIE 1931 2°). Rhino's own kelvin swatches are
+          not. The match with Raytraced holds under the conditions in the
+          <a href="https://github.com/futureradius/walkthroughlab#lamps">README's Lamps section</a>; check against the list
+          optimize prints, and correct with <em>new = old × wanted ÷ listed</em>.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="/src/lamp-calculator.ts"></script>
+  </body>
+</html>

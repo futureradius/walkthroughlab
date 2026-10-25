@@ -41,4 +41,8 @@ export default defineConfig({
   // Relative paths so the page works under /walkthroughlab/ on GitHub Pages.
   base: "./",
   plugins: [fileSizes()],
+  build: {
+    // The lamp calculator for authors is a page of its own beside the walkthrough.
+    rolldownOptions: { input: ["index.html", "lamps.html"] },
+  },
 });

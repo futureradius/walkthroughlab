@@ -1,0 +1,118 @@
+html,
+body {
+  margin: 0;
+  background: #fff;
+  color: #222;
+  font: 16px/1.5 system-ui, sans-serif;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.lead {
+  margin: 0 0 24px;
+  color: #444;
+}
+
+section {
+  padding: 16px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+  padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+input[type="number"] {
+  width: 8.5em;
+  text-align: right;
+}
+
+#hex {
+  width: 6.5em;
+  font-family: ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+input[type="range"] {
+  width: 100%;
+  margin: 4px 0 8px;
+  padding: 0;
+  border: 0;
+}
+
+button {
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+}
+
+.note {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.warn {
+  color: #8a4b00;
+}
+
+.invalid {
+  border-color: #c0392b;
+}
+
+.how p {
+  font-size: 14px;
+  color: #555;
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+a {
+  color: #0b57d0;
+}

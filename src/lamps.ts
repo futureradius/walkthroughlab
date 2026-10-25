@@ -37,6 +37,10 @@ export const luminance = ([r, g, b]: Rgb) => 0.2126 * r + 0.7152 * g + 0.0722 * 
 export const lumenOf = (strength: number, colour: Rgb, area: number) =>
   strength * luminance(colour) * LUMEN_PER_WATT * Math.PI * area;
 
+/** The strength a lamp needs to send out this many lumen: `lumenOf` turned round. */
+export const strengthFor = (lumen: number, colour: Rgb, area: number) =>
+  lumen / (luminance(colour) * LUMEN_PER_WATT * Math.PI * area);
+
 /** A colour in CIE 1960 u, v, from linear red, green and blue. */
 function uvOf([r, g, b]: Rgb): [number, number] {
   const x = 0.4124 * r + 0.3576 * g + 0.1805 * b;

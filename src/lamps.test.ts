@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeLamps, facingOf, fromRhino, kelvinOf, lumenOf } from "./lamps";
+import { describeLamps, facingOf, fromRhino, kelvinOf, lumenOf, strengthFor } from "./lamps";
 
 /** A hex code as pasted into Rhino, as its glTF export carries it. */
 const exported = (hex: string) =>
@@ -30,6 +30,11 @@ describe("lamps", () => {
     const panel = lumenOf(6.5, fromRhino(exported("#FFD4A0")), 0.36);
     expect(panel).toBeGreaterThan(3500);
     expect(panel).toBeLessThan(3700);
+  });
+
+  it("works out the strength for a lumen, the other way round", () => {
+    const colour = fromRhino(exported("#FFAD55"));
+    expect(lumenOf(strengthFor(1200, colour, 0.002), colour, 0.002)).toBeCloseTo(1200);
   });
 
   it("says which way a flat lamp faces, and nothing of a rounded one", () => {
