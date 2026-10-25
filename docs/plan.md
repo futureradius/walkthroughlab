@@ -179,7 +179,7 @@ and never published (#15, #16, #34).
 ### Test environment, on the Redmi Note 8, each present and convincing
 
 - [ ] Movement as it stands, including falling off a ledge
-- [ ] Baked light from the sky and from lamps (glowing materials)
+- [x] Baked light from the sky and from lamps (glowing materials)
 - [ ] Ambient occlusion
 - [ ] Glass
 - [ ] Water: tints, reflects the sky through small waves, still for reduced
