@@ -23,6 +23,7 @@ import { FloatType } from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { MeshoptEncoder } from "meshoptimizer";
 import * as watlas from "watlas";
+import { describeLamps, facingOf, fromRhino as fromRhinoGlow, lumenOf } from "../src/lamps.ts";
 import { buttonOf, COLLISION_MESH, normalise, readMarks, swingOf } from "../src/marks.ts";
 import { readConfig } from "../src/settings.ts";
 
@@ -53,6 +54,8 @@ const WEBP_QUALITY = 80;
 const GLASS_TRANSMISSION = 0.5;
 /** How strongly a material reflects, which the walkthrough honours on glass. */
 const KEPT_ON_GLASS = ["KHR_materials_ior", "KHR_materials_specular"];
+/** How bright a lamp glows, beyond a colour's 1, which the bake and the walkthrough honour (#29). */
+const KEPT_ON_LAMPS = ["KHR_materials_emissive_strength"];
 /** Rhino exports these on every material; phones pay for them and gain nothing. */
 const DROPPED_EXTENSIONS = [
   "KHR_materials_transmission",
@@ -86,17 +89,38 @@ const SKY_EXPOSURE = 1;
 /**
  * Glass keeps its colour, which the walkthrough and the bake take as the share
  * of light each of its surfaces lets through; everything else becomes solid.
+ * A material that glows with a plain colour is a lamp, solid and never metal,
+ * noted as `lamp` for the bake and the walkthrough; from Rhino, its colour is
+ * raised to the power Raytraced raises it to (#29). Returns what the author
+ * should know.
  */
-function simplifyMaterials(document) {
+function simplifyMaterials(document, { fromRhino = true } = {}) {
   let anyGlass = false;
+  let anyLamp = false;
+  const said = [];
   for (const material of document.getRoot().listMaterials()) {
+    const name = material.getName() || "(unnamed)";
+    if (material.getEmissiveTexture()) {
+      said.push(`${name}: glows from a picture, which Rhino exports black; give its glow a plain colour.`);
+      material.setEmissiveTexture(null);
+    }
+    const glow = material.getEmissiveFactor();
+    const isLamp = Math.max(...glow) > 0;
+    anyLamp ||= isLamp;
+    if (isLamp) {
+      if (fromRhino) material.setEmissiveFactor(fromRhinoGlow(glow));
+      material.setMetallicFactor(0);
+      material.setExtras({ ...material.getExtras(), lamp: true });
+    }
     const transmission = material.getExtension("KHR_materials_transmission");
     const isGlass =
+      !isLamp &&
       transmission !== null &&
       transmission.getTransmissionFactor() > GLASS_TRANSMISSION;
     anyGlass ||= isGlass;
     for (const name of DROPPED_EXTENSIONS) {
-      if (!(isGlass && KEPT_ON_GLASS.includes(name))) material.setExtension(name, null);
+      const kept = (isGlass && KEPT_ON_GLASS.includes(name)) || (isLamp && KEPT_ON_LAMPS.includes(name));
+      if (!kept) material.setExtension(name, null);
     }
 
     const [red, green, blue] = material.getBaseColorFactor();
@@ -114,8 +138,65 @@ function simplifyMaterials(document) {
   for (const extension of document.getRoot().listExtensionsUsed()) {
     const name = extension.extensionName;
     if (!DROPPED_EXTENSIONS.includes(name)) continue;
-    if (!(anyGlass && KEPT_ON_GLASS.includes(name))) extension.dispose();
+    const kept = (anyGlass && KEPT_ON_GLASS.includes(name)) || (anyLamp && KEPT_ON_LAMPS.includes(name));
+    if (!kept) extension.dispose();
   }
+  return said;
+}
+
+/**
+ * Every lamp's material in a document, and for each the objects glowing with
+ * it, each with its area and the sum of its triangles' fronts, each as long as
+ * its area, in world space: what the list of lamps needs (#29).
+ */
+function lampsIn(document) {
+  const found = new Map();
+  for (const node of document.getRoot().listNodes()) {
+    for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+      const material = primitive.getMaterial();
+      if (primitive.getMode() !== TRIANGLES || !material?.getExtras().lamp) continue;
+      const { corners, area } = worldCorners(primitive, node);
+      const index = primitive.getIndices();
+      const count = index ? index.getCount() : corners.length / 3;
+      const at = (i) => (index ? index.getScalar(i) : i) * 3;
+      const fronts = [0, 0, 0];
+      for (let t = 0; t + 2 < count; t += 3) {
+        const [a, b, c] = [at(t), at(t + 1), at(t + 2)];
+        const u = [0, 1, 2].map((k) => corners[b + k] - corners[a + k]);
+        const v = [0, 1, 2].map((k) => corners[c + k] - corners[a + k]);
+        fronts[0] += (u[1] * v[2] - u[2] * v[1]) / 2;
+        fronts[1] += (u[2] * v[0] - u[0] * v[2]) / 2;
+        fronts[2] += (u[0] * v[1] - u[1] * v[0]) / 2;
+      }
+      if (!found.has(material)) found.set(material, new Map());
+      const objects = found.get(material);
+      const object = objects.get(node) ?? { area: 0, fronts: [0, 0, 0] };
+      object.area += area;
+      for (let k = 0; k < 3; k++) object.fronts[k] += fronts[k];
+      objects.set(node, object);
+    }
+  }
+  return found;
+}
+
+/** The list's entry for one lamp material and its objects, each at a size: 1 but for a prop's copies. */
+function lampsOf(name, material, objects) {
+  const colour = material.getEmissiveFactor();
+  const strength = material.getExtension("KHR_materials_emissive_strength")?.getEmissiveStrength() ?? 1;
+  return {
+    name,
+    lumens: objects.map(({ area, size = 1 }) => lumenOf(strength, colour, area * size * size)),
+    colour,
+    facings: objects.map(({ area, fronts }) => facingOf(fronts, area)),
+    sways: isSwaying(material),
+  };
+}
+
+/** Print how bright and how warm every lamp of an environment is, its props' included, to check against the real fixtures (#29). */
+function listLamps(file, lamps) {
+  if (lamps.length === 0) return;
+  console.log(`${file}: lamps, by material:`);
+  for (const entry of lamps) console.log(`  ${describeLamps(entry)}`);
 }
 
 /**
@@ -373,6 +454,8 @@ function markElevator(layer, warn) {
   const extras = (node, more) => node.setExtras({ ...node.getExtras(), ...more });
   extras(layer.node, { walkthrough: "elevator", elevator: { route } });
   const model = layer.layers.find((inner) => normalise(inner.name) === "model");
+  // The car, whose lamps the bake lets light only the car (#29).
+  if (model) extras(model.node, { walkthrough: "car" });
   for (const inner of [...layer.layers, ...(model?.layers ?? [])]) {
     const plain = normalise(inner.name);
     const button = buttonOf(plain);
@@ -426,10 +509,20 @@ function primitivesOfProp(document) {
 async function readProp(io, file) {
   const name = normalise(file.replace(/\.glb$/, ""));
   const document = await io.read(joinPath(PROPS_SOURCE, file));
-  simplifyMaterials(document);
+  // Blender writes a glow's colour as it lights, unlike Rhino.
+  const said = simplifyMaterials(document, { fromRhino: false }).map((text) => `props/${file}: ${text}`);
   await flattenTextures(document, `props/${file}`);
   await document.transform(dedup(), weld(), prune());
   await compressTextures(document);
+  // Each lamp material over the whole prop, at its own size.
+  const lamps = [...lampsIn(document)].map(([material, objects]) => {
+    const all = { area: 0, fronts: [0, 0, 0] };
+    for (const { area, fronts } of objects.values()) {
+      all.area += area;
+      for (let k = 0; k < 3; k++) all.fronts[k] += fronts[k];
+    }
+    return { material, ...all };
+  });
   const parts = primitivesOfProp(document).filter(({ collision }) => !collision);
   const cornersOf = new Map(parts.map(({ primitive, node }) => [primitive, worldCorners(primitive, node).corners]));
   let height = 0.01;
@@ -478,7 +571,7 @@ async function readProp(io, file) {
   // The walkthrough sways a prop's baked parts by its own settings.
   for (const material of document.getRoot().listMaterials()) material.setExtras({ ...material.getExtras(), prop: name });
   const sways = low[0] <= high[0];
-  const warnings = [];
+  const warnings = said;
   if (sways && unpainted) {
     warnings.push(`props/${file}: its ${SWAY}… parts have no sway paint, so they sway by how high they are; see docs/props.md to paint them.`);
   }
@@ -489,7 +582,7 @@ async function readProp(io, file) {
     warnings.push(`props/${file}: it stands ${away.toFixed(1)} m from its origin, so each copy lands that far from its line; move it so the origin is where it stands.`);
   }
   for (const warning of warnings) console.warn(warning);
-  return { name, file, document, crown: sways ? { low, high } : undefined, warnings };
+  return { name, file, document, crown: sways ? { low, high } : undefined, lamps, warnings };
 }
 
 /** Every prop in models-source/props/, by the name its marks use. */
@@ -977,7 +1070,12 @@ async function optimizeEnvironment(io, file, props) {
   const from = joinPath(SOURCE, file);
   const to = joinPath(MODELS, file);
   const document = await io.read(from);
-  simplifyMaterials(document);
+  const said = simplifyMaterials(document);
+  for (const text of said) console.warn(`${file}: ${text}`);
+  // Each lamp object as Rhino wrote it, before objects alike are merged.
+  const lamps = [...lampsIn(document)].map(([material, objects]) =>
+    lampsOf(material.getName() || "(unnamed)", material, [...objects.values()]),
+  );
   await flattenTextures(document, file);
   await document.transform(
     dedup(),
@@ -990,9 +1088,17 @@ async function optimizeEnvironment(io, file, props) {
   );
   await compressTextures(document);
   const marks = markEnvironment(document, file);
+  marks.warnings.push(...said);
   const configFile = joinPath(MODELS, renamed(file, "-config.md"));
   const config = existsSync(configFile) ? readConfig(await readFile(configFile, "utf8")) : {};
   const placed = placeProps(document, marks, props, config);
+  for (const { prop, placing } of placed) {
+    for (const { material, area, fronts } of prop.lamps) {
+      const copies = placing.map(({ note }) => ({ area, fronts, size: note.size }));
+      lamps.push(lampsOf(`prop-${prop.name} ${material.getName() || "(unnamed)"}`, material, copies));
+    }
+  }
+  listLamps(file, lamps);
   await document.transform(tidy());
   // A second set of texture coordinates in which no two surfaces overlap, so
   // `npm run bake` can paint each one's light into the baked light pictures.

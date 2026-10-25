@@ -47,6 +47,8 @@ export const LAYERS = {
   glass: 2,
   /** Things that sway, such as scatter and props' leaves: drawn, but kept out of ambient occlusion's own work. */
   sway: 3,
+  /** See GLOSSARY.md: solid, but its glow is never darkened by ambient occlusion. */
+  lamp: 4,
 } as const;
 
 /** The files `npm run optimize` writes for one environment and its sky. */
@@ -218,6 +220,23 @@ function withBakedLight(material: MeshStandardMaterial, bakedLight: Texture) {
   });
 }
 
+/**
+ * A lamp is a baked surface with its glow on top, from its front only, as the
+ * bake has it light the environment (#29). The glow is its colour times its
+ * strength, which tone mapping turns white where it is far beyond white.
+ */
+function withGlow(material: MeshBasicMaterial, glowing: MeshStandardMaterial) {
+  const glow = { value: glowing.emissive.clone().multiplyScalar(glowing.emissiveIntensity) };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.glow = glow;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("void main() {", "uniform vec3 glow;\nvoid main() {")
+      .replace("#include <opaque_fragment>", "if ( gl_FrontFacing ) outgoingLight += glow;\n#include <opaque_fragment>");
+  };
+  material.customProgramCacheKey = () => "lamp";
+  return material;
+}
+
 /** Whether a material could ever show relief or shine, so it keeps its rich version beside the plain one. */
 function couldBeRich(material: MeshStandardMaterial): boolean {
   return material.normalMap !== null || material.roughnessMap !== null || material.metalness > 0.5 || material.roughness < 1;
@@ -256,7 +275,8 @@ export function prepareSurfaces(
     // as it moves, which ambient occlusion would leave behind (#28).
     const sways = object.geometry.hasAttribute("_sway");
     if (sways) object.geometry.setAttribute("sway", object.geometry.getAttribute("_sway"));
-    object.layers.enable(sways ? LAYERS.sway : LAYERS.solid);
+    const lamp = !sways && material.userData.lamp === true;
+    object.layers.enable(sways ? LAYERS.sway : lamp ? LAYERS.lamp : LAYERS.solid);
     // Its own baked light picture, which ambient occlusion measures it by.
     handsOwnLight(object);
     // Only surfaces the bake painted carry the second set of coordinates,
@@ -266,9 +286,12 @@ export function prepareSurfaces(
       object.userData.bakedLight = picture;
       let made = baked.get(material);
       if (!made) {
-        const rich = couldBeRich(material) ? withReliefAndShine(material, picture, BAKED_LIGHT_RANGE) : undefined;
+        // A lamp is always plain: its glow outshines any relief or shine.
+        const rich = !lamp && couldBeRich(material) ? withReliefAndShine(material, picture, BAKED_LIGHT_RANGE) : undefined;
+        const plain = withBakedLight(material, picture);
+        if (lamp) withGlow(plain, material);
         if (!rich) material.dispose();
-        made = { plain: withBakedLight(material, picture), rich };
+        made = { plain, rich };
         baked.set(material, made);
       }
       if (sways) {

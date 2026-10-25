@@ -163,6 +163,7 @@ const VERTEX = /* glsl */ `
 const FRAGMENT = /* glsl */ `
   uniform sampler2D map;
   uniform vec3 tint;
+  uniform vec3 glow;
   uniform float grown;
   varying vec2 vUv;
   varying vec3 vLight;
@@ -178,7 +179,7 @@ const FRAGMENT = /* glsl */ `
     #endif
     // Leaves appear a few at a time as the crown fades in.
     if (vSeed > grown) discard;
-    gl_FragColor = vec4(colour.rgb * vShade * vLight, 1.0);
+    gl_FragColor = vec4(colour.rgb * vShade * vLight + (gl_FrontFacing ? glow : vec3(0.0)), 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -189,6 +190,8 @@ interface Leaves {
   geometry: BufferGeometry;
   map: Texture | null;
   tint: Color;
+  /** Its glow, if it is a lamp: it glows, but lights nothing (#29). */
+  glow: Color;
 }
 
 /** Every swaying part in a prop's file, by material, with corners where they are in the prop. */
@@ -211,7 +214,12 @@ export function leavesOf(model: Object3D): Leaves[] {
     if (object.geometry.index) geometry.setIndex(object.geometry.index.clone());
     geometry.applyMatrix4(object.matrixWorld);
     const material = object.material as MeshStandardMaterial;
-    found.push({ geometry, map: material.map ?? null, tint: material.color.clone() });
+    found.push({
+      geometry,
+      map: material.map ?? null,
+      tint: material.color.clone(),
+      glow: material.emissive.clone().multiplyScalar(material.emissiveIntensity),
+    });
   });
   return found;
 }
@@ -262,7 +270,7 @@ export class Crowns {
       if (!byPicture.has(picture)) byPicture.set(picture, []);
       byPicture.get(picture)!.push(copy);
     }
-    for (const { geometry: shape, map, tint } of leaves) {
+    for (const { geometry: shape, map, tint, glow } of leaves) {
       map?.updateMatrix();
       for (const [picture, copies] of byPicture) {
         const geometry = new InstancedBufferGeometry();
@@ -295,6 +303,7 @@ export class Crowns {
             map: { value: map },
             mapTransform: { value: map ? map.matrix : new Matrix3() },
             tint: { value: tint },
+            glow: { value: glow },
             bakedLight: { value: picture >= 0 ? this.bakedLight[picture] : null },
             lightRange: { value: BAKED_LIGHT_RANGE },
             crownCentre: { value: centre },

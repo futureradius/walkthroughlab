@@ -324,11 +324,15 @@ for (const setting of Object.keys(OCCLUSION_DESCRIBED) as (keyof OcclusionSettin
 }
 
 /**
- * The kinds of surface drawn over the darkening rather than under it: they
- * neither shade what is near them nor hide what is behind them, and are not
- * darkened themselves. Solid surfaces are drawn under it.
+ * The kinds of surface drawn over the darkening rather than under it, and not
+ * darkened themselves: lamps, whose glow it must not dim, and glass, which
+ * neither shades what is near it nor hides what is behind it. Solid surfaces
+ * are drawn under it.
  */
-const OVER_DARKENING = [LAYERS.glass];
+const OVER_DARKENING = [LAYERS.lamp, LAYERS.glass];
+
+/** The kinds of surface that shade what is near them: solid ones, lamps among them. */
+const DARKENING = [LAYERS.solid, LAYERS.lamp];
 
 /**
  * The kinds of surface drawn under the darkening and darkened by it. Things
@@ -482,7 +486,8 @@ export class AmbientOcclusion {
     // Only solid surfaces shade what is near them, and the sky is too far
     // away to shade anything.
     const layers = camera.layers.mask;
-    camera.layers.set(LAYERS.solid);
+    camera.layers.disableAll();
+    for (const layer of DARKENING) camera.layers.enable(layer);
     const background = scene.background;
     scene.background = null;
     const darkening = workings.work(renderer, width, height, settings);
@@ -524,8 +529,9 @@ export class AmbientOcclusion {
     renderer.autoClear = false;
     this.darken.render(renderer);
     if (!settings.alone) {
-      // Glass goes on last, so the darkening behind it is seen through it
-      // like everything else there rather than lying on top of it.
+      // Lamps go on after the darkening, hidden only by what stands in front
+      // of them; glass goes on last, so the darkening behind it is seen
+      // through it like everything else there rather than lying on top of it.
       camera.layers.disableAll();
       for (const layer of OVER_DARKENING) camera.layers.enable(layer);
       scene.background = null;

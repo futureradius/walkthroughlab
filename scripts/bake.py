@@ -1,6 +1,6 @@
 # Run by `npm run bake` inside Blender, never by hand. Paints the light that an
-# environment's sky casts on its surfaces into one picture, using the second
-# set of texture coordinates that `npm run optimize` wrote.
+# environment's sky and lamps cast on its surfaces into pictures, using the
+# second set of texture coordinates that `npm run optimize` wrote.
 import math
 import sys
 
@@ -9,6 +9,8 @@ import bpy
 # What `npm run optimize` notes on every collision mesh layer it finds among
 # the marks; Blender keeps it as a custom property.
 COLLISION_MESH = "collision mesh"
+# How the names of a prop's swaying materials begin.
+SWAY = "sway-"
 # Pixels the light is spread past each surface's edge, so no dark seams show.
 MARGIN = 8
 
@@ -94,6 +96,35 @@ print(f"bake: {metal} metal materials baked for their light only")
 # Enough for light to cross a row of panes, each a slab with two surfaces.
 scene.cycles.transparent_max_bounces = 32
 
+# A lamp glows from its front only, the side its surface faces in Rhino, and a
+# closed solid from its outside; the swaying parts of a prop are here only for
+# their still shadow, so a glowing one lights nothing (#29).
+lamps = 0
+for material in bpy.data.materials:
+    if not material.get("lamp") or not material.node_tree:
+        continue
+    principled = material.node_tree.nodes.get("Principled BSDF")
+    if principled is None:
+        continue
+    strength = principled.inputs["Emission Strength"]
+    if material.name.lower().startswith(SWAY):
+        strength.default_value = 0
+        continue
+    tree = material.node_tree
+    geometry = tree.nodes.new("ShaderNodeNewGeometry")
+    front = tree.nodes.new("ShaderNodeMath")
+    front.operation = "SUBTRACT"
+    front.inputs[0].default_value = 1
+    tree.links.new(geometry.outputs["Backfacing"], front.inputs[1])
+    glow = tree.nodes.new("ShaderNodeMath")
+    glow.operation = "MULTIPLY"
+    glow.inputs[1].default_value = strength.default_value
+    tree.links.new(front.outputs["Value"], glow.inputs[0])
+    tree.links.new(glow.outputs["Value"], strength)
+    material.cycles.emission_sampling = "FRONT"
+    lamps += 1
+print(f"bake: {lamps} lamp materials glow from their front")
+
 
 def under(thing, mark):
     """Whether `npm run optimize` noted this mark on the object or a layer above it."""
@@ -172,6 +203,28 @@ for thing in scene.objects:
 
 if not targets:
     sys.exit("bake: no surfaces with a second set of texture coordinates")
+
+# A lamp in an elevator's car lights only the car, which takes its light along
+# when it travels; lighting the floor it was modelled at would leave a patch of
+# light there when it leaves (#29). Light bounced off the car still spills out.
+linked = 0
+for car in [thing for thing in scene.objects if thing.get("walkthrough") == "car"]:
+    inside = [thing for thing in car.children_recursive if thing.type == "MESH"]
+    glowing = [
+        thing
+        for thing in inside
+        if any(slot.material and slot.material.get("lamp") for slot in thing.material_slots)
+    ]
+    if not glowing:
+        continue
+    receivers = bpy.data.collections.new(f"{car.name} receivers")
+    for thing in inside:
+        receivers.objects.link(thing)
+    for thing in glowing:
+        thing.light_linking.receiver_collection = receivers
+    linked += len(glowing)
+if linked:
+    print(f"bake: {linked} objects with lamps in elevator cars light only their car")
 
 bpy.ops.object.select_all(action="DESELECT")
 for thing in targets:

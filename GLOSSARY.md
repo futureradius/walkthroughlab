@@ -17,8 +17,12 @@ The surrounding panorama an author chooses for an environment, which the viewer 
 _Avoid_: HDRI, skybox, environment map, backdrop
 
 **Baked light**:
-The light and shadow computed once in advance for an environment under its sky and stored with it, so a viewer's device only has to display it.
+The light and shadow computed once in advance for an environment under its sky and its lamps and stored with it, so a viewer's device only has to display it.
 _Avoid_: Lightmap, global illumination, GI
+
+**Lamp**:
+A surface of an environment whose material glows with a plain colour, set by the author in Rhino. It glows from its front only, the side its surface faces in Rhino: that side lights the environment through its baked light, and the viewer sees it glowing. Rhino's own lights are not lamps.
+_Avoid_: Light, light source, emitter, luminaire, emissive
 
 **Ambient occlusion**:
 The soft darkening a viewer's device adds live where surfaces meet or come close, finer than baked light can hold.

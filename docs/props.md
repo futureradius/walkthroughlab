@@ -65,5 +65,12 @@ section says `shadow: no`; that needs a new `npm run optimize` and bake. The
 leaves take their light from a small square above the crown, which the bake
 lights and viewers never see.
 
+A prop can be a lamp, such as a table lamp with a glowing shade: give the
+glowing part an Emission colour and strength in Blender, which writes them as
+the bake uses them, unlike Rhino (see "Lamps" in the README). It glows from
+its front, the side its normals face, and optimize lists its copies with the
+environment's lamps. A glowing `sway-` part glows but lights nothing, since
+swaying parts stay out of the bake.
+
 `node scripts/placeholder-props.mjs` writes placeholder props to try all of
 this with.

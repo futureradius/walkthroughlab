@@ -7,9 +7,30 @@ Walk through an architectural space in the browser: https://futureradius.github.
 2. Put the sky, an equirectangular `.exr` panorama, into `models-source/` as well.
 3. Run `npm run optimize` (or `npm run optimize -- <environment>` when `models-source/` holds more than one Rhino export). It reads the marks and lists what is wrong with them, shrinks the textures and writes the file viewers download to `public/models/`. From the sky it writes a picture and a light file to `public/skies/`, each also in a small version that arrives before the viewer can move while the sharp one follows. It ends by saying how the opening download, the whole walkthrough and all sound compare with the download budget (#14). A model without a collision mesh or a start spot is refused; other mistakes are warnings, also listed under "Warnings and errors" in the `?config` panel.
 
-4. Run `npm run bake`. It needs [Blender](https://www.blender.org/) installed and takes a few minutes: it computes the light and shadow the sky casts on the environment and writes them as pictures next to the environment in `public/models/`, as many 2048 px pictures as the environment needs at 3 cm a pixel (#27). Run it again whenever the environment or its sky changes.
+4. Run `npm run bake`. It needs [Blender](https://www.blender.org/) installed and takes a few minutes: it computes the light and shadow the sky and the lamps cast on the environment and writes them as pictures next to the environment in `public/models/`, as many 2048 px pictures as the environment needs at 3 cm a pixel (#27). Run it again whenever the environment or its sky changes.
 
 `models-source/` is not committed; `public/models/` and `public/skies/` are.
+
+### Lamps
+
+A lamp is a surface whose material glows with a plain colour: an Emission material, or a Physically Based one with Emission. It needs no mark. The bake turns its glow into light, and the walkthrough shows it glowing (#29). Rhino's own lights don't export, and a glow from a picture arrives black; optimize reports it.
+
+**Rhino decides the brightness.** Tune lamps by eye in Raytraced mode, and the bake matches it, as long as Rhino has no light objects and no separate sun, its skylight is the same sky at intensity 1, post effects are off, tone mapping's black and white points are 0 and 1, and the document's linear workflow stays at its usual gamma of 2.2. Raytraced raises a glow's colour to that power before it lights anything, and optimize does the same. Keep the multiplier (or intensity) at 1 or above; make a dim glow with a darker colour instead.
+
+**Colour.** Paste these into the colour's hex field. Rhino's own kelvin swatches are not the colours of those temperatures: its "2000K" is about 3000 K, and its 5000K is pure white.
+
+| Temperature | Hex to paste |
+|---|---|
+| 2700 K, warm white | `#FFAD55` |
+| 3000 K | `#FFB869` |
+| 3500 K | `#FFC786` |
+| 4000 K, neutral white | `#FFD4A0` |
+
+**Front only.** A lamp glows from one side only, the side its surface faces in Rhino (`Dir` shows it; `Flip` turns it), and a closed solid from its outside. In Raytraced it glows from both sides, so the bake differs there: a panel modelled as one plane in a dropped ceiling lights the room and not the closed space above. A plane that should glow both ways is two planes, back to back.
+
+**Check against the real fixture.** `npm run optimize` lists every lamp material with each object's lumen, its nearest colour temperature, and which way flat lamps face, for example `Panel: 1 lamp, 3,600 lm, ~4000 K, faces down`. A flat lamp facing up, or "not a lamp colour", is usually a mistake. To reach a fixture's lumen, set the strength to *strength × wanted lumen ÷ listed lumen* and optimize again. As a first guess, strength = lumen ÷ (2146 × glowing area in m² × the colour's luminance: 0.52 at 2700 K, 0.57 at 3000 K, 0.65 at 3500 K, 0.72 at 4000 K).
+
+A lamp in an elevator's car lights only the car, so its light travels with it.
 
 ## Moving through it
 

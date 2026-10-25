@@ -67,6 +67,12 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
   what is on screen and cost time every frame, of which about 1 ms is left in
   the worst view on the Redmi Note 8 (#9); probes cost almost nothing while
   walking but are coarser. Measure each on the Redmi. (#11)
+- **Swaying lamps that light their surroundings**, such as glowing paper
+  lanterns hung in a tree. A glowing `sway-` part glows but lights nothing,
+  because swaying things stay out of the bake. Keep it in mind when choosing
+  how moving and swaying things are lit and shadowed: the lantern's light
+  could be baked from its resting place, as a tree's still shadow is, or come
+  from whichever live light wins above. (#29)
 
 ## Moving through
 
