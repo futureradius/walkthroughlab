@@ -73,6 +73,37 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
   how moving and swaying things are lit and shadowed: the lantern's light
   could be baked from its resting place, as a tree's still shadow is, or come
   from whichever live light wins above. (#29)
+- **An exposure for each environment**, like a camera's, for night scenes
+  lit by lamps at their real lumen. Today brightness is fixed by the sky at
+  intensity 1 and tone mapping at exposure 1, so a night scene at real lumen
+  looks dim, as it does in Raytraced; the only way to brighten it is to make
+  every lamp stronger by the same factor, which makes the lumen list fiction
+  and clips near lamps sooner. The bake would multiply the light by the
+  exposure before writing its pictures, so dim light keeps its precision in
+  them and the light range of 4 counts after the exposure, and the walkthrough
+  would divide it back out only where it must. In Rhino, the author would
+  match it with tone mapping's white point (perhaps 0.25 for an exposure of 4;
+  check against a render first). (#29)
+- **Eyes that adjust to the dark** as the viewer walks: the exposure eases
+  towards how bright it is around the viewpoint, so a dark corridor entered
+  from a sunny outside slowly brightens, and the sky outside a window burns
+  out from inside. How bright it is could be read from the baked light probes
+  the props already use, which costs almost nothing on the Redmi, rather than
+  measured from each frame. It needs a limit either way, so night stays night.
+  (#29)
+- **A curve on the baked light**, as in Photoshop, for styles of abstraction
+  where light is drawn rather than measured. The curve is applied to the
+  bake's raw light (`models-source/baked/*.exr`) as it is written to the WebP
+  pictures, so it touches only light, never textures or the glow of lamps,
+  costs nothing in the walkthrough, and lifting shadows causes no banding.
+  Changing it needs no new render, only the conversion again, in seconds. One
+  curve per channel can tint light, such as warmer shadows. To find a curve,
+  a preview in the walkthrough applies it live in the shader, tuned from the
+  tuning panel on the phone, and the curve found there is copied into the
+  conversion. It breaks the match with Raytraced on purpose; to compare, the
+  author can render Rhino's lighting on its own and put the same curve on it
+  in an image editor. The lamp list stays true of the light before the curve.
+  (#29)
 
 ## Moving through
 
