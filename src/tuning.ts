@@ -106,18 +106,26 @@ function addSection(parent: HTMLElement, section: Section, onChange: () => void)
 
 /**
  * What `npm run optimize` found wrong with the environment's marks, open
- * at the top of the panel so an author on a phone sees it first.
+ * at the top of the panel so an author on a phone sees it first. Returns a
+ * way to add what goes wrong while walking, such as a download that fails.
  */
-function addWarnings(parent: HTMLElement, warnings: string[]) {
+function addWarnings(parent: HTMLElement, warnings: string[]): (warning: string) => void {
   const panel = element("details", { className: "tuning__warnings", open: warnings.length > 0 });
-  panel.append(element("summary", { textContent: `Warnings and errors (${warnings.length})` }));
-  if (warnings.length === 0) {
-    panel.append(element("p", { className: "tuning__about", textContent: "The marks in the model are all in order." }));
-  } else {
-    const list = panel.appendChild(element("ul", {}));
-    for (const warning of warnings) list.append(element("li", { textContent: warning }));
-  }
+  const summary = panel.appendChild(element("summary", {}));
+  const allInOrder = element("p", { className: "tuning__about", textContent: "The marks in the model are all in order." });
+  const list = element("ul", {});
+  panel.append(warnings.length === 0 ? allInOrder : list);
+  let count = 0;
+  const add = (warning: string) => {
+    if (count === 0 && allInOrder.isConnected) allInOrder.replaceWith(list);
+    list.append(element("li", { textContent: warning }));
+    count++;
+    summary.textContent = `Warnings and errors (${count})`;
+  };
+  for (const warning of warnings) add(warning);
+  summary.textContent = `Warnings and errors (${count})`;
   parent.append(panel);
+  return add;
 }
 
 /**
@@ -132,8 +140,9 @@ export function addTuning(
   sections: Section[],
   warnings: string[],
   onChange: () => void = () => {},
-) {
+): { warn: (warning: string) => void } {
   const panel = parent.appendChild(element("div", { className: "tuning" }));
-  addWarnings(panel, warnings);
+  const warn = addWarnings(panel, warnings);
   for (const section of sections) addSection(panel, section, onChange);
+  return { warn };
 }

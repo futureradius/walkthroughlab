@@ -76,6 +76,22 @@ export interface Opened {
   elevators: { update(seconds: number): void; tap(raycaster: Raycaster): void };
 }
 
+/** Seconds a part of the trailing download may take before the console hears it is still awaited. */
+const SLOW_SECONDS = 20;
+
+/** Wait for a part of the trailing download, saying so if it takes long. */
+async function awaited<T>(what: string, part: Promise<T>): Promise<T> {
+  const timer = setTimeout(
+    () => console.warn(`The trailing download has waited ${SLOW_SECONDS} s for ${what}, and holds everything after it.`),
+    SLOW_SECONDS * 1000,
+  );
+  try {
+    return await part;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * The trailing download, in order, each part fading in or sharpening what is
  * there as it arrives. Ambient occlusion fades in by itself once its method
@@ -88,36 +104,39 @@ async function trail(
   water: Water,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
-  await occlusion?.ready();
+  await awaited("ambient occlusion", occlusion?.ready() ?? Promise.resolve());
   // Made here rather than downloaded; flat until then.
   water.grow();
   for (const { name, scatter } of scatters) {
     try {
-      scatter.grow(tuftOf(await loadModel(environment.scatter(name), downloads)));
+      scatter.grow(tuftOf(await awaited(`the ${name}`, loadModel(environment.scatter(name), downloads))));
     } catch (error) {
       console.warn(`The ${name} for scatter-${name} could not be grown.`, error);
     }
   }
   for (const { name, crowns } of swaying) {
     try {
-      crowns.grow(leavesOf(await loadModel(environment.prop(name), downloads)));
+      crowns.grow(leavesOf(await awaited(`prop-${name}'s swaying parts`, loadModel(environment.prop(name), downloads))));
     } catch (error) {
       console.warn(`The swaying parts of prop-${name} could not be drawn.`, error);
     }
   }
-  await loadSharpSky(
-    environment.files,
-    renderer,
-    downloads,
-    (light) => {
-      scene.environment?.dispose();
-      scene.environment = light;
-    },
-    (picture) => {
-      (scene.background as { dispose?: () => void } | null)?.dispose?.();
-      scene.background = picture;
-      water.sky = picture;
-    },
+  await awaited(
+    "the sharp sky",
+    loadSharpSky(
+      environment.files,
+      renderer,
+      downloads,
+      (light) => {
+        scene.environment?.dispose();
+        scene.environment = light;
+      },
+      (picture) => {
+        (scene.background as { dispose?: () => void } | null)?.dispose?.();
+        scene.background = picture;
+        water.sky = picture;
+      },
+    ),
   );
 }
 
@@ -241,7 +260,9 @@ export async function openEnvironment(
   configure(sections, await config);
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  void trail(environment, scatters, swaying, water, { renderer, scene, occlusion, downloads });
+  trail(environment, scatters, swaying, water, { renderer, scene, occlusion, downloads }).catch((error) =>
+    console.error("The trailing download stopped, so what comes after the failure never arrives.", error),
+  );
   return {
     steering,
     faces,

@@ -24,6 +24,23 @@ const VIEW_DISTANCE = 300;
 const SETTLING_SECONDS = 3;
 
 const params = new URLSearchParams(location.search);
+
+// With ?config, what goes wrong while walking is listed in the panel too,
+// for a phone, whose console is out of reach; kept until the panel exists.
+const heard: string[] = [];
+let tell: (warning: string) => void = (warning) => heard.push(warning);
+if (params.has("config")) {
+  const said = (parts: unknown[]) => parts.map((part) => (part instanceof Error ? part.message : String(part))).join(" ");
+  for (const level of ["warn", "error"] as const) {
+    const original = console[level].bind(console);
+    console[level] = (...parts: unknown[]) => {
+      original(...parts);
+      tell(said(parts));
+    };
+  }
+  window.addEventListener("error", (event) => tell(event.message));
+  window.addEventListener("unhandledrejection", (event) => tell(said([event.reason])));
+}
 const canvas = document.querySelector<HTMLCanvasElement>("#walkthrough")!;
 const renderer = new WebGLRenderer({
   canvas,
@@ -105,7 +122,10 @@ document.addEventListener("visibilitychange", noteHitch);
 if (params.has("config")) {
   const netSection = section("Safety net", net.settings, NET_DESCRIBED);
   const accessibilitySection = section("Accessibility", accessibility, ACCESSIBILITY_DESCRIBED);
-  addTuning(document.body, [accessibilitySection, ...sections, netSection], warnings, noteHitch);
+  const { warn } = addTuning(document.body, [accessibilitySection, ...sections, netSection], warnings, noteHitch);
+  // The marks' warnings are in the list already.
+  for (const warning of heard) if (!warnings.includes(warning)) warn(warning);
+  tell = warn;
 } else {
   // The panel has a switch for this instead, to try it on any device.
   reducedMotion.addEventListener("change", () => {
