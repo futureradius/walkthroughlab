@@ -8,6 +8,7 @@ import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
 import { Crowns, leavesOf, PROP, PROP_DESCRIBED, propSway, STILL_PROP_DESCRIBED } from "./props";
 import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
 import { CLOTH_DESCRIBED, clothSettings } from "./cloth";
+import { birdOf, FLOCK_DESCRIBED, Flocks } from "./flock";
 import { Water, WATER_DESCRIBED } from "./water";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
@@ -23,6 +24,8 @@ export interface EnvironmentAddress {
   scatter: (name: string) => string;
   /** Where the swaying parts of a prop lie, by its mark's name, such as "tree". */
   prop: (name: string) => string;
+  /** Where the file a traffic mark flies lies, by the mark's name, such as "birds". */
+  traffic: (name: string) => string;
   /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, heading, and near which floor height. */
   at?: { x: number; z: number; heading: number; y?: number };
 }
@@ -40,6 +43,7 @@ export const TEST_ENVIRONMENT: EnvironmentAddress = {
   config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
   scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
   prop: (name) => `${import.meta.env.BASE_URL}models/props/${name}.glb`,
+  traffic: (name) => `${import.meta.env.BASE_URL}models/traffic/${name}.glb`,
 };
 
 /** What the environment is opened into. */
@@ -67,6 +71,8 @@ export interface Opened {
   scatters: Scatter[];
   /** Props' swaying parts, such as trees' crowns; move them on every frame. */
   props: { update(seconds: number): void };
+  /** Flocks of traffic, such as birds; move them on every frame, `still` for viewers who ask for reduced motion. */
+  traffic: { update(seconds: number, still: boolean): void };
   /** Surfaces that may show relief or shine; `apply` them every frame. */
   surfaces: Surfaces;
   /** The environment's water, if any; move its waves on every frame, after the wind. */
@@ -102,6 +108,7 @@ async function trail(
   environment: EnvironmentAddress,
   scatters: { name: string; scatter: Scatter }[],
   swaying: { name: string; crowns: Crowns }[],
+  traffic: { name: string; flocks: Flocks }[],
   water: Water,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
@@ -139,6 +146,13 @@ async function trail(
       },
     ),
   );
+  for (const { name, flocks } of traffic) {
+    try {
+      flocks.grow(birdOf(await awaited(`traffic-${name}'s file`, loadModel(environment.traffic(name), downloads))));
+    } catch (error) {
+      console.warn(`The flocks of traffic-${name} could not be drawn.`, error);
+    }
+  }
 }
 
 /** Use what the config file sets in these sections, saying in the console what it could not. */
@@ -243,6 +257,12 @@ export async function openEnvironment(
     if (crowns) scene.add(crowns.group);
     return { name, settings, crowns };
   });
+  // Traffic's settings are there from the start, its flocks once their file arrives.
+  const traffic = loaded.traffic.map(({ name, loops }) => {
+    const flocks = new Flocks(loops, LAYERS.sway);
+    scene.add(flocks.group);
+    return { name, flocks };
+  });
   const kinds = new Set(loaded.doors.map(({ motion }) => motion.kind));
   if (kinds.has("hinged")) sections.push(section("door-hinged", hinged, DOOR_DESCRIBED, true));
   if (kinds.has("sliding") || elevators.length > 0) sections.push(section("door-sliding", sliding, DOOR_DESCRIBED, true));
@@ -258,11 +278,12 @@ export async function openEnvironment(
         ? section(`prop-${name}`, settings, PROP_DESCRIBED, true)
         : section(`prop-${name}`, settings, STILL_PROP_DESCRIBED, true),
     ),
+    ...traffic.map(({ name, flocks }) => section(`traffic-${name}`, flocks.settings, FLOCK_DESCRIBED, true)),
   );
   configure(sections, await config);
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  trail(environment, scatters, swaying, water, { renderer, scene, occlusion, downloads }).catch((error) =>
+  trail(environment, scatters, swaying, traffic, water, { renderer, scene, occlusion, downloads }).catch((error) =>
     console.error("The trailing download stopped, so what comes after the failure never arrives.", error),
   );
   return {
@@ -278,6 +299,11 @@ export async function openEnvironment(
           propSway(name).value = settings.sway;
           crowns?.update(seconds);
         }
+      },
+    },
+    traffic: {
+      update: (seconds, still) => {
+        for (const { flocks } of traffic) flocks.update(seconds, still);
       },
     },
     surfaces,

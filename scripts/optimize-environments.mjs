@@ -39,6 +39,11 @@ const SCATTER = joinPath(MODELS, "scatter");
 const PROPS_SOURCE = joinPath(SOURCE, "props");
 /** The parts of each prop that sway, which arrive after the viewer can move. */
 const PROPS = joinPath(MODELS, "props");
+/** Traffic, such as a bird, prepared in Blender, beside the environment (#32). */
+const TRAFFIC_SOURCE = joinPath(SOURCE, "traffic");
+const TRAFFIC = joinPath(MODELS, "traffic");
+/** An unpainted bird's parts flap from this share of its half span outwards. */
+const BODY_SHARE = 0.15;
 /** A prop's parts whose material's name begins with this sway and are lit live (#28). */
 const SWAY = "sway-";
 /** How far a prop's most swaying part moves in a full gust of a strong wind, as a share of the prop's height. */
@@ -353,7 +358,7 @@ function layersOf(nodes) {
  * collision meshes, where the viewer starts, and the warnings, which the
  * ?config panel lists.
  */
-function markEnvironment(document, file) {
+function markEnvironment(document, file, traffic) {
   const scene = document.getRoot().listScenes()[0];
   const marks = readMarks(layersOf(scene.listChildren()));
   for (const warning of marks.warnings) console.warn(`${file}: ${warning}`);
@@ -373,6 +378,16 @@ function markEnvironment(document, file) {
     layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "scatter", scatter: name });
     if (!existsSync(joinPath(SCATTER_SOURCE, `${name}.glb`))) {
       const warning = `${path}: there is no ${SCATTER_SOURCE}/${name}.glb to copy over its surfaces.`;
+      marks.warnings.push(warning);
+      console.warn(`${file}: ${warning}`);
+    }
+  }
+  // Traffic flies round each loop on its layer, as copies of traffic/<name>.glb (#32).
+  for (const { kind, name, path, layer, loops } of marks.parts) {
+    if (kind !== "traffic") continue;
+    layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "traffic", traffic: name, loops });
+    const said = traffic.has(name) ? traffic.get(name).warnings : [`${path}: there is no ${TRAFFIC_SOURCE}/${name}.glb to fly round its loops.`];
+    for (const warning of said) {
       marks.warnings.push(warning);
       console.warn(`${file}: ${warning}`);
     }
@@ -1255,7 +1270,7 @@ const megabytes = async (path) =>
   `${((await stat(path)).size / 1024 / 1024).toFixed(2)} MB`;
 const renamed = (file, extension) => file.replace(/\.[^.]+$/, extension);
 
-async function optimizeEnvironment(io, file, props) {
+async function optimizeEnvironment(io, file, props, traffic) {
   const from = joinPath(SOURCE, file);
   const to = joinPath(MODELS, file);
   const document = await io.read(from);
@@ -1276,7 +1291,7 @@ async function optimizeEnvironment(io, file, props) {
     prune(),
   );
   await compressTextures(document);
-  const marks = markEnvironment(document, file);
+  const marks = markEnvironment(document, file, traffic);
   marks.warnings.push(...said);
   prepareCloths(document, marks, (text) => {
     marks.warnings.push(text);
@@ -1345,7 +1360,7 @@ async function reportBudget(environment, sky) {
       joinPath(SKIES, renamed(sky, "-small.jpg")),
       joinPath(SKIES, renamed(sky, "-small.hdr")),
     ]));
-  const scattered = [SCATTER, PROPS].flatMap((folder) =>
+  const scattered = [SCATTER, PROPS, TRAFFIC].flatMap((folder) =>
     existsSync(folder) ? readdirSync(folder).map((file) => joinPath(folder, file)) : [],
   );
   const whole =
@@ -1373,6 +1388,72 @@ async function optimizeScatter(io) {
     await io.write(joinPath(SCATTER, file), document);
     console.log(`scatter/${file}: ${await megabytes(joinPath(SCATTER_SOURCE, file))} -> ${await megabytes(joinPath(SCATTER, file))}`);
   }
+}
+
+/**
+ * Read each piece of traffic in models-source/traffic/, such as a bird (#32),
+ * and note on every corner how much it flaps, as `_FLAP`: from the paint on
+ * it, black still and white the most, or unpainted, more the further it is
+ * from the centre line, its wings' tips the most. Compressed like the
+ * environment, ready to write.
+ */
+async function readTraffic(io) {
+  const traffic = new Map();
+  if (!existsSync(TRAFFIC_SOURCE)) return traffic;
+  for (const file of (await readdir(TRAFFIC_SOURCE)).filter((name) => name.endsWith(".glb"))) {
+    const name = normalise(file.replace(/.glb$/, ""));
+    const document = await io.read(joinPath(TRAFFIC_SOURCE, file));
+    await document.transform(dedup(), weld(), prune());
+    await compressTextures(document);
+    const parts = [];
+    for (const node of document.getRoot().listNodes()) {
+      for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+        if (primitive.getMode() === TRIANGLES) parts.push({ primitive, corners: worldCorners(primitive, node).corners });
+      }
+    }
+    let half = 0.01;
+    for (const { corners } of parts) for (let i = 0; i < corners.length; i += 3) half = Math.max(half, Math.abs(corners[i]));
+    const warnings = [];
+    let unpainted = false;
+    const buffer = document.getRoot().listBuffers()[0];
+    for (const { primitive, corners } of parts) {
+      const paint = primitive.getAttribute("COLOR_0");
+      unpainted ||= !paint;
+      const flaps = new Float32Array(corners.length / 3);
+      for (let i = 0, colour = []; i < flaps.length; i++) {
+        if (paint) {
+          paint.getElement(i, colour);
+          flaps[i] = (colour[0] + colour[1] + colour[2]) / 3;
+        } else {
+          flaps[i] = Math.max(0, Math.min(1, (Math.abs(corners[i * 3]) / half - BODY_SHARE) / (1 - BODY_SHARE)));
+        }
+      }
+      // Paint says how a part moves, never what colour it is.
+      primitive.setAttribute("COLOR_0", null);
+      primitive.setAttribute("_FLAP", document.createAccessor().setType("SCALAR").setArray(flaps).setBuffer(buffer));
+    }
+    if (unpainted) warnings.push(`traffic/${file}: it has no flap paint, so it flaps more the further out from its centre line; see docs/traffic.md to paint it.`);
+    // Its origin should be its middle, which flies along the loop.
+    const { min, max } = getBounds(document.getRoot().listScenes()[0]);
+    const away = Math.hypot(...[0, 1, 2].map((k) => (min[k] + max[k]) / 2));
+    if (away > Math.max(...[0, 1, 2].map((k) => (max[k] - min[k]) / 2))) {
+      warnings.push(`traffic/${file}: its middle is ${away.toFixed(1)} m from its origin, so it flies that far off its loop; move it so the origin is its middle.`);
+    }
+    await document.transform(prune({ keepAttributes: true }), meshopt({ encoder: MeshoptEncoder, level: "medium" }));
+    traffic.set(name, { file, document, warnings });
+  }
+  return traffic;
+}
+
+/** Write each piece of traffic for the walkthrough to download after the sharp sky, removing any left from traffic that is gone. */
+async function writeTraffic(io, traffic) {
+  await mkdir(TRAFFIC, { recursive: true });
+  for (const { file, document } of traffic.values()) {
+    const to = joinPath(TRAFFIC, `${normalise(file.replace(/.glb$/, ""))}.glb`);
+    await io.write(to, document);
+    console.log(`traffic/${file}: ${await megabytes(joinPath(TRAFFIC_SOURCE, file))} -> ${await megabytes(to)}`);
+  }
+  for (const old of await readdir(TRAFFIC)) if (!traffic.has(old.replace(/.glb$/, ""))) await rm(joinPath(TRAFFIC, old));
 }
 
 /**
@@ -1439,8 +1520,10 @@ if (environments.length + skies.length === 0) {
   console.log(`No .glb or .exr files in ${SOURCE}/`);
 }
 const props = await readProps(io);
-for (const file of environments) await optimizeEnvironment(io, file, props);
+const traffic = await readTraffic(io);
+for (const file of environments) await optimizeEnvironment(io, file, props, traffic);
 for (const file of skies) await optimizeSky(file);
 await optimizeScatter(io);
 await writeProps(io, props);
+await writeTraffic(io, traffic);
 if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0]);

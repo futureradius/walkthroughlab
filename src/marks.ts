@@ -39,6 +39,8 @@ export interface Part<T> {
   layer: Layer<T>;
   /** For a prop, each copy its lines place. */
   copies?: Copy[];
+  /** For traffic, each closed loop its lines draw, one flock on each (#32). */
+  loops?: Point[][];
 }
 
 /** Where one copy of a prop stands, which way it faces, and how large it is, from its line (#28). */
@@ -87,6 +89,8 @@ const MOVING: readonly Kind[] = ["door-hinged", "door-sliding", "elevator"];
 
 /** Lines may lie this far off level, in metres, and still count as flat. */
 const FLAT = 0.01;
+/** How far apart, in metres, a loop's ends may be before the author is told it was not closed. */
+const LOOP_GAP = 1;
 
 /** Capitals and spaces around a dash don't matter in a name. */
 export const normalise = (name: string) =>
@@ -197,6 +201,10 @@ function readPart<T>(
   }
   if (kind.kind === "prop") {
     marks.parts.push({ kind: kind.kind, name: kind.name, path, layer, copies: copiesOf(layer, path, warn) });
+    return;
+  }
+  if (kind.kind === "traffic") {
+    marks.parts.push({ kind: kind.kind, name: kind.name, path, layer, loops: loopsOf(layer, path, warn) });
     return;
   }
   marks.parts.push({ kind: kind.kind, name: kind.name, path, layer });
@@ -321,6 +329,33 @@ export function copiesOf<T>(layer: Layer<T>, path: string, warn: (path: string, 
   if (polylines > 0) warn(path, `${polylines} of its lines are polylines; only their first stretch is used.`);
   if (empty > 0) warn(path, `${empty} of its lines have no length across the floor, so they place nothing.`);
   return copies;
+}
+
+/**
+ * One loop for each polyline on a traffic layer, its points in order without
+ * the closing one (#32). A polyline that is not closed is closed from its
+ * last point back to its first.
+ */
+export function loopsOf<T>(layer: Layer<T>, path: string, warn: (path: string, text: string) => void): Point[][] {
+  if (layer.lines.length === 0) warn(path, "has no line; draw one closed polyline per flock, the loop it flies round. Nothing flies until then.");
+  if (layer.surfaces > 0) warn(path, "only its lines are read; the things drawn on it are shown as they are.");
+  const loops: Point[][] = [];
+  let open = 0, short = 0;
+  for (const line of layer.lines) {
+    const points = [...line];
+    const [first, last] = [points[0], points[points.length - 1]];
+    const gap = points.length > 1 ? Math.hypot(...last.map((v, k) => v - first[k])) : 0;
+    if (points.length > 1 && gap < 1e-6) points.pop();
+    else if (gap > LOOP_GAP) open++;
+    if (points.length < 3) {
+      short++;
+      continue;
+    }
+    loops.push(points);
+  }
+  if (open > 0) warn(path, `${open} of its lines are not closed; each is flown from its last point straight back to its first.`);
+  if (short > 0) warn(path, `${short} of its lines have fewer than three corners, so no flock flies round them.`);
+  return loops;
 }
 
 /** The line that says how a door or elevator moves. */

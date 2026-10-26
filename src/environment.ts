@@ -27,7 +27,7 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import type { Downloads } from "./download";
 import type { DoorMotion, Leaf } from "./doors";
 import type { ElevatorParts } from "./elevators";
-import { COLLISION_MESH, normalise, type Start } from "./marks";
+import { COLLISION_MESH, normalise, type Point, type Start } from "./marks";
 import { prepareCloth, withCloth, type ClothNote } from "./cloth";
 import { withReliefAndShine, type Shiny } from "./materials";
 import { propSway, withSway, type PropCopy } from "./props";
@@ -92,6 +92,8 @@ export interface Environment {
   cloths: string[];
   /** Each prop mark's name, such as "tree", where its copies are, and whether it has parts that sway, drawn there once they arrive. */
   props: { name: string; copies: PropCopy[]; sways: boolean }[];
+  /** Each traffic mark's name, such as "birds", and the loops its flocks fly round (#32). */
+  traffic: { name: string; loops: Point[][] }[];
   /** Each door that moves by itself: how, and its leaves, their collision meshes kept out of `collision`. */
   doors: { motion: DoorMotion; leaves: Leaf[] }[];
   /** Each elevator: its route, car, doors and buttons, their collision meshes kept out of `collision`. */
@@ -445,6 +447,7 @@ export async function loadEnvironment(
   const lines: Object3D[] = [];
   const scatter: Environment["scatter"] = [];
   const props: Environment["props"] = [];
+  const traffic: Environment["traffic"] = [];
   const cloths = new Set<string>();
   const doorLayers: Object3D[] = [];
   const elevatorLayers: Object3D[] = [];
@@ -457,6 +460,7 @@ export async function loadEnvironment(
       const { prop: name, copies, sways } = object.userData;
       props.push({ name, copies, sways });
     }
+    if (object.userData.walkthrough === "traffic") traffic.push({ name: object.userData.traffic, loops: object.userData.loops ?? [] });
     if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
     else if (object instanceof Line) lines.push(object);
   });
@@ -512,6 +516,7 @@ export async function loadEnvironment(
     scatter,
     cloths: [...cloths],
     props,
+    traffic,
     doors,
     elevators,
     shiny,

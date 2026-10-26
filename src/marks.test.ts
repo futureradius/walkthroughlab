@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buttonOf, copiesOf, headingOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
+import { buttonOf, copiesOf, headingOf, loopsOf, normalise, readMarks, swingOf, type Layer, type Point } from "./marks";
 
 /** A layer as the export carries it; its node is its own name, to find it again. */
 function layer(name: string, contents: { layers?: Layer<string>[]; lines?: Point[][]; surfaces?: number } = {}): Layer<string> {
@@ -161,6 +161,30 @@ describe("prop copies", () => {
     const marks = readMarks(model(layer("prop-table", { surfaces: 2 })));
     expect(marks.parts[0].copies).toEqual([]);
     expect(marks.warnings).toHaveLength(2);
+  });
+});
+
+describe("traffic loops", () => {
+  const square: Point[] = [[0, 12, 0], [10, 12, 0], [10, 14, 10], [0, 12, 10]];
+
+  it("reads one loop per closed polyline, without its closing point", () => {
+    const marks = readMarks(model(layer("traffic-birds", { lines: [[...square, square[0]]] })));
+    expect(marks.warnings).toEqual([]);
+    expect(marks.parts[0]).toMatchObject({ kind: "traffic", name: "birds", loops: [square] });
+  });
+
+  it("closes an open polyline, saying so when its ends are far apart, and skips lines too short to fly round", () => {
+    const warnings: string[] = [];
+    const warn = (path: string, text: string) => warnings.push(`${path}: ${text}`);
+    const loops = loopsOf(layer("traffic-birds", { lines: [square, [[0, 0, 0], [5, 0, 0]]] }), "traffic-birds", warn);
+    expect(loops).toEqual([square]);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it("warns about a traffic layer without lines", () => {
+    const marks = readMarks(model(layer("traffic-birds")));
+    expect(marks.parts[0].loops).toEqual([]);
+    expect(marks.warnings).toHaveLength(1);
   });
 });
 

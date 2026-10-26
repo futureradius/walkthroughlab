@@ -128,6 +128,10 @@ _Avoid_: Wind animation, vertex animation, foliage motion
 Things that travel through an environment along fixed routes to make it busy, such as birds, metro wagons and cars. Viewers never steer them.
 _Avoid_: NPCs, vehicles, agents, crowd
 
+**Flock**:
+Copies of one bird flying together round a loop the author draws, keeping their places about an unseen leader that follows the smoothed loop.
+_Avoid_: Swarm, boids, herd
+
 ### Materials
 
 **Glass**:
