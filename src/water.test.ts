@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { asWater, ripplePicture, Water } from "./water";
 import { windUniforms } from "./wind";
 
-/** One water surface and its waves, in a wind of this strength. */
-function water(strength: number) {
+/** One water surface and its waves, their pictures made, in a wind of this strength. */
+function water(strength: number, grown = true) {
   windUniforms.windStrength.value = strength;
   const material = asWater(new Color(0.01, 0.43, 0.48));
-  return { material, water: new Water([material]) };
+  const pool = new Water([material]);
+  if (grown) pool.grow();
+  return { material, pool };
 }
 
 afterEach(() => {
@@ -15,36 +17,39 @@ afterEach(() => {
 });
 
 describe("water's waves", () => {
-  it("are worked out wave by wave in a wind, as usual", () => {
-    const { material, water: pool } = water(0.4);
+  it("are drawn in a wind once their pictures are made", () => {
+    const { material, pool } = water(0.4);
     pool.update(0.016, true, 1);
-    expect(material.defines).toEqual({ WAVES_SHADER: "" });
-  });
-
-  it("are drawn from the ripple pictures when the settings ask for them", () => {
-    const { material, water: pool } = water(0.4);
-    pool.settings.waves = "textures";
-    pool.update(0.016, true, 1);
-    expect(material.defines).toEqual({ WAVES_TEXTURES: "" });
+    expect(material.defines).toEqual({ WAVES: "" });
   });
 
   it("are not drawn at all in still air, as for reduced motion", () => {
-    const { material, water: pool } = water(0);
+    const { material, pool } = water(0);
     pool.update(0.016, true, 1);
     expect(material.defines).toEqual({});
   });
 
   it("are not drawn at all while the safety net takes shine away", () => {
-    const { material, water: pool } = water(0.4);
+    const { material, pool } = water(0.4);
     pool.update(0.016, false, 1);
     expect(material.defines).toEqual({});
   });
 
   it("are not drawn at all with no roughness", () => {
-    const { material, water: pool } = water(1);
+    const { material, pool } = water(1);
     pool.settings.roughness = 0;
     pool.update(0.016, true, 1);
     expect(material.defines).toEqual({});
+  });
+
+  it("rise over a second rather than appearing at once", () => {
+    const { material, pool } = water(0.5);
+    pool.update(0.25, true, 1);
+    const early = material.uniforms.rough.value;
+    pool.update(1, true, 1);
+    expect(early).toBeGreaterThan(0);
+    expect(material.uniforms.rough.value).toBeCloseTo(0.5 * pool.settings.roughness);
+    expect(early).toBeLessThan(material.uniforms.rough.value);
   });
 });
 

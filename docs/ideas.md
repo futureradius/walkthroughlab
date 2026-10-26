@@ -131,6 +131,11 @@ Movement is done until the finish line (#8).
   such as a cloth simulated in Blender, stored frame by frame in a picture the
   walkthrough plays back. Birds flap by a simple formula instead; this is the
   upgrade for sway that looks fake by formula. (#11)
+- **Water's waves worked out wave by wave** in its shader, from a handful of
+  wave trains, as the walkthrough drew them for a day (commit cb3d282). Its
+  waves showed a recognisable repeating pattern, and full-screen water ran at
+  32 fps on the Redmi against 36 with the two sliding ripple pictures and 39
+  flat. Worth another go, without the pattern, after the finish line. (#30)
 - **Indoor water out of the wind.** Water's waves follow the environment's
   one wind, so an indoor pool ripples as much as one outside. Revisit after
   the finish line, perhaps with a layer or a setting for sheltered water. (#30)

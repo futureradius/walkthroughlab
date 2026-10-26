@@ -14,28 +14,26 @@ import {
   ZeroFactor,
   type Texture,
 } from "three";
-import { choice, fixed, number, type Described } from "./settings";
+import { fixed, number, type Described } from "./settings";
 import { GUST_GLSL, windUniforms } from "./wind";
 
-/** How water's waves are drawn: worked out wave by wave, from two sliding ripple pictures, or not at all. */
-export type Waves = "shader" | "textures" | "flat";
-
 /**
- * How water's small waves are drawn (#30). They come from the environment's
- * wind: they run downwind, bigger and longer the stronger it blows, rougher
- * where its gusts pass, and none at all in still air, which is how viewers
- * who ask for reduced motion see it. Set per environment in its config file
- * under `## Water`.
+ * How water's small waves are drawn (#30): two ripple pictures sliding over
+ * each other, made in the trailing download. They come from the
+ * environment's wind: they run downwind, bigger and longer the stronger it
+ * blows, rougher where its gusts pass, and none at all in still air, which is
+ * how viewers who ask for reduced motion see it. Set per environment in its
+ * config file under `## Water`.
  */
 export interface WaterSettings {
-  /** How big the waves get in a given wind: 1 as usual, 0 a mirror in any wind. */
+  /** How big the waves get in a given wind: 1 a lively pool, 0 a mirror in any wind. */
   roughness: number;
   /** How fast the waves run: 1 as real water's do. */
   speed: number;
-  waves: Waves;
 }
 
-export const WATER: WaterSettings = { roughness: 1, speed: 1, waves: "shader" };
+/** As tuned on the Redmi Note 8 in the test environment (#30). */
+export const WATER: WaterSettings = { roughness: 0.6, speed: 0.45 };
 
 export const WATER_DESCRIBED: Described<WaterSettings> = {
   roughness: number({
@@ -44,7 +42,7 @@ export const WATER_DESCRIBED: Described<WaterSettings> = {
     max: 3,
     step: 0.05,
     show: fixed(2, "×"),
-    about: "How big water's waves get in a given wind: 1 as usual, 0 a mirror in any wind. The wind sets their way.",
+    about: "How big water's waves get in a given wind: 1 a lively pool, 0 a mirror in any wind. The wind sets their way.",
   }),
   speed: number({
     label: "Wave speed",
@@ -54,33 +52,14 @@ export const WATER_DESCRIBED: Described<WaterSettings> = {
     show: fixed(2, "×"),
     about: "How fast water's waves run: 1 as real water's do, 0.5 half as fast. Gust speed, under Wind, moves the rougher patches.",
   }),
-  waves: choice({
-    label: "Waves",
-    words: ["shader", "textures", "flat"],
-    about: "How the waves are drawn, to compare what each costs: worked out wave by wave, from two sliding ripple pictures, or flat water.",
-    panelOnly: true,
-  }),
 };
 
 /** Water's index of refraction, which `npm run optimize` gives every water material. */
 const IOR = 1.33;
 /** The share of light water reflects head-on. */
 const HEAD_ON = ((IOR - 1) / (IOR + 1)) ** 2;
-
-/**
- * The trains of waves added up by the shader, each as its angle off the wind
- * in radians, its length in metres in a middling wind, and its steepness:
- * how far it tilts the surface at its steepest. Short, as a pool's are, since
- * the wind has little water to raise longer ones over.
- */
-const TRAINS = [
-  [0.0, 0.45, 0.3],
-  [0.6, 0.31, 0.25],
-  [-0.5, 0.22, 0.22],
-  [1.2, 0.15, 0.18],
-  [-1.0, 0.1, 0.15],
-  [0.25, 0.07, 0.12],
-];
+/** Seconds the waves take to rise once their pictures are made (#14). */
+const GROW_SECONDS = 1;
 
 /**
  * The two ripple pictures' sides in metres in a middling wind, their angles
@@ -100,11 +79,8 @@ const uniforms = {
   /** The sky picture viewers see beyond the architecture. */
   sky: { value: null as Texture | null },
   reflection: { value: 1 },
-  /** How far the waves tilt the surface: the roughness times the wind's strength. */
+  /** How far the waves tilt the surface: the roughness times the wind's strength, as far as they have risen. */
   rough: { value: 0 },
-  /** Each train's waves per metre along x and z, its radians per metre, and how far it has run. */
-  trains: { value: TRAINS.map(() => new Vector4()) },
-  /** The ripple picture, made once its waves are first asked for. */
   ripples: { value: null as Texture | null },
   /** Each ripple picture's turn off the floor plan, as cos and sin, its pictures per metre and how far it has slid. */
   slides: { value: RIPPLES.map(() => new Vector4()) },
@@ -131,28 +107,12 @@ const FRAGMENT = /* glsl */ `
   varying vec3 vNormal;
   ${GUST_GLSL}
 
-  #if defined( WAVES_SHADER )
-    uniform vec4 trains[${TRAINS.length}];
-    const float STEEPNESS[${TRAINS.length}] = float[](${TRAINS.map(([, , steepness]) => steepness.toFixed(2)).join(", ")});
-
-    /** How steeply the water rises at a spot on the floor plan, along x and z. */
-    vec2 waveSlope(vec2 spot) {
-      // How far apart neighbouring pixels lie on the water: waves too short
-      // to draw there fade out rather than flicker.
-      float pixel = length(fwidth(spot));
-      vec2 slope = vec2(0.0);
-      for (int i = 0; i < ${TRAINS.length}; i++) {
-        vec4 train = trains[i];
-        float seen = clamp(1.5708 / (pixel * train.z) - 1.0, 0.0, 1.0);
-        slope += train.xy / train.z * (STEEPNESS[i] * seen * cos(dot(train.xy, spot) - train.w));
-      }
-      return slope;
-    }
-  #elif defined( WAVES_TEXTURES )
+  #ifdef WAVES
     uniform sampler2D ripples;
     uniform vec4 slides[${RIPPLES.length}];
     const float STEEPNESS[${RIPPLES.length}] = float[](${RIPPLES.map(({ steepness }) => steepness.toFixed(2)).join(", ")});
 
+    /** How steeply the water rises at a spot on the floor plan, along x and z. */
     vec2 waveSlope(vec2 spot) {
       vec2 slope = vec2(0.0);
       for (int i = 0; i < ${RIPPLES.length}; i++) {
@@ -169,7 +129,7 @@ const FRAGMENT = /* glsl */ `
   void main() {
     vec3 normal = normalize(vNormal);
     vec3 toEye = normalize(cameraPosition - vSpot);
-    #if defined( WAVES_SHADER ) || defined( WAVES_TEXTURES )
+    #ifdef WAVES
       // Only the water's top tilts with its waves; its sides stay as they are.
       vec2 slope = waveSlope(vSpot.xz) * rough * gusting(vSpot.xz) * max(normal.y, 0.0);
       normal = normalize(normal + vec3(-slope.x, 0.0, -slope.y));
@@ -197,9 +157,10 @@ const FRAGMENT = /* glsl */ `
 
 /**
  * Water that tints what lies below it by the share of red, green and blue its
- * colour names, once, and reflects the sky picture through its waves on top.
- * Its faces point out of the water, so drawn from the front alone the view
- * crosses its top once, and its sides and floor stay unseen.
+ * colour names, once, and reflects the sky picture through its waves on top:
+ * one read of the picture, far cheaper on a phone than three.js's physical
+ * material (#30). Its faces point out of the water, so drawn from the front
+ * alone the view crosses its top once, and its sides and floor stay unseen.
  */
 export function asWater(colour: Color, name = "water"): ShaderMaterial {
   const material = new ShaderMaterial({
@@ -207,7 +168,6 @@ export function asWater(colour: Color, name = "water"): ShaderMaterial {
     uniforms,
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
-    defines: definesFor(WATER.waves),
     side: FrontSide,
     depthWrite: false,
     toneMapped: false,
@@ -225,10 +185,6 @@ export function asWater(colour: Color, name = "water"): ShaderMaterial {
   return material;
 }
 
-function definesFor(waves: Waves): Record<string, string> {
-  return waves === "shader" ? { WAVES_SHADER: "" } : waves === "textures" ? { WAVES_TEXTURES: "" } : {};
-}
-
 /** Pixels along each side of the ripple picture. */
 const RIPPLE_SIZE = 128;
 
@@ -239,7 +195,7 @@ const RIPPLE_SIZE = 128;
  */
 export function ripplePicture(size = RIPPLE_SIZE): DataTexture {
   let seed = 7;
-  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const waves: { m: number; n: number; height: number; phase: number }[] = [];
   while (waves.length < 40) {
     const m = Math.round(1 + random() * 9);
@@ -281,16 +237,18 @@ export function ripplePicture(size = RIPPLE_SIZE): DataTexture {
 }
 
 /**
- * Every water surface of an environment: moves its waves on with the wind
- * each frame, and draws them as the settings and the safety net allow.
+ * Every water surface of an environment: flat until its ripple pictures are
+ * made, then moves its waves on with the wind each frame, drawn as the
+ * settings and the safety net allow.
  */
 export class Water {
   readonly settings: WaterSettings = { ...WATER };
   private readonly materials: ShaderMaterial[];
-  /** How far each train of waves, and each ripple picture, has run, in radians or pictures. */
-  private readonly run = TRAINS.map(() => 0);
+  /** How far each ripple picture has slid, in pictures. */
   private readonly slid = RIPPLES.map(() => 0);
-  private drawn: Waves = WATER.waves;
+  /** How far the waves have risen since their pictures were made, from 0 to 1. */
+  private risen = 0;
+  private waving = false;
 
   constructor(materials: ShaderMaterial[]) {
     this.materials = materials;
@@ -306,35 +264,35 @@ export class Water {
     uniforms.sky.value = picture;
   }
 
+  /** Make the ripple pictures, in the trailing download; the waves rise from then on. */
+  grow() {
+    if (this.any) uniforms.ripples.value ??= ripplePicture();
+  }
+
   /**
    * Move the waves on by one frame, after the wind has blown. Without
    * `wavesAllowed` the water lies flat; `reflection` is the strength
    * reflections are set to.
    */
   update(seconds: number, wavesAllowed: boolean, reflection: number) {
-    const { roughness, speed, waves } = this.settings;
+    const { roughness, speed } = this.settings;
     const strength = windUniforms.windStrength.value;
-    const drawn = wavesAllowed && roughness * strength > 0 ? waves : "flat";
-    if (drawn !== this.drawn) {
-      this.drawn = drawn;
-      if (drawn === "textures") uniforms.ripples.value ??= ripplePicture();
+    const made = uniforms.ripples.value !== null;
+    if (made) this.risen = Math.min(1, this.risen + seconds / GROW_SECONDS);
+    // Flat water leaves out the waves' work altogether.
+    const waving = made && wavesAllowed && roughness * strength > 0;
+    if (waving !== this.waving) {
+      this.waving = waving;
       for (const material of this.materials) {
-        material.defines = definesFor(drawn);
+        material.defines = waving ? { WAVES: "" } : {};
         material.needsUpdate = true;
       }
     }
     uniforms.reflection.value = reflection;
-    uniforms.rough.value = roughness * strength;
+    uniforms.rough.value = roughness * strength * this.risen;
     // A stronger wind raises longer waves, which also run faster.
     const stretch = 0.5 + strength;
     const { x, y } = windUniforms.windDirection.value;
-    TRAINS.forEach(([angle, length], i) => {
-      const c = Math.cos(angle);
-      const s = Math.sin(angle);
-      const k = (2 * Math.PI) / (length * stretch);
-      this.run[i] = (this.run[i] + k * runs(k) * seconds * speed) % (2 * Math.PI);
-      uniforms.trains.value[i].set((c * x - s * y) * k, (s * x + c * y) * k, k, this.run[i]);
-    });
     RIPPLES.forEach(({ side, angle }, i) => {
       const c = Math.cos(angle);
       const s = Math.sin(angle);

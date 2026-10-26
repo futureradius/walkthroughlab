@@ -182,7 +182,7 @@ and never published (#15, #16, #34).
 - [x] Baked light from the sky and from lamps (glowing materials)
 - [ ] Ambient occlusion
 - [ ] Glass
-- [ ] Water: tints, reflects the sky through small waves, still for reduced
+- [x] Water: tints, reflects the sky through small waves, still for reduced
       motion
 - [ ] Materials: plain, relief, shine and both, each used at least once, tuned
       in the test environment

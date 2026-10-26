@@ -79,7 +79,7 @@ export interface Opened {
 /**
  * The trailing download, in order, each part fading in or sharpening what is
  * there as it arrives. Ambient occlusion fades in by itself once its method
- * has arrived.
+ * has arrived, and water's waves rise once their pictures are made.
  */
 async function trail(
   environment: EnvironmentAddress,
@@ -89,6 +89,8 @@ async function trail(
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
   await occlusion?.ready();
+  // Made here rather than downloaded; flat until then.
+  water.grow();
   for (const { name, scatter } of scatters) {
     try {
       scatter.grow(tuftOf(await loadModel(environment.scatter(name), downloads)));

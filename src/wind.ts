@@ -11,11 +11,12 @@ export interface WindSettings {
   direction: number;
   /** From 0, still, to 1, a strong wind. */
   strength: number;
-  /** How fast gusts roll across grass, trees and water: 1 as usual. */
+  /** How fast gusts roll across grass, trees and water. */
   gustSpeed: number;
 }
 
-export const WIND: WindSettings = { direction: 225, strength: 0.4, gustSpeed: 1 };
+/** Gust speed as tuned on the Redmi Note 8 against water's waves (#30). */
+export const WIND: WindSettings = { direction: 225, strength: 0.4, gustSpeed: 1.4 };
 
 export const WIND_DESCRIBED: Described<WindSettings> = {
   direction: number({
@@ -40,7 +41,7 @@ export const WIND_DESCRIBED: Described<WindSettings> = {
     max: 2,
     step: 0.05,
     show: fixed(2, "×"),
-    about: "How fast gusts roll across grass, trees and water: 1 as usual, 0.5 half as fast.",
+    about: "How fast gusts roll across grass, trees and water: 2 twice as fast as 1, at which grass was first tuned.",
   }),
 };
 
