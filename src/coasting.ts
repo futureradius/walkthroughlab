@@ -8,8 +8,7 @@ export interface CoastingSettings {
   glide: number;
   /** The brake that grows with speed and tames a fierce throw, per radian. */
   grip: number;
-  /** Whether the device asks for reduced motion, which swaps in the two below. */
-  reduced: boolean;
+  /** The two brakes in place of those above with reduced motion. */
   reducedGlide: number;
   reducedGrip: number;
 }
@@ -24,7 +23,6 @@ export const COASTING: CoastingSettings = {
   on: true,
   glide: 3.5,
   grip: 0.1,
-  reduced: false,
   reducedGlide: 14,
   reducedGrip: 3.5,
 };
@@ -50,17 +48,13 @@ export const COASTING_DESCRIBED: Described<CoastingSettings> = {
     show: perRadian,
     about: "The brake that grows with speed and tames a fierce throw.",
   }),
-  reduced: toggle({
-    label: "As with reduced motion",
-    about: "Brake as for a device that asks for reduced motion, with the two below.",
-  }),
   reducedGlide: number({
     label: "Glide (reduced)",
     min: 2,
     max: 40,
     step: 0.5,
     show: perSecond,
-    about: "Glide with reduced motion.",
+    about: "Glide with reduced motion, which Accessibility switches on.",
   }),
   reducedGrip: number({
     label: "Grip (reduced)",
@@ -73,8 +67,8 @@ export const COASTING_DESCRIBED: Described<CoastingSettings> = {
 };
 
 /** The brake that is always on, per second, as reduced motion picks it. */
-export function glideOf(settings: CoastingSettings): number {
-  return settings.reduced ? settings.reducedGlide : settings.glide;
+export function glideOf(settings: CoastingSettings, reduced: boolean): number {
+  return reduced ? settings.reducedGlide : settings.glide;
 }
 
 /** Slowest release that throws the view, in radians per second. */
@@ -87,6 +81,8 @@ const REST = 0.03;
  * faster it turns, until it rests or is caught.
  */
 export class Coasting {
+  /** Whether to brake as for reduced motion, with the reduced brakes. */
+  reduced = false;
   private speed = 0;
   private right = 0;
   private up = 0;
@@ -118,8 +114,8 @@ export class Coasting {
       this.speed = 0;
       return { right: 0, up: 0 };
     }
-    const glide = glideOf(this.settings);
-    const grip = this.settings.reduced ? this.settings.reducedGrip : this.settings.grip;
+    const glide = glideOf(this.settings, this.reduced);
+    const grip = this.reduced ? this.settings.reducedGrip : this.settings.grip;
 
     // Slowing by glide × speed + grip × speed², worked out exactly so the
     // view ends up in the same place whatever the frame rate.

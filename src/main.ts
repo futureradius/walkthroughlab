@@ -1,4 +1,5 @@
 import { NeutralToneMapping, PerspectiveCamera, Raycaster, Scene, Vector2, WebGLRenderer } from "three";
+import { ACCESSIBILITY_DESCRIBED } from "./accessibility";
 import { addAbout } from "./about";
 import { Downloads } from "./download";
 import { Gestures } from "./gestures";
@@ -88,10 +89,10 @@ const { steering, faces, sections, warnings, wind, scatters, props, surfaces, wa
 
 // Add ?config to the address for a panel that changes settings while walking.
 // Ambient occlusion's and zoom's start from those the environment's config
-// file gave. With reduced motion a thrown view is braked much harder.
+// file gave. With reduced motion a thrown view is braked much harder, and
+// the wind is still.
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-const { coasting } = steering.settings;
-coasting.reduced = reducedMotion.matches;
+const accessibility = { reducedMotion: reducedMotion.matches };
 net = new SafetyNet(fullPixelRatio, occlusion !== null, scatters.length > 0, surfaces.any || water.any);
 
 // Something arriving, the page going off screen or a setting changed stalls
@@ -103,11 +104,12 @@ if (occlusion) occlusion.onArrival = noteHitch;
 document.addEventListener("visibilitychange", noteHitch);
 if (params.has("config")) {
   const netSection = section("Safety net", net.settings, NET_DESCRIBED);
-  addTuning(document.body, [...sections, netSection], warnings, noteHitch);
+  const accessibilitySection = section("Accessibility", accessibility, ACCESSIBILITY_DESCRIBED);
+  addTuning(document.body, [accessibilitySection, ...sections, netSection], warnings, noteHitch);
 } else {
-  // The panel has a switch for this instead, to try both brakes on one device.
+  // The panel has a switch for this instead, to try it on any device.
   reducedMotion.addEventListener("change", () => {
-    coasting.reduced = reducedMotion.matches;
+    accessibility.reducedMotion = reducedMotion.matches;
   });
 }
 
@@ -137,6 +139,7 @@ renderer.setAnimationLoop((now) => {
   // behind, the car jitters against the eyes as it rides.
   doors.update(seconds);
   elevators.update(seconds);
+  steering.reducedMotion = accessibility.reducedMotion;
   const view = steering.step(readings, seconds, screenSize());
   camera.position.set(view.x, view.y, view.z);
   camera.rotation.y = -view.heading;
@@ -144,7 +147,7 @@ renderer.setAnimationLoop((now) => {
   camera.fov = view.fov;
   camera.updateProjectionMatrix();
   faces.update();
-  blow(wind, seconds, reducedMotion.matches);
+  blow(wind, seconds, accessibility.reducedMotion);
   for (const scatter of scatters) scatter.update(seconds, camera.position);
   props.update(seconds);
   surfaces.apply(net!.current.shine);

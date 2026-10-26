@@ -199,6 +199,11 @@ export class Steering {
     this.viewpoint = { ...this.viewpoint, ...to };
   }
 
+  /** Whether to brake a thrown view as for reduced motion; see Accessibility. */
+  set reducedMotion(reduced: boolean) {
+    this.coasting.reduced = reduced;
+  }
+
   /** A free look drag began, which catches a coasting view. */
   touch() {
     this.held = true;
@@ -325,7 +330,7 @@ export class Steering {
     if (this.held) this.sidestepping = 1;
     else if (stick.x === 0 && stick.y === 0) this.sidestepping = coast;
     else {
-      const faded = this.sidestepping * Math.exp(-glideOf(coasting) * seconds);
+      const faded = this.sidestepping * Math.exp(-glideOf(coasting, this.coasting.reduced) * seconds);
       this.sidestepping = Math.max(coast, faded);
     }
     if (this.sidestepping < TURNING) this.sidestepping = 0;

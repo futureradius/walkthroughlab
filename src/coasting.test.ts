@@ -68,7 +68,9 @@ describe("coasting", () => {
 
   it("settles sooner and nearer with reduced motion, without stopping dead", () => {
     const usual = carry(new Coasting(), 5);
-    const reduced = carry(new Coasting({ ...COASTING, reduced: true }), 5);
+    const braking = new Coasting({ ...COASTING });
+    braking.reduced = true;
+    const reduced = carry(braking, 5);
     expect(reduced.turned).toBeGreaterThan(0);
     expect(reduced.turned).toBeLessThan(usual.turned / 4);
     expect(reduced.seconds).toBeLessThan(0.5);

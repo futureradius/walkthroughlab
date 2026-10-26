@@ -287,7 +287,7 @@ describe("steering", () => {
     it("hands back sooner with reduced motion", () => {
       const share = (reduced: boolean) => {
         const { steering, frame, hold } = walkthrough();
-        steering.settings.coasting.reduced = reduced;
+        steering.reducedMotion = reduced;
         steering.touch();
         frame(right);
         steering.letGo();
