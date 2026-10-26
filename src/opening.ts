@@ -7,7 +7,7 @@ import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type Envi
 import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
 import { Crowns, leavesOf, PROP, PROP_DESCRIBED, propSway, STILL_PROP_DESCRIBED } from "./props";
 import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
-import { WATER_DESCRIBED } from "./water";
+import { Water, WATER_DESCRIBED } from "./water";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
@@ -66,8 +66,10 @@ export interface Opened {
   scatters: Scatter[];
   /** Props' swaying parts, such as trees' crowns; move them on every frame. */
   props: { update(seconds: number): void };
-  /** Surfaces that may show relief or shine, and water's waves; `apply` them every frame. */
+  /** Surfaces that may show relief or shine; `apply` them every frame. */
   surfaces: Surfaces;
+  /** The environment's water, if any; move its waves on every frame, after the wind. */
+  water: Water;
   /** Doors that open by themselves; move them on every frame, after steering. */
   doors: { update(seconds: number): void };
   /** Elevators: move them on every frame, after steering, and tell them of taps. */
@@ -83,6 +85,7 @@ async function trail(
   environment: EnvironmentAddress,
   scatters: { name: string; scatter: Scatter }[],
   swaying: { name: string; crowns: Crowns }[],
+  water: Water,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
   await occlusion?.ready();
@@ -111,6 +114,7 @@ async function trail(
     (picture) => {
       (scene.background as { dispose?: () => void } | null)?.dispose?.();
       scene.background = picture;
+      water.sky = picture;
     },
   );
 }
@@ -200,7 +204,9 @@ export async function openEnvironment(
   const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
   // Steering's sections exist only once it does.
   const sections = steeringSections(steering);
-  const surfaces = new Surfaces(loaded.shiny, loaded.glass, loaded.water);
+  const surfaces = new Surfaces(loaded.shiny, loaded.glass);
+  const water = new Water(loaded.water);
+  water.sky = loaded.skyPicture;
   // Copies grow once their file arrives; their settings are there from the start.
   const wind = { ...WIND };
   const scatters = loaded.scatter.map(({ name, layer }) => {
@@ -222,7 +228,7 @@ export async function openEnvironment(
   sections.push(
     section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
-    ...(loaded.water.length > 0 ? [section("Water", surfaces.water, WATER_DESCRIBED, true)] : []),
+    ...(water.any ? [section("Water", water.settings, WATER_DESCRIBED, true)] : []),
     ...scatters.map(({ name, scatter }) => section(`scatter-${name}`, scatter.settings, SCATTER_DESCRIBED, true)),
     ...props.map(({ name, settings, crowns }) =>
       crowns
@@ -233,7 +239,7 @@ export async function openEnvironment(
   configure(sections, await config);
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  void trail(environment, scatters, swaying, { renderer, scene, occlusion, downloads });
+  void trail(environment, scatters, swaying, water, { renderer, scene, occlusion, downloads });
   return {
     steering,
     faces,
@@ -250,6 +256,7 @@ export async function openEnvironment(
       },
     },
     surfaces,
+    water,
     doors: {
       update: (seconds) => {
         for (const door of doors) door.update(seconds, collision, steering);

@@ -1,5 +1,5 @@
 import { Vector2 } from "three";
-import { number, percent, type Described } from "./settings";
+import { fixed, number, percent, type Described } from "./settings";
 
 /**
  * The one wind everything that sways moves in, set per environment in its
@@ -11,9 +11,11 @@ export interface WindSettings {
   direction: number;
   /** From 0, still, to 1, a strong wind. */
   strength: number;
+  /** How fast gusts roll across grass, trees and water: 1 as usual. */
+  gustSpeed: number;
 }
 
-export const WIND: WindSettings = { direction: 225, strength: 0.4 };
+export const WIND: WindSettings = { direction: 225, strength: 0.4, gustSpeed: 1 };
 
 export const WIND_DESCRIBED: Described<WindSettings> = {
   direction: number({
@@ -32,12 +34,22 @@ export const WIND_DESCRIBED: Described<WindSettings> = {
     show: percent,
     about: "How hard it blows, from still to a strong wind. Still for viewers who ask for reduced motion.",
   }),
+  gustSpeed: number({
+    label: "Gust speed",
+    min: 0,
+    max: 2,
+    step: 0.05,
+    show: fixed(2, "×"),
+    about: "How fast gusts roll across grass, trees and water: 1 as usual, 0.5 half as fast.",
+  }),
 };
 
 /** What every swaying thing's shader reads: shared, so they all move in one wind. */
 export const windUniforms = {
-  /** Seconds the walkthrough has been running, which every gust is worked out from. */
+  /** Seconds the walkthrough has been running, which everything's own flutter is worked out from. */
   time: { value: 0 },
+  /** Likewise, but at the gusts' speed, so a change of speed doesn't make them jump. */
+  gustTime: { value: 0 },
   /** The way the wind blows towards, across the floor plan. */
   windDirection: { value: new Vector2(1, 0) },
   windStrength: { value: 0 },
@@ -49,6 +61,7 @@ export const windUniforms = {
  */
 export function blow(settings: WindSettings, seconds: number, reducedMotion: boolean) {
   windUniforms.time.value += seconds;
+  windUniforms.gustTime.value += seconds * settings.gustSpeed;
   const bearing = (settings.direction * Math.PI) / 180;
   // From the bearing, towards the opposite way.
   windUniforms.windDirection.value.set(-Math.sin(bearing), Math.cos(bearing));
@@ -64,6 +77,7 @@ export function blow(settings: WindSettings, seconds: number, reducedMotion: boo
  */
 export const GUST_GLSL = /* glsl */ `
   uniform float time;
+  uniform float gustTime;
   uniform vec2 windDirection;
   uniform float windStrength;
 
@@ -72,8 +86,8 @@ export const GUST_GLSL = /* glsl */ `
     float across = dot(spot, vec2(-windDirection.y, windDirection.x));
     // Broad gusts rolling across with the wind, their fronts wavering, and
     // smaller ones inside them, at speeds that never line up.
-    float broad = sin(along * 0.23 - time * 1.1 + 1.7 * sin(across * 0.13 + time * 0.21));
-    float small = sin(along * 0.87 - time * 2.6 + across * 0.41);
+    float broad = sin(along * 0.23 - gustTime * 1.1 + 1.7 * sin(across * 0.13 + gustTime * 0.21));
+    float small = sin(along * 0.87 - gustTime * 2.6 + across * 0.41);
     return 0.55 + 0.3 * broad + 0.15 * small;
   }
 

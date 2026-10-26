@@ -82,7 +82,7 @@ const environment = {
     ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180, y: Number.isFinite(atHeight) ? atHeight : undefined } }
     : {}),
 };
-const { steering, faces, sections, warnings, wind, scatters, props, surfaces, doors, elevators } = await whileLoading(document.body, downloads, (onProgress, onName) =>
+const { steering, faces, sections, warnings, wind, scatters, props, surfaces, water, doors, elevators } = await whileLoading(document.body, downloads, (onProgress, onName) =>
   openEnvironment(environment, { renderer, scene, occlusion, downloads }, onProgress, onName),
 );
 
@@ -92,7 +92,7 @@ const { steering, faces, sections, warnings, wind, scatters, props, surfaces, do
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const { coasting } = steering.settings;
 coasting.reduced = reducedMotion.matches;
-net = new SafetyNet(fullPixelRatio, occlusion !== null, scatters.length > 0, surfaces.any);
+net = new SafetyNet(fullPixelRatio, occlusion !== null, scatters.length > 0, surfaces.any || water.any);
 
 // Something arriving, the page going off screen or a setting changed stalls
 // frames for reasons the net can do nothing about, so those seconds don't count.
@@ -148,6 +148,7 @@ renderer.setAnimationLoop((now) => {
   for (const scatter of scatters) scatter.update(seconds, camera.position);
   props.update(seconds);
   surfaces.apply(net!.current.shine);
+  water.update(seconds, net!.current.shine && surfaces.settings.on, surfaces.settings.reflection);
   if (occlusion) occlusion.render();
   else renderer.render(scene, camera);
 

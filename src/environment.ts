@@ -4,7 +4,6 @@ import {
   CustomBlending,
   DoubleSide,
   EquirectangularReflectionMapping,
-  FrontSide,
   Line,
   Mesh,
   MeshBasicMaterial,
@@ -18,6 +17,7 @@ import {
   ZeroFactor,
   type Material,
   type Object3D,
+  type ShaderMaterial,
   type Texture,
   type WebGLRenderer,
 } from "three";
@@ -32,7 +32,7 @@ import { withReliefAndShine, type Shiny } from "./materials";
 import { propSway, withSway, type PropCopy } from "./props";
 import { readConfig, type Config } from "./settings";
 import { handsOwnLight } from "./sunlit";
-import { withWaves } from "./water";
+import { asWater } from "./water";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 export const BAKED_LIGHT_RANGE = 4;
 
@@ -96,7 +96,7 @@ export interface Environment {
   /** Surfaces that may show relief or shine, glass and water, for Surfaces to switch and tune. */
   shiny: Shiny[];
   glass: MeshStandardMaterial[];
-  water: MeshStandardMaterial[];
+  water: ShaderMaterial[];
 }
 
 /**
@@ -218,17 +218,6 @@ function isWater(material: Material): material is MeshStandardMaterial {
 }
 
 /**
- * Water tints what lies below it like glass, and reflects the sky through its
- * waves. Its faces point out of the water, so drawn from the front alone the
- * view crosses its top once, and its sides and floor stay unseen.
- */
-function asWater(material: MeshStandardMaterial) {
-  asGlass(material);
-  material.side = FrontSide;
-  withWaves(material);
-}
-
-/**
  * A surface whose light was baked only has to show its own colour times that
  * light, which is the cheapest thing a phone can draw.
  */
@@ -275,11 +264,11 @@ export function prepareSurfaces(
   model: Object3D,
   bakedLight: Texture[],
   anisotropy: number,
-): { shiny: Shiny[]; glass: MeshStandardMaterial[]; water: MeshStandardMaterial[] } {
+): { shiny: Shiny[]; glass: MeshStandardMaterial[]; water: ShaderMaterial[] } {
   const baked = new Map<Material, { plain: Material; rich?: MeshStandardMaterial }>();
   const swaying = new Map<Material, Material>();
   const glass = new Set<MeshStandardMaterial>();
-  const water = new Set<MeshStandardMaterial>();
+  const water = new Map<Material, ShaderMaterial>();
   const shiny: Shiny[] = [];
   let bakedGlass = 0;
   model.traverse((object) => {
@@ -288,10 +277,12 @@ export function prepareSurfaces(
     prepare(material, anisotropy);
     if (isWater(material)) {
       object.layers.enable(LAYERS.water);
-      if (!water.has(material)) {
-        water.add(material);
-        asWater(material);
+      let made = water.get(material);
+      if (!made) {
+        water.set(material, (made = asWater(material.color, material.name)));
+        material.dispose();
       }
+      object.material = made;
       return;
     }
     // Glass is decided first, so it stays glass whatever coordinates it carries.
@@ -344,7 +335,7 @@ export function prepareSurfaces(
       `${bakedGlass} glass meshes carry coordinates for baked light, which glass does not show yet (issue #20).`,
     );
   }
-  return { shiny, glass: [...glass], water: [...water] };
+  return { shiny, glass: [...glass], water: [...water.values()] };
 }
 
 /**

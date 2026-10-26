@@ -8,6 +8,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  ShaderMaterial,
   Texture,
   type Material,
 } from "three";
@@ -83,15 +84,22 @@ describe("sorting surfaces", () => {
     expect(material.blendColor.getHex()).not.toBe(0);
   });
 
-  it("blends water with what is below it like glass, from the front alone, with its waves", () => {
+  it("blends water with what is below it like glass, from the front alone, by its own colour", () => {
     const [water] = prepared([mesh(waterMaterial())]);
-    const material = water.material as MeshStandardMaterial;
+    const material = water.material as ShaderMaterial;
+    expect(material).toBeInstanceOf(ShaderMaterial);
     expect(material.blending).toBe(CustomBlending);
     expect(material.depthWrite).toBe(false);
-    expect(material.color.getHex()).toBe(0);
-    expect(material.blendColor.getHex()).not.toBe(0);
     expect(material.side).toBe(FrontSide);
-    expect(material.customProgramCacheKey()).toBe("water");
+    // Encoded for display, as the canvas holds it.
+    expect(material.blendColor.r).toBeCloseTo(0x80 / 255, 1);
+    expect(material.blendColor.b).toBeGreaterThan(material.blendColor.r);
+  });
+
+  it("makes each water material once, however many meshes share it", () => {
+    const shared = waterMaterial();
+    const [a, b] = prepared([mesh(shared), mesh(shared)]);
+    expect(a.material).toBe(b.material);
   });
 
   it("gives a solid surface the bake painted its baked light", () => {

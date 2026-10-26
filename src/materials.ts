@@ -1,6 +1,5 @@
 import type { Material, Mesh, MeshStandardMaterial } from "three";
 import { fixed, number, toggle, type Described } from "./settings";
-import { WATER, waves, type WaterSettings } from "./water";
 
 /**
  * How surfaces with relief or shine are shown: each material gets one of four
@@ -119,26 +118,22 @@ export interface Shiny {
 
 /**
  * Every surface that may show relief or shine, each switched between its rich
- * and its plain material by the settings and the safety net; glass and water,
- * whose reflections the same strength sets; and water's waves, which go with
- * shine.
+ * and its plain material by the settings and the safety net, and glass, whose
+ * reflections the same strength sets. Water reads it too; see Water.
  */
 export class Surfaces {
   readonly settings: MaterialSettings = { ...MATERIALS };
-  readonly water: WaterSettings = { ...WATER };
   private readonly shiny: Shiny[];
-  private readonly reflecting: MeshStandardMaterial[];
-  private readonly hasWater: boolean;
+  private readonly glass: MeshStandardMaterial[];
 
-  constructor(shiny: Shiny[], glass: MeshStandardMaterial[], water: MeshStandardMaterial[] = []) {
+  constructor(shiny: Shiny[], glass: MeshStandardMaterial[]) {
     this.shiny = shiny;
-    this.reflecting = [...glass, ...water];
-    this.hasWater = water.length > 0;
+    this.glass = glass;
   }
 
-  /** Whether any surface could shine, show relief or waves, so the safety net has something to take. */
+  /** Whether any surface could shine or show relief, so the safety net has something to take. */
   get any(): boolean {
-    return this.shiny.length > 0 || this.hasWater;
+    return this.shiny.length > 0;
   }
 
   /**
@@ -152,8 +147,7 @@ export class Surfaces {
     shared.shineBelow.value = shineBelow;
     shared.reflection.value = reflection;
     shared.reliefStrength.value = relief;
-    for (const material of this.reflecting) material.envMapIntensity = reflection;
-    waves.value = shineAllowed ? this.water.roughness : 0;
+    for (const glass of this.glass) glass.envMapIntensity = reflection;
     for (const { mesh, plain, rich } of this.shiny) {
       const shines = rich.metalness > 0.5 || rich.roughness < shineBelow || rich.roughnessMap !== null;
       const wanted = shineAllowed && (shines || rich.normalMap !== null) ? rich : plain;
