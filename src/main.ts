@@ -87,15 +87,12 @@ const fps = params.has("fps")
 addAbout(document.body);
 
 const downloads = new Downloads();
-// Add ?tuft=blades to grow the placeholder blades instead of the placeholder cards (#25).
-const tuft = params.get("tuft");
 // Add ?at=x,z,bearing to open at that spot on the floor plan, looking along
 // the compass bearing (0 north, 90 east), instead of at the start spot; a
 // fourth number picks the floor nearest that height, for upper storeys.
 const [atX, atZ, bearing, atHeight] = (params.get("at") ?? "").split(",").map(Number);
 const environment = {
   ...TEST_ENVIRONMENT,
-  ...(tuft ? { scatter: (name: string) => TEST_ENVIRONMENT.scatter(`${name}-${tuft}`) } : {}),
   ...(Number.isFinite(atZ)
     ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180, y: Number.isFinite(atHeight) ? atHeight : undefined } }
     : {}),

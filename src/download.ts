@@ -16,11 +16,16 @@ const BROWSER: Network = {
   },
 };
 
+/** A file the site says it does not have, which trying again will not bring. */
+export class MissingFile extends Error {}
+
 /**
  * Fetches the files of a walkthrough, telling how many bytes of each have
- * arrived, and never gives up on one: a failed download is tried again at
- * once, then every RETRY_SECONDS, or straight away when asked to. Meanwhile
- * `onWaiting` is told that something is waiting for the connection.
+ * arrived, and never gives up on one while the connection is to blame: a
+ * failed download is tried again at once, then every RETRY_SECONDS, or
+ * straight away when asked to. Meanwhile `onWaiting` is told that something
+ * is waiting for the connection. A file the site does not have fails at once
+ * with MissingFile, so whatever waits on it can carry on without it.
  */
 export class Downloads {
   /** Told true when a download starts waiting to be tried again, false when none is. */
@@ -49,6 +54,7 @@ export class Downloads {
         this.onArrival();
         return file;
       } catch (error) {
+        if (error instanceof MissingFile) throw error;
         console.warn(`Could not download ${address}; trying again.`, error);
         onBytes(0);
         // The first retry is at once, to get past a brief dropout.
@@ -59,6 +65,7 @@ export class Downloads {
 
   private async once(address: string, onBytes: (bytes: number) => void): Promise<ArrayBuffer> {
     const response = await this.network.fetch(address);
+    if (response.status === 404 || response.status === 410) throw new MissingFile(`${address} is not on the site.`);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     if (!response.body) {
       const whole = await response.arrayBuffer();

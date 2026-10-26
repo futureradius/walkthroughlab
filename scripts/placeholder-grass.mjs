@@ -3,8 +3,8 @@
 //   grass.glb        blades: thin solid tapered ribbons, nothing see-through,
 //                    the kind that ran faster on phones and laptops
 //   grass-cards.glb  cards: a few flat see-through pictures of several blades
-// Run with `node scripts/placeholder-grass.mjs`, then `npm run optimize`;
-// `?tuft=cards` grows the cards instead.
+// Run with `node scripts/placeholder-grass.mjs`, then `npm run optimize`. To
+// try the cards, rename them to grass.glb and optimize again.
 import { mkdir } from "node:fs/promises";
 import { Document, NodeIO } from "@gltf-transform/core";
 import sharp from "sharp";

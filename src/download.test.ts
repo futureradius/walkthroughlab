@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Downloads, RETRY_SECONDS, type Network } from "./download";
+import { Downloads, MissingFile, RETRY_SECONDS, type Network } from "./download";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -75,5 +75,12 @@ describe("downloading", () => {
     const heard: number[] = [];
     await new Downloads(net).get("a.glb", (bytes) => heard.push(bytes));
     expect(heard).toEqual([0, 2]);
+  });
+
+  it("gives up at once on a file the site does not have, so what waits on it can carry on", async () => {
+    const { net, fetch, waits } = network([async () => new Response("", { status: 404 }), ok([1])]);
+    await expect(new Downloads(net).get("gone.glb")).rejects.toBeInstanceOf(MissingFile);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(waits).toHaveLength(0);
   });
 });

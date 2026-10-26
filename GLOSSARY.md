@@ -107,7 +107,7 @@ Everything that must arrive before the viewer can move: the environment with its
 _Avoid_: Preload, first load, initial payload
 
 **Trailing download**:
-Everything that arrives after the viewer can move, each part fading in where it belongs as it arrives: ambient occlusion, reflections of the sky, scatter, swaying things, a sharper sky picture, birds and sound. A part that fails is tried again until it arrives.
+Everything that arrives after the viewer can move, each part fading in where it belongs as it arrives: ambient occlusion, reflections of the sky, scatter, swaying things, a sharper sky picture, birds and sound. A part that fails is tried again until it arrives, unless the site does not have it at all: that part is left out and the rest still arrive.
 _Avoid_: Late arrival, lazy loading, streaming, deferred assets
 
 ### Movement
