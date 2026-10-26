@@ -50,7 +50,7 @@ describe("a bird's wings", () => {
     const { flapping } = flap(0, 60);
     const changes = flapping.filter((each, i) => i > 0 && each !== flapping[i - 1]).length;
     expect(changes).toBeGreaterThan(6);
-    // Bursts last up to 1.5 s and pauses up to 4 s, so it flaps less than half the time.
+    // Bursts last up to 1 s and pauses up to 2.5 s, so it flaps less than half the time.
     const share = flapping.filter(Boolean).length / flapping.length;
     expect(share).toBeGreaterThan(0.15);
     expect(share).toBeLessThan(0.6);

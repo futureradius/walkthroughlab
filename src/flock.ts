@@ -43,17 +43,18 @@ export interface FlockSettings {
   burst: number;
 }
 
+/** As tuned on the Redmi Note 8 over the test environment (#32). */
 export const FLOCK: FlockSettings = {
-  count: 9,
-  speed: 9,
-  spread: 3,
-  size: 1,
-  flap: 4,
-  bank: 30,
+  count: 7,
+  speed: 3,
+  spread: 1.5,
+  size: 0.8,
+  flap: 2.5,
+  bank: 61,
   climb: 10,
-  pause: 4,
+  pause: 2.5,
   dive: 8,
-  burst: 1.5,
+  burst: 1,
 };
 
 /** Most birds in one flock. */

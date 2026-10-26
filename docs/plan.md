@@ -190,7 +190,7 @@ and never published (#15, #16, #34).
 - [ ] Still props (chairs, tables) with baked shadow; potted plants swaying;
       trees and bushes placed by hand, swaying as painted
 - [x] Curtains and flags swaying
-- [ ] Birds on their loop, absent for reduced motion
+- [x] Birds on their loop, absent for reduced motion
 - [ ] A door that opens, closes and stops the viewpoint when closed
 - [ ] An elevator that carries the viewpoint between floors
 - [ ] Sound: ambient, footsteps, a placed sound, door and elevator sounds;

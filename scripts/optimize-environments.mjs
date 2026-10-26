@@ -1331,6 +1331,7 @@ async function optimizeEnvironment(io, file, props, traffic) {
   await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
   await io.write(to, document);
   console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}`);
+  return marks.parts.filter(({ kind }) => kind === "scatter").map(({ name }) => name);
 }
 
 /** Bytes a file takes on the wire: GitHub Pages compresses all but pictures. */
@@ -1375,12 +1376,13 @@ async function reportBudget(environment, sky) {
 
 /**
  * The small files scatter marks copy, such as a grass tuft: textures as WebP
- * and geometry compressed, like the environment's.
+ * and geometry compressed, like the environment's. Only those a mark names,
+ * so a file left in models-source/scatter/ is never published by mistake.
  */
-async function optimizeScatter(io) {
+async function optimizeScatter(io, names) {
   if (!existsSync(SCATTER_SOURCE)) return;
   await mkdir(SCATTER, { recursive: true });
-  for (const file of (await readdir(SCATTER_SOURCE)).filter((name) => name.endsWith(".glb"))) {
+  for (const file of (await readdir(SCATTER_SOURCE)).filter((name) => names.has(normalise(name.replace(/.glb$/, ""))))) {
     const document = await io.read(joinPath(SCATTER_SOURCE, file));
     await document.transform(dedup(), weld(), prune());
     await compressTextures(document);
@@ -1521,9 +1523,10 @@ if (environments.length + skies.length === 0) {
 }
 const props = await readProps(io);
 const traffic = await readTraffic(io);
-for (const file of environments) await optimizeEnvironment(io, file, props, traffic);
+const scattered = new Set();
+for (const file of environments) for (const name of await optimizeEnvironment(io, file, props, traffic)) scattered.add(name);
 for (const file of skies) await optimizeSky(file);
-await optimizeScatter(io);
+await optimizeScatter(io, scattered);
 await writeProps(io, props);
 await writeTraffic(io, traffic);
 if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0]);
