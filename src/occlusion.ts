@@ -325,11 +325,11 @@ for (const setting of Object.keys(OCCLUSION_DESCRIBED) as (keyof OcclusionSettin
 
 /**
  * The kinds of surface drawn over the darkening rather than under it, and not
- * darkened themselves: lamps, whose glow it must not dim, and glass, which
- * neither shades what is near it nor hides what is behind it. Solid surfaces
- * are drawn under it.
+ * darkened themselves: lamps, whose glow it must not dim, and glass and water,
+ * which neither shade what is near them nor hide what is behind them. Solid
+ * surfaces are drawn under it.
  */
-const OVER_DARKENING = [LAYERS.lamp, LAYERS.glass];
+const OVER_DARKENING = [LAYERS.lamp, LAYERS.glass, LAYERS.water];
 
 /** The kinds of surface that shade what is near them: solid ones, lamps among them. */
 const DARKENING = [LAYERS.solid, LAYERS.lamp];

@@ -93,6 +93,7 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     elevators: [],
     shiny: [],
     glass: [],
+    water: [],
   };
 }
 

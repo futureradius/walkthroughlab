@@ -1,5 +1,6 @@
 import type { Material, Mesh, MeshStandardMaterial } from "three";
 import { fixed, number, toggle, type Described } from "./settings";
+import { WATER, waves, type WaterSettings } from "./water";
 
 /**
  * How surfaces with relief or shine are shown: each material gets one of four
@@ -13,7 +14,7 @@ export interface MaterialSettings {
   on: boolean;
   /** Roughness below which a surface reflects the sky; metal always does. */
   shineBelow: number;
-  /** Strength of reflections, glass's included, as a share of what they would be. */
+  /** Strength of reflections, glass's and water's included, as a share of what they would be. */
   reflection: number;
   /** Strength of relief from normal maps. */
   relief: number;
@@ -24,7 +25,7 @@ export const MATERIALS: MaterialSettings = { on: true, shineBelow: 0.5, reflecti
 export const MATERIALS_DESCRIBED: Described<MaterialSettings> = {
   on: toggle({
     label: "Relief and shine",
-    about: "Off shows every surface plain, as the safety net's no-shine step does, to measure what relief and shine cost.",
+    about: "Off shows every surface plain and water without waves, as the safety net's no-shine step does, to measure what they cost.",
     panelOnly: true,
   }),
   shineBelow: number({
@@ -41,7 +42,7 @@ export const MATERIALS_DESCRIBED: Described<MaterialSettings> = {
     max: 2,
     step: 0.05,
     show: fixed(2, "×"),
-    about: "How strong reflections are, glass's included: 1 as the material says.",
+    about: "How strong reflections are, glass's and water's included: 1 as the material says.",
   }),
   relief: number({
     label: "Relief",
@@ -118,22 +119,26 @@ export interface Shiny {
 
 /**
  * Every surface that may show relief or shine, each switched between its rich
- * and its plain material by the settings and the safety net, and glass, whose
- * reflections the same strength sets.
+ * and its plain material by the settings and the safety net; glass and water,
+ * whose reflections the same strength sets; and water's waves, which go with
+ * shine.
  */
 export class Surfaces {
   readonly settings: MaterialSettings = { ...MATERIALS };
+  readonly water: WaterSettings = { ...WATER };
   private readonly shiny: Shiny[];
-  private readonly glass: MeshStandardMaterial[];
+  private readonly reflecting: MeshStandardMaterial[];
+  private readonly hasWater: boolean;
 
-  constructor(shiny: Shiny[], glass: MeshStandardMaterial[]) {
+  constructor(shiny: Shiny[], glass: MeshStandardMaterial[], water: MeshStandardMaterial[] = []) {
     this.shiny = shiny;
-    this.glass = glass;
+    this.reflecting = [...glass, ...water];
+    this.hasWater = water.length > 0;
   }
 
-  /** Whether any surface could shine or show relief, so the safety net has something to take. */
+  /** Whether any surface could shine, show relief or waves, so the safety net has something to take. */
   get any(): boolean {
-    return this.shiny.length > 0;
+    return this.shiny.length > 0 || this.hasWater;
   }
 
   /**
@@ -147,7 +152,8 @@ export class Surfaces {
     shared.shineBelow.value = shineBelow;
     shared.reflection.value = reflection;
     shared.reliefStrength.value = relief;
-    for (const glass of this.glass) glass.envMapIntensity = reflection;
+    for (const material of this.reflecting) material.envMapIntensity = reflection;
+    waves.value = shineAllowed ? this.water.roughness : 0;
     for (const { mesh, plain, rich } of this.shiny) {
       const shines = rich.metalness > 0.5 || rich.roughness < shineBelow || rich.roughnessMap !== null;
       const wanted = shineAllowed && (shines || rich.normalMap !== null) ? rich : plain;

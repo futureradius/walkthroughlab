@@ -2,6 +2,7 @@ import {
   BoxGeometry,
   BufferAttribute,
   CustomBlending,
+  FrontSide,
   Group,
   Layers,
   Mesh,
@@ -16,6 +17,12 @@ import { LAYERS, prepareSurfaces } from "./environment";
 /** What three.js loads for a material the optimize script marked BLEND. */
 const glassMaterial = () => new MeshStandardMaterial({ color: 0x80c0ff, transparent: true });
 const solidMaterial = () => new MeshStandardMaterial({ color: 0xc0b0a0 });
+/** What three.js loads for a material the optimize script noted as water: BLEND too. */
+function waterMaterial() {
+  const material = glassMaterial();
+  material.userData.water = true;
+  return material;
+}
 
 /** A mesh as the model holds it, with a second set of coordinates where the bake painted it. */
 function mesh(material: Material, baked = false) {
@@ -54,8 +61,14 @@ afterEach(() => {
 
 describe("sorting surfaces", () => {
   it("puts every mesh on the usual layer and on exactly one kind's", () => {
-    const [glass, baked, plain] = prepared([mesh(glassMaterial()), mesh(solidMaterial(), true), mesh(solidMaterial())]);
+    const [glass, water, baked, plain] = prepared([
+      mesh(glassMaterial()),
+      mesh(waterMaterial()),
+      mesh(solidMaterial(), true),
+      mesh(solidMaterial()),
+    ]);
     expect(layersOf(glass)).toEqual({ usual: true, kinds: ["glass"] });
+    expect(layersOf(water)).toEqual({ usual: true, kinds: ["water"] });
     expect(layersOf(baked)).toEqual({ usual: true, kinds: ["solid"] });
     expect(layersOf(plain)).toEqual({ usual: true, kinds: ["solid"] });
   });
@@ -68,6 +81,17 @@ describe("sorting surfaces", () => {
     // Its colour moved to how it tints what is behind; it shows only the reflection.
     expect(material.color.getHex()).toBe(0);
     expect(material.blendColor.getHex()).not.toBe(0);
+  });
+
+  it("blends water with what is below it like glass, from the front alone, with its waves", () => {
+    const [water] = prepared([mesh(waterMaterial())]);
+    const material = water.material as MeshStandardMaterial;
+    expect(material.blending).toBe(CustomBlending);
+    expect(material.depthWrite).toBe(false);
+    expect(material.color.getHex()).toBe(0);
+    expect(material.blendColor.getHex()).not.toBe(0);
+    expect(material.side).toBe(FrontSide);
+    expect(material.customProgramCacheKey()).toBe("water");
   });
 
   it("gives a solid surface the bake painted its baked light", () => {

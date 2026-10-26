@@ -46,6 +46,8 @@ export class Faces {
     visible.traverse((object) => {
       if (!(object instanceof Mesh)) return;
       const material: Material = object.material;
+      // Water is always drawn from the front alone.
+      if (object.layers.isEnabled(LAYERS.water)) return;
       if (object.layers.isEnabled(LAYERS.glass)) {
         if (!this.glass.has(material)) this.glass.set(material, material.blendColor.clone());
       } else {

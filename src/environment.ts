@@ -4,6 +4,7 @@ import {
   CustomBlending,
   DoubleSide,
   EquirectangularReflectionMapping,
+  FrontSide,
   Line,
   Mesh,
   MeshBasicMaterial,
@@ -31,6 +32,7 @@ import { withReliefAndShine, type Shiny } from "./materials";
 import { propSway, withSway, type PropCopy } from "./props";
 import { readConfig, type Config } from "./settings";
 import { handsOwnLight } from "./sunlit";
+import { withWaves } from "./water";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 export const BAKED_LIGHT_RANGE = 4;
 
@@ -49,6 +51,8 @@ export const LAYERS = {
   sway: 3,
   /** See GLOSSARY.md: solid, but its glow is never darkened by ambient occlusion. */
   lamp: 4,
+  /** See GLOSSARY.md: drawn like glass, but from the front alone and tinting once. */
+  water: 5,
 } as const;
 
 /** The files `npm run optimize` writes for one environment and its sky. */
@@ -89,9 +93,10 @@ export interface Environment {
   doors: { motion: DoorMotion; leaves: Leaf[] }[];
   /** Each elevator: its route, car, doors and buttons, their collision meshes kept out of `collision`. */
   elevators: ElevatorParts[];
-  /** Surfaces that may show relief or shine, and glass, for Surfaces to switch and tune. */
+  /** Surfaces that may show relief or shine, glass and water, for Surfaces to switch and tune. */
   shiny: Shiny[];
   glass: MeshStandardMaterial[];
+  water: MeshStandardMaterial[];
 }
 
 /**
@@ -205,6 +210,25 @@ function asGlass(material: MeshStandardMaterial) {
 }
 
 /**
+ * Water is marked by its material's name, which `npm run optimize` notes as
+ * `water`, and is BLEND like glass, so the bake lets light through it (#30).
+ */
+function isWater(material: Material): material is MeshStandardMaterial {
+  return isGlass(material) && material.userData.water === true;
+}
+
+/**
+ * Water tints what lies below it like glass, and reflects the sky through its
+ * waves. Its faces point out of the water, so drawn from the front alone the
+ * view crosses its top once, and its sides and floor stay unseen.
+ */
+function asWater(material: MeshStandardMaterial) {
+  asGlass(material);
+  material.side = FrontSide;
+  withWaves(material);
+}
+
+/**
  * A surface whose light was baked only has to show its own colour times that
  * light, which is the cheapest thing a phone can draw.
  */
@@ -244,23 +268,32 @@ function couldBeRich(material: MeshStandardMaterial): boolean {
 
 /**
  * Sort every mesh of a loaded model into its kind of surface, put it on that
- * kind's layer, and give its material what the kind needs: glass blends with
- * what is behind it, and a solid surface the bake painted shows baked light.
+ * kind's layer, and give its material what the kind needs: glass and water
+ * blend with what is behind them, water with its waves, and a solid surface the bake painted shows baked light.
  */
 export function prepareSurfaces(
   model: Object3D,
   bakedLight: Texture[],
   anisotropy: number,
-): { shiny: Shiny[]; glass: MeshStandardMaterial[] } {
+): { shiny: Shiny[]; glass: MeshStandardMaterial[]; water: MeshStandardMaterial[] } {
   const baked = new Map<Material, { plain: Material; rich?: MeshStandardMaterial }>();
   const swaying = new Map<Material, Material>();
   const glass = new Set<MeshStandardMaterial>();
+  const water = new Set<MeshStandardMaterial>();
   const shiny: Shiny[] = [];
   let bakedGlass = 0;
   model.traverse((object) => {
     if (!(object instanceof Mesh)) return;
     const material: Material = object.material;
     prepare(material, anisotropy);
+    if (isWater(material)) {
+      object.layers.enable(LAYERS.water);
+      if (!water.has(material)) {
+        water.add(material);
+        asWater(material);
+      }
+      return;
+    }
     // Glass is decided first, so it stays glass whatever coordinates it carries.
     if (isGlass(material)) {
       object.layers.enable(LAYERS.glass);
@@ -311,7 +344,7 @@ export function prepareSurfaces(
       `${bakedGlass} glass meshes carry coordinates for baked light, which glass does not show yet (issue #20).`,
     );
   }
-  return { shiny, glass: [...glass] };
+  return { shiny, glass: [...glass], water: [...water] };
 }
 
 /**
@@ -458,7 +491,7 @@ export async function loadEnvironment(
     // The second set of texture coordinates, written by `npm run optimize`.
     each.channel = 1;
   }
-  const { shiny, glass } = prepareSurfaces(gltf.scene, bakedLight, anisotropy);
+  const { shiny, glass, water } = prepareSurfaces(gltf.scene, bakedLight, anisotropy);
 
   return {
     visible: gltf.scene,
@@ -474,6 +507,7 @@ export async function loadEnvironment(
     elevators,
     shiny,
     glass,
+    water,
   };
 }
 
@@ -485,7 +519,7 @@ export async function loadModel(address: string, downloads: Downloads): Promise<
 
 /**
  * Download the sharp sky that replaces the small one, in the trailing
- * download: first the light, which sharpens reflections on glass and metal,
+ * download: first the light, which sharpens reflections on glass, water and metal,
  * then the picture beyond the architecture (#14).
  */
 export async function loadSharpSky(

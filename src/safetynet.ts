@@ -38,7 +38,7 @@ export const NET_DESCRIBED: Described<NetSettings> = {
   on: toggle({
     label: "On",
     about:
-      "Takes away some grass, then shine and relief, then turns ambient occlusion off, then lowers the resolution, while the frame rate stays under 28, and gives them back once it holds 50. Off to measure what something costs.",
+      "Takes away some grass, then shine, relief and water's waves, then turns ambient occlusion off, then lowers the resolution, while the frame rate stays under 28, and gives them back once it holds 50. Off to measure what something costs.",
   }),
 };
 

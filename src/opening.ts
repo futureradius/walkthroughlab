@@ -7,6 +7,7 @@ import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type Envi
 import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
 import { Crowns, leavesOf, PROP, PROP_DESCRIBED, propSway, STILL_PROP_DESCRIBED } from "./props";
 import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
+import { WATER_DESCRIBED } from "./water";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
@@ -65,7 +66,7 @@ export interface Opened {
   scatters: Scatter[];
   /** Props' swaying parts, such as trees' crowns; move them on every frame. */
   props: { update(seconds: number): void };
-  /** Surfaces that may show relief or shine; `apply` them every frame. */
+  /** Surfaces that may show relief or shine, and water's waves; `apply` them every frame. */
   surfaces: Surfaces;
   /** Doors that open by themselves; move them on every frame, after steering. */
   doors: { update(seconds: number): void };
@@ -199,7 +200,7 @@ export async function openEnvironment(
   const steering = new Steering({ terrain, start: { x, z, floor, heading, pitch: 0 } });
   // Steering's sections exist only once it does.
   const sections = steeringSections(steering);
-  const surfaces = new Surfaces(loaded.shiny, loaded.glass);
+  const surfaces = new Surfaces(loaded.shiny, loaded.glass, loaded.water);
   // Copies grow once their file arrives; their settings are there from the start.
   const wind = { ...WIND };
   const scatters = loaded.scatter.map(({ name, layer }) => {
@@ -221,6 +222,7 @@ export async function openEnvironment(
   sections.push(
     section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
+    ...(loaded.water.length > 0 ? [section("Water", surfaces.water, WATER_DESCRIBED, true)] : []),
     ...scatters.map(({ name, scatter }) => section(`scatter-${name}`, scatter.settings, SCATTER_DESCRIBED, true)),
     ...props.map(({ name, settings, crowns }) =>
       crowns

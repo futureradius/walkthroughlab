@@ -131,6 +131,9 @@ Movement is done until the finish line (#8).
   such as a cloth simulated in Blender, stored frame by frame in a picture the
   walkthrough plays back. Birds flap by a simple formula instead; this is the
   upgrade for sway that looks fake by formula. (#11)
+- **Indoor water out of the wind.** Water's waves follow the environment's
+  one wind, so an indoor pool ripples as much as one outside. Revisit after
+  the finish line, perhaps with a layer or a setting for sheltered water. (#30)
 
 ## Grass
 
@@ -209,6 +212,9 @@ Measured on the test environment, from smallest change to biggest. (#23)
 - **Coming back to the tab shows a white page.** Seen by the author on
   returning to a walkthrough left open in another tab; the walkthrough then
   needs reloading. Not yet looked into. (#14)
+- **A fade from the small sky to the sharp one**, for the light reflected on
+  glass, water and metal and for the picture beyond the architecture. The
+  sharp sky replaces the small one at once; that is hardly noticed so far. (#30)
 
 ## Comparing with renders
 

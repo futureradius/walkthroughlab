@@ -3,13 +3,15 @@ import { describe, expect, it } from "vitest";
 import { prepareSurfaces } from "./environment";
 import { Faces } from "./faces";
 
-/** A glass pane and a wall, prepared as the environment would be. */
+/** A glass pane, a pool's water and a wall, prepared as the environment would be. */
 function environment() {
   const glass = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x80c0ff, transparent: true }));
+  const water = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x206080, transparent: true }));
+  water.material.userData.water = true;
   const wall = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xc0b0a0 }));
-  const model = new Group().add(glass, wall);
+  const model = new Group().add(glass, water, wall);
   prepareSurfaces(model, [], 4);
-  return { model, glass: glass.material, wall: wall.material };
+  return { model, glass: glass.material, water: water.material, wall: wall.material };
 }
 
 describe("drawing faces", () => {
@@ -39,6 +41,18 @@ describe("drawing faces", () => {
     faces.update();
     expect(glass.side).toBe(FrontSide);
     expect(wall.side).toBe(FrontSide);
+  });
+
+  it("draws water from the front alone whatever the setting, letting its colour through once", () => {
+    for (const front of ["glass", "none", "all"] as const) {
+      const { model, water } = environment();
+      const once = water.blendColor.clone();
+      const faces = new Faces(model);
+      faces.settings.front = front;
+      faces.update();
+      expect(water.side).toBe(FrontSide);
+      expect(water.blendColor.equals(once)).toBe(true);
+    }
   });
 
   it("gives glass back its own colour when both sides are drawn again", () => {

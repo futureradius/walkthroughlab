@@ -7,7 +7,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { join as joinPath } from "node:path";
 import { gzipSync } from "node:zlib";
 import { NodeIO, PropertyType } from "@gltf-transform/core";
-import { ALL_EXTENSIONS, EXTTextureWebP } from "@gltf-transform/extensions";
+import { ALL_EXTENSIONS, EXTTextureWebP, KHRMaterialsIOR } from "@gltf-transform/extensions";
 import {
   cloneDocument,
   dedup,
@@ -54,6 +54,10 @@ const WEBP_QUALITY = 80;
 const GLASS_TRANSMISSION = 0.5;
 /** How strongly a material reflects, which the walkthrough honours on glass. */
 const KEPT_ON_GLASS = ["KHR_materials_ior", "KHR_materials_specular"];
+/** Water's index of refraction, which it is always drawn with, whatever Rhino says (#30). */
+const WATER_IOR = 1.33;
+/** How far Rhino's index may be from water's before the author is told. */
+const WATER_IOR_LEEWAY = 0.01;
 /** How bright a lamp glows, beyond a colour's 1, which the bake and the walkthrough honour (#29). */
 const KEPT_ON_LAMPS = ["KHR_materials_emissive_strength"];
 /** Rhino exports these on every material; phones pay for them and gain nothing. */
@@ -86,9 +90,14 @@ const CODE_ESTIMATE = 0.2;
 /** Brightens or darkens a sky, both as seen and as a light source. */
 const SKY_EXPOSURE = 1;
 
+/** A material named `water` or `water-…` is water (#30), so "Waterproof membrane" is not. */
+const isWaterMaterial = (material) => /^water(-|$)/.test(normalise(material.getName()));
+
 /**
  * Glass keeps its colour, which the walkthrough and the bake take as the share
  * of light each of its surfaces lets through; everything else becomes solid.
+ * Water is glass to the bake, and `water` to the walkthrough, with water's
+ * index of refraction (#30).
  * A material that glows with a plain colour is a lamp, solid and never metal,
  * noted as `lamp` for the bake and the walkthrough; from Rhino, its colour is
  * raised to the power Raytraced raises it to (#29). Returns what the author
@@ -113,13 +122,27 @@ function simplifyMaterials(document, { fromRhino = true } = {}) {
       material.setExtras({ ...material.getExtras(), lamp: true });
     }
     const transmission = material.getExtension("KHR_materials_transmission");
+    const isWater = !isLamp && isWaterMaterial(material);
     const isGlass =
-      !isLamp &&
-      transmission !== null &&
-      transmission.getTransmissionFactor() > GLASS_TRANSMISSION;
+      isWater ||
+      (!isLamp && transmission !== null && transmission.getTransmissionFactor() > GLASS_TRANSMISSION);
     anyGlass ||= isGlass;
+    if (isWater) {
+      // Without the extension, glTF's index is glass's 1.5.
+      const ior = material.getExtension("KHR_materials_ior")?.getIOR() ?? 1.5;
+      if (Math.abs(ior - WATER_IOR) > WATER_IOR_LEEWAY) {
+        said.push(
+          `${name}: has an IOR of ${Number(ior.toFixed(3))} in Rhino; the walkthrough draws water at ${WATER_IOR} instead. Set it to ${WATER_IOR} in Rhino so renders match.`,
+        );
+      }
+      material.setExtension("KHR_materials_ior", document.createExtension(KHRMaterialsIOR).createIOR().setIOR(WATER_IOR));
+      material.setExtras({ ...material.getExtras(), water: true });
+    }
     for (const name of DROPPED_EXTENSIONS) {
-      const kept = (isGlass && KEPT_ON_GLASS.includes(name)) || (isLamp && KEPT_ON_LAMPS.includes(name));
+      // Rhino writes its specular slider as one, which would dim water's reflection.
+      const kept =
+        (isGlass && KEPT_ON_GLASS.includes(name) && !(isWater && name === "KHR_materials_specular")) ||
+        (isLamp && KEPT_ON_LAMPS.includes(name));
       if (!kept) material.setExtension(name, null);
     }
 
@@ -141,7 +164,8 @@ function simplifyMaterials(document, { fromRhino = true } = {}) {
     const kept = (anyGlass && KEPT_ON_GLASS.includes(name)) || (anyLamp && KEPT_ON_LAMPS.includes(name));
     if (!kept) extension.dispose();
   }
-  return said;
+  // Rhino writes a material once for each object that uses it, alike until merged.
+  return [...new Set(said)];
 }
 
 /**

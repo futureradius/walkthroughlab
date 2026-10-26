@@ -58,23 +58,28 @@ export function blow(settings: WindSettings, seconds: number, reducedMotion: boo
 /**
  * GLSL for how far the wind pushes something at a spot on the floor plan, as
  * a share of its strength: gusts drift across the ground with the wind, and
- * each thing flutters a little on its own, by `phase`.
+ * each thing flutters a little on its own, by `phase`. `gusting` is the
+ * gusts alone, from 0.1 between them to 1 in the strongest, which water
+ * shows as rougher patches (#30).
  */
 export const GUST_GLSL = /* glsl */ `
   uniform float time;
   uniform vec2 windDirection;
   uniform float windStrength;
 
-  float gust(vec2 spot, float phase) {
+  float gusting(vec2 spot) {
     float along = dot(spot, windDirection);
     float across = dot(spot, vec2(-windDirection.y, windDirection.x));
     // Broad gusts rolling across with the wind, their fronts wavering, and
     // smaller ones inside them, at speeds that never line up.
     float broad = sin(along * 0.23 - time * 1.1 + 1.7 * sin(across * 0.13 + time * 0.21));
     float small = sin(along * 0.87 - time * 2.6 + across * 0.41);
-    float push = 0.55 + 0.3 * broad + 0.15 * small;
+    return 0.55 + 0.3 * broad + 0.15 * small;
+  }
+
+  float gust(vec2 spot, float phase) {
     // Each thing also flutters in its own rhythm.
     float own = sin(time * (2.0 + 1.5 * fract(phase)) + phase);
-    return windStrength * (push + 0.2 * own);
+    return windStrength * (gusting(spot) + 0.2 * own);
   }
 `;
