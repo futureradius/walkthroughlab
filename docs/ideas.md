@@ -248,3 +248,10 @@ component. (#8)
   It matters most once props stand on props, such as a plant on a table or
   books on a shelf, where a line's height has to meet the top of another
   prop. Asked for by the author after placing the first props. (#28)
+- **Baking on the second laptop, driven remotely**, so a long bake leaves the
+  main laptop free. The bake script already uses its NVIDIA card. It needs a
+  USB keyboard once for setup (its own is broken), then SSH (OpenSSH Server
+  works on Windows 11 Home and Pro alike; Remote Desktop only on Pro), Node,
+  Blender, a clone of the repo, and `models-source/` copied over, since it
+  isn't in git. Left out of the finish line because the main laptop has an
+  NVIDIA card too. (#36)

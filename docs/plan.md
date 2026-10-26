@@ -86,13 +86,15 @@ what is left to decide when it is built, and the checklist lines it must tick.
 | 14 | Sound | #33 | Marks, Loading, Doors, Elevators, the loop test | one sound engine |
 | 15 | Stress copy and the readiness check | #34 | everything | |
 
-Two small steps sit outside the order:
+One small step sat outside the order:
 
-- **Sound loop test on old phones** (#35), done early, alongside Marks. If it
-  fails, MP3 becomes a second format before any sound is exported.
-- **Bake on the NVIDIA laptop** (#36), driven from the main laptop, set up
-  whenever the author is home with a USB keyboard. Until then, bakes run on
-  the main laptop.
+- **Sound loop test on old phones** (#35), done before Sound. Opus loops
+  cleanly on the Redmi Note 8 and a Pixel 6, and fades nicely as the page
+  leaves the screen and comes back, so Opus stays the one format. No iPhone
+  was at hand; if iPhones turn out to have a problem, sound is adjusted then.
+
+Bakes run on the main laptop's NVIDIA card. Baking on the second laptop,
+driven remotely, is in the ideas log (#36).
 
 ### How they fit together
 
@@ -216,7 +218,7 @@ and never published (#15, #16, #34).
 
 ### Stress copy
 
-- [ ] Bakes in under 2 hours on the NVIDIA laptop
+- [ ] Bakes in under 2 hours on the main laptop's NVIDIA card
 - [ ] Baked light as sharp as in the test environment, with no visible seams
 - [ ] The fixed route through its first pavilion holds the same frame-rate rule
 - [ ] Its opening download and time to move are recorded; going over budget is
