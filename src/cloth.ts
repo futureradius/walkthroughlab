@@ -17,10 +17,10 @@ export interface ClothSettings {
   speed: number;
 }
 
-/** A curtain's: a slow billow. Any name but `flags` starts with these. */
-export const CURTAINS: ClothSettings = { sway: 0.06, ripples: 0.4, speed: 0.6 };
-/** A flag's: lively flapping. */
-export const FLAGS: ClothSettings = { sway: 0.5, ripples: 1.5, speed: 3 };
+/** A curtain's, as tuned on the Redmi Note 8: a slow billow. Any name but `flags` starts with these. */
+export const CURTAINS: ClothSettings = { sway: 0.05, ripples: 0.3, speed: 1 };
+/** A flag's, likewise: lively flapping. */
+export const FLAGS: ClothSettings = { sway: 0.19, ripples: 0.75, speed: 2.3 };
 
 /** The mark name whose cloths turn about their pole to point downwind. */
 export const TURNING = "flags";
@@ -29,7 +29,8 @@ export const CLOTH_DESCRIBED: Described<ClothSettings> = {
   sway: number({
     label: "Sway",
     min: 0,
-    max: 2,
+    // Fine steps matter most down low; 1 m already suits only huge curtains.
+    max: 1,
     step: 0.01,
     show: fixed(2, " m"),
     about: "How far a corner 1 m from its line moves in a full gust of a strong wind; 0 still.",

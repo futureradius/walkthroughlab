@@ -189,7 +189,7 @@ and never published (#15, #16, #34).
 - [ ] Grass as swaying scatter
 - [ ] Still props (chairs, tables) with baked shadow; potted plants swaying;
       trees and bushes placed by hand, swaying as painted
-- [ ] Curtains and flags swaying
+- [x] Curtains and flags swaying
 - [ ] Birds on their loop, absent for reduced motion
 - [ ] A door that opens, closes and stops the viewpoint when closed
 - [ ] An elevator that carries the viewpoint between floors

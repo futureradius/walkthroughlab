@@ -2,7 +2,11 @@
 // change by eye: headless Edge, driven over its debugging port, waits until
 // the loading cover is gone and a few seconds more, so the frame is settled.
 //
-//   npm run screenshot -- <address> <picture.png> [seconds to settle]
+//   npm run screenshot -- <address> <picture.png> [seconds to settle] [--look-up=<pixels>] [--reduced-motion]
+//
+// --look-up drags the view up by that many pixels once loaded, as a finger
+// would, for things above eye level such as a flag; --reduced-motion opens it
+// as for a device that asks for reduced motion.
 //
 // For example, with `npm run preview` running:
 //   npm run screenshot -- "http://localhost:4173/?fps&at=27,-4,60" stairs.png
@@ -16,7 +20,10 @@ import { join } from "node:path";
 
 const EDGE = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const PORT = 9336;
-const [address, picture, settle = "6"] = process.argv.slice(2);
+const options = process.argv.slice(2).filter((part) => part.startsWith("--"));
+const [address, picture, settle = "6"] = process.argv.slice(2).filter((part) => !part.startsWith("--"));
+const lookUp = Number(options.find((part) => part.startsWith("--look-up="))?.slice("--look-up=".length) ?? 0);
+const reducedMotion = options.includes("--reduced-motion");
 if (!address || !picture) {
   console.error("npm run screenshot -- <address> <picture.png> [seconds to settle]");
   process.exit(1);
@@ -62,6 +69,9 @@ try {
 
   await send("Network.enable");
   await send("Network.setCacheDisabled", { cacheDisabled: true });
+  if (reducedMotion) {
+    await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  }
   await send("Page.navigate", { url: address });
   let loaded = false;
   for (let tries = 0; !loaded && tries < 120; tries++) {
@@ -73,6 +83,17 @@ try {
     loaded = answer.result.value;
   }
   if (!loaded) console.warn("The loading cover was still up after a minute; saving what shows.");
+  if (lookUp) {
+    const mouse = (type, y) => send("Input.dispatchMouseEvent", { type, x: 640, y, button: "left", buttons: 1, clickCount: 1 });
+    await mouse("mousePressed", 300);
+    for (let step = 1; step <= 10; step++) {
+      await mouse("mouseMoved", 300 + (lookUp * step) / 10);
+      await wait(30);
+    }
+    // Held still before letting go, so the view doesn't coast on.
+    await wait(400);
+    await mouse("mouseReleased", 300 + lookUp);
+  }
   await wait(Number(settle) * 1000);
   const shot = await send("Page.captureScreenshot", { format: "png" });
   await writeFile(picture, Buffer.from(shot.data, "base64"));
