@@ -7,6 +7,7 @@ import { LAYERS, loadConfig, loadEnvironment, loadModel, loadSharpSky, type Envi
 import { MATERIALS_DESCRIBED, Surfaces } from "./materials";
 import { Crowns, leavesOf, PROP, PROP_DESCRIBED, propSway, STILL_PROP_DESCRIBED } from "./props";
 import { groundsOf, Scatter, SCATTER_DESCRIBED, tuftOf } from "./scatter";
+import { CLOTH_DESCRIBED, clothSettings } from "./cloth";
 import { Water, WATER_DESCRIBED } from "./water";
 import { WIND, WIND_DESCRIBED, type WindSettings } from "./wind";
 import { Faces, FACES_DESCRIBED } from "./faces";
@@ -250,6 +251,7 @@ export async function openEnvironment(
     section("Materials", surfaces.settings, MATERIALS_DESCRIBED, true),
     section("Wind", wind, WIND_DESCRIBED, true),
     ...(water.any ? [section("Water", water.settings, WATER_DESCRIBED, true)] : []),
+    ...loaded.cloths.map((name) => section(`sway-${name}`, clothSettings(name), CLOTH_DESCRIBED, true)),
     ...scatters.map(({ name, scatter }) => section(`scatter-${name}`, scatter.settings, SCATTER_DESCRIBED, true)),
     ...props.map(({ name, settings, crowns }) =>
       crowns

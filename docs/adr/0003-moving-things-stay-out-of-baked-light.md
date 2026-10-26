@@ -19,4 +19,4 @@ Moving things cast no shadow of their own onto the environment, which shows most
 
 ## Amended 2026-10-24: moving parts keep their baked light
 
-A door is baked as modelled, closed, and keeps its baked light as it moves: the light travels with its surfaces, and the shadow of the closed door stays in the doorway (#7). Tree trunks and branches do the same when they sway (#28). Looks right closed and passes when open; if the doorway's shadow gives a door away, it is left out of the bake as this decision first said, or gets a second bake for its open state (in `docs/ideas.md`).
+A door is baked as modelled, closed, and keeps its baked light as it moves: the light travels with its surfaces, and the shadow of the closed door stays in the doorway (#7). Tree trunks and branches do the same when they sway (#28), and so do curtains and flags (#31): a flag turned downwind keeps the light it had where it was modelled, and its shadow stays there. Looks right closed and passes when open; if the doorway's shadow gives a door away, it is left out of the bake as this decision first said, or gets a second bake for its open state (in `docs/ideas.md`).

@@ -57,7 +57,8 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
   a moving part that opens or closes an opening. Come back to it only if a door
   in the test environment looks wrong when it opens. (#11)
 - **A live shadow near the viewpoint** for moving things, as ADR 0003 permits
-  once measured. (#11)
+  once measured. (#11) Cloth would gain most: a flag turned downwind keeps the
+  light it was baked with where modelled, and its shadow stays there. (#31)
 - **Cheap live light for what moves, instead of a second bake.** Mostly baked
   light, with a cheap live approximation of bounced light for moving parts,
   sway and traffic. To try: Glamarye's bundled version (Glamarye is already

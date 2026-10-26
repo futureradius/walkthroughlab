@@ -12,6 +12,7 @@ import { NET_DESCRIBED, SafetyNet } from "./safetynet";
 import { section } from "./settings";
 import { onTap } from "./taps";
 import { addTuning } from "./tuning";
+import { waveCloths } from "./cloth";
 import { blow } from "./wind";
 
 /** Old phones report pixel ratios of 3 or more; rendering that many pixels is the main cost. */
@@ -167,6 +168,7 @@ renderer.setAnimationLoop((now) => {
   blow(wind, seconds, accessibility.reducedMotion);
   for (const scatter of scatters) scatter.update(seconds, camera.position);
   props.update(seconds);
+  waveCloths(seconds);
   surfaces.apply(net!.current.shine);
   water.update(seconds, net!.current.shine && surfaces.settings.on, surfaces.settings.reflection);
   if (occlusion) occlusion.render();

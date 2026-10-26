@@ -400,6 +400,171 @@ function markEnvironment(document, file) {
   return marks;
 }
 
+/** Longest edge a cloth's triangles keep, in metres, so it has corners to bend at (#31). */
+const CLOTH_EDGE = 0.1;
+/** Most triangles one cloth is divided into, so a huge cloth can't run away. */
+const CLOTH_TRIANGLES = 200000;
+/** How far a flag's pole line may lean from upright, in degrees, before the author is told. */
+const POLE_LEAN = 30;
+
+/** The nearest point to `p` on the segment from `a` to `b`, and how far away it is. */
+function nearestOn([a, b], p) {
+  const ab = [0, 1, 2].map((k) => b[k] - a[k]);
+  const lengthSq = ab.reduce((sum, d) => sum + d * d, 0);
+  const t = lengthSq > 0 ? Math.min(1, Math.max(0, [0, 1, 2].reduce((sum, k) => sum + (p[k] - a[k]) * ab[k], 0) / lengthSq)) : 0;
+  const at = [0, 1, 2].map((k) => a[k] + t * ab[k]);
+  return { at, distance: Math.hypot(...[0, 1, 2].map((k) => p[k] - at[k])) };
+}
+
+/**
+ * A cloth's triangles divided until no edge is longer than CLOTH_EDGE, each
+ * long edge split at its middle and the corner made there shared by the
+ * triangles on both sides. `values` holds every attribute's numbers per
+ * corner and grows with the new corners; `world` gives a corner's place.
+ */
+function divide(triangles, values, world) {
+  const middles = new Map();
+  const middle = (i, j) => {
+    const key = i < j ? `${i} ${j}` : `${j} ${i}`;
+    let m = middles.get(key);
+    if (m === undefined) {
+      m = values.POSITION.length;
+      for (const [semantic, corners] of Object.entries(values)) {
+        const mixed = corners[i].map((n, k) => (n + corners[j][k]) / 2);
+        if (semantic === "NORMAL") {
+          const length = Math.hypot(...mixed) || 1;
+          for (let k = 0; k < 3; k++) mixed[k] /= length;
+        }
+        corners.push(mixed);
+      }
+      middles.set(key, m);
+    }
+    return m;
+  };
+  const length = (i, j) => {
+    const [p, q] = [world(i), world(j)];
+    return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  };
+  const kept = [];
+  const todo = [...triangles];
+  while (todo.length > 0) {
+    const [a, b, c] = todo.pop();
+    const edges = [length(a, b), length(b, c), length(c, a)];
+    const longest = edges.indexOf(Math.max(...edges));
+    if (edges[longest] <= CLOTH_EDGE || kept.length + todo.length > CLOTH_TRIANGLES) {
+      kept.push([a, b, c]);
+      continue;
+    }
+    // Turned so the longest edge comes first, keeping which way it faces.
+    const [p, q, r] = [[a, b, c], [b, c, a], [c, a, b]][longest];
+    const m = middle(p, q);
+    todo.push([p, m, r], [m, q, r]);
+  }
+  return kept;
+}
+
+/** Groups of triangles that touch, by where their corners lie: each one cloth. */
+function clothsOf(triangles, world) {
+  const parent = new Map();
+  const root = (key) => {
+    while (parent.get(key) !== key) key = parent.get(key);
+    return key;
+  };
+  const keyOf = (i) => world(i).map((n) => Math.round(n * 1000)).join(" ");
+  for (const triangle of triangles) {
+    const keys = triangle.map(keyOf);
+    for (const key of keys) if (!parent.has(key)) parent.set(key, key);
+    for (const key of keys.slice(1)) parent.set(root(key), root(keys[0]));
+  }
+  const groups = new Map();
+  for (const triangle of triangles) {
+    const group = root(keyOf(triangle[0]));
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(triangle);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Make each cloth under a sway mark's `model` layer a node of its own,
+ * divided finely enough to bend, noting its mark's name and the line it
+ * hangs from, the nearest, for the walkthrough to move it by (#31).
+ */
+function prepareCloths(document, marks, warn) {
+  const buffer = document.getRoot().listBuffers()[0];
+  for (const { kind, name, path, layer } of marks.parts) {
+    if (kind !== "sway") continue;
+    const model = layer.layers.find((inner) => normalise(inner.name) === "model");
+    if (!model) {
+      warn(`${path}: has no model layer holding its cloths, so nothing sways.`);
+      continue;
+    }
+    if (layer.lines.length === 0) {
+      warn(`${path}: has no line along the edge its cloths hang from, so they stay still.`);
+      continue;
+    }
+    const lines = layer.lines.map((line) => [line[0], line[line.length - 1]]);
+    if (name === "flags") {
+      for (const [a, b] of lines) {
+        const long = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1;
+        const lean = (Math.acos(Math.abs(b[1] - a[1]) / long) * 180) / Math.PI;
+        if (lean > POLE_LEAN) warn(`${path}: a pole line leans ${Math.round(lean)}° from upright; its flag turns about the upright through its start.`);
+      }
+    }
+    let count = 0;
+    const visit = (node) => {
+      for (const child of node.listChildren()) visit(child);
+      const mesh = node.getMesh();
+      if (!mesh) return;
+      const matrix = node.getWorldMatrix();
+      for (const primitive of mesh.listPrimitives()) {
+        if (primitive.getMode() !== TRIANGLES) continue;
+        const semantics = primitive.listSemantics();
+        const values = {};
+        for (const semantic of semantics) {
+          const accessor = primitive.getAttribute(semantic);
+          values[semantic] = Array.from({ length: accessor.getCount() }, (_, i) => accessor.getElement(i, []));
+        }
+        const world = (i) => {
+          const p = values.POSITION[i];
+          return [0, 1, 2].map((r) => matrix[r] * p[0] + matrix[4 + r] * p[1] + matrix[8 + r] * p[2] + matrix[12 + r]);
+        };
+        const index = primitive.getIndices();
+        const corners = index ? index.getCount() : values.POSITION.length;
+        const triangles = [];
+        for (let t = 0; t + 2 < corners; t += 3) triangles.push([0, 1, 2].map((k) => (index ? index.getScalar(t + k) : t + k)));
+        for (const group of clothsOf(triangles, world)) {
+          const divided = divide(group, values, world);
+          // Only the corners this cloth uses, numbered afresh.
+          const renumbered = new Map();
+          for (const triangle of divided) for (const i of triangle) if (!renumbered.has(i)) renumbered.set(i, renumbered.size);
+          const used = [...renumbered.keys()];
+          const centre = [0, 1, 2].map((k) => used.reduce((sum, i) => sum + world(i)[k], 0) / used.length);
+          const line = lines.reduce((best, each) => (nearestOn(each, centre).distance < nearestOn(best, centre).distance ? each : best));
+          const cloth = document.createPrimitive().setMaterial(primitive.getMaterial());
+          for (const semantic of semantics) {
+            const type = primitive.getAttribute(semantic).getType();
+            const array = new Float32Array(used.flatMap((i) => values[semantic][i]));
+            cloth.setAttribute(semantic, document.createAccessor().setType(type).setArray(array).setBuffer(buffer));
+          }
+          const indices = new Uint32Array(divided.flat().map((i) => renumbered.get(i)));
+          cloth.setIndices(document.createAccessor().setType("SCALAR").setArray(indices).setBuffer(buffer));
+          count++;
+          const own = document
+            .createNode(`${name} cloth ${count}`)
+            .setMatrix(node.getMatrix())
+            .setMesh(document.createMesh(`${name} cloth ${count}`).addPrimitive(cloth))
+            .setExtras({ walkthrough: "cloth", sway: name, line });
+          (node.getParentNode() ?? model.node).addChild(own);
+        }
+        primitive.dispose();
+      }
+    };
+    visit(model.node);
+    console.log(`${path}: ${count} cloth${count === 1 ? "" : "s"}`);
+  }
+}
+
 /** Every corner of every surface under a node, in world space. */
 function cornersUnder(node) {
   const corners = [];
@@ -1113,6 +1278,10 @@ async function optimizeEnvironment(io, file, props) {
   await compressTextures(document);
   const marks = markEnvironment(document, file);
   marks.warnings.push(...said);
+  prepareCloths(document, marks, (text) => {
+    marks.warnings.push(text);
+    console.warn(`${file}: ${text}`);
+  });
   const configFile = joinPath(MODELS, renamed(file, "-config.md"));
   const config = existsSync(configFile) ? readConfig(await readFile(configFile, "utf8")) : {};
   const placed = placeProps(document, marks, props, config);

@@ -28,6 +28,7 @@ import type { Downloads } from "./download";
 import type { DoorMotion, Leaf } from "./doors";
 import type { ElevatorParts } from "./elevators";
 import { COLLISION_MESH, normalise, type Start } from "./marks";
+import { prepareCloth, withCloth, type ClothNote } from "./cloth";
 import { withReliefAndShine, type Shiny } from "./materials";
 import { propSway, withSway, type PropCopy } from "./props";
 import { readConfig, type Config } from "./settings";
@@ -87,6 +88,8 @@ export interface Environment {
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
   scatter: { name: string; layer: Object3D }[];
+  /** Each sway mark's name, such as "curtains", whose cloths move by its settings. */
+  cloths: string[];
   /** Each prop mark's name, such as "tree", where its copies are, and whether it has parts that sway, drawn there once they arrive. */
   props: { name: string; copies: PropCopy[]; sways: boolean }[];
   /** Each door that moves by itself: how, and its leaves, their collision meshes kept out of `collision`. */
@@ -267,6 +270,7 @@ export function prepareSurfaces(
 ): { shiny: Shiny[]; glass: MeshStandardMaterial[]; water: ShaderMaterial[] } {
   const baked = new Map<Material, { plain: Material; rich?: MeshStandardMaterial }>();
   const swaying = new Map<Material, Material>();
+  const cloths = new Map<string, Material>();
   const glass = new Set<MeshStandardMaterial>();
   const water = new Map<Material, ShaderMaterial>();
   const shiny: Shiny[] = [];
@@ -296,9 +300,12 @@ export function prepareSurfaces(
       return;
     }
     // A prop's part painted to sway, such as a trunk, keeps its baked light
-    // as it moves, which ambient occlusion would leave behind (#28).
-    const sways = object.geometry.hasAttribute("_sway");
-    if (sways) object.geometry.setAttribute("sway", object.geometry.getAttribute("_sway"));
+    // as it moves, which ambient occlusion would leave behind (#28); so does
+    // a cloth (#31).
+    const cloth = object.userData.walkthrough === "cloth" ? (object.userData as ClothNote) : undefined;
+    if (cloth) prepareCloth(object, cloth);
+    const sways = cloth !== undefined || object.geometry.hasAttribute("_sway");
+    if (sways && !cloth) object.geometry.setAttribute("sway", object.geometry.getAttribute("_sway"));
     const lamp = !sways && material.userData.lamp === true;
     object.layers.enable(sways ? LAYERS.sway : lamp ? LAYERS.lamp : LAYERS.solid);
     // Its own baked light picture, which ambient occlusion measures it by.
@@ -317,6 +324,14 @@ export function prepareSurfaces(
         if (!rich) material.dispose();
         made = { plain, rich };
         baked.set(material, made);
+      }
+      if (cloth) {
+        // Plain always, as below; one for each mark, whose settings it moves by.
+        const key = `${made.plain.uuid} ${cloth.sway}`;
+        let clothed = cloths.get(key);
+        if (!clothed) cloths.set(key, (clothed = withCloth(made.plain.clone(), cloth.sway)));
+        object.material = clothed;
+        return;
       }
       if (sways) {
         // Plain always: relief and shine would need swaying too.
@@ -430,12 +445,14 @@ export async function loadEnvironment(
   const lines: Object3D[] = [];
   const scatter: Environment["scatter"] = [];
   const props: Environment["props"] = [];
+  const cloths = new Set<string>();
   const doorLayers: Object3D[] = [];
   const elevatorLayers: Object3D[] = [];
   gltf.scene.traverse((object) => {
     if (object.userData.walkthrough === "door") doorLayers.push(object);
     if (object.userData.walkthrough === "elevator") elevatorLayers.push(object);
     if (object.userData.walkthrough === "scatter") scatter.push({ name: object.userData.scatter, layer: object });
+    if (object.userData.walkthrough === "cloth") cloths.add(object.userData.sway);
     if (object.userData.walkthrough === "prop") {
       const { prop: name, copies, sways } = object.userData;
       props.push({ name, copies, sways });
@@ -493,6 +510,7 @@ export async function loadEnvironment(
     start,
     warnings,
     scatter,
+    cloths: [...cloths],
     props,
     doors,
     elevators,
