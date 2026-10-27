@@ -1,6 +1,19 @@
 import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { FOOTSTEPS, heard, nearest, Strides } from "./sound";
+import { FOOTSTEPS, gainOf, heard, nearest, Strides } from "./sound";
+
+describe("loudness in decibels", () => {
+  it("plays 0 dB at the sound's own level, -20 dB at a tenth of it, and -6 dB at about half", () => {
+    expect(gainOf(0)).toBe(1);
+    expect(gainOf(-20)).toBeCloseTo(0.1);
+    expect(gainOf(-6)).toBeCloseTo(0.5, 1);
+  });
+
+  it("is silent at the bottom of its range", () => {
+    expect(gainOf(-60)).toBe(0);
+    expect(gainOf(-59)).toBeGreaterThan(0);
+  });
+});
 
 describe("how loud a sound is with distance", () => {
   const carries = { realistic: 20, silent: 25 };

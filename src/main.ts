@@ -92,8 +92,15 @@ const downloads = new Downloads();
 // the compass bearing (0 north, 90 east), instead of at the start spot; a
 // fourth number picks the floor nearest that height, for upper storeys.
 const [atX, atZ, bearing, atHeight] = (params.get("at") ?? "").split(",").map(Number);
+// Add ?sound=off for no sound at all, ?sound=no-ambient for all but the
+// ambient sound, or ?sound=on for all of it, whatever the config file says.
+const soundFlag = params.get("sound");
+const SOUND_FLAGS = ["on", "off", "no-ambient"] as const;
+const sound = SOUND_FLAGS.find((flag) => flag === soundFlag);
+if (soundFlag !== null && !sound) console.warn(`?sound=${soundFlag} is not on, off or no-ambient, so the config file decides.`);
 const environment = {
   ...TEST_ENVIRONMENT,
+  sound,
   ...(Number.isFinite(atZ)
     ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180, y: Number.isFinite(atHeight) ? atHeight : undefined } }
     : {}),

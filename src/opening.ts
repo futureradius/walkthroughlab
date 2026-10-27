@@ -29,6 +29,8 @@ export interface EnvironmentAddress {
   traffic: (name: string) => string;
   /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, heading, and near which floor height. */
   at?: { x: number; z: number; heading: number; y?: number };
+  /** From the link, whatever the config file says: all sound on or off, or everything but the ambient sound. */
+  sound?: "on" | "off" | "no-ambient";
 }
 
 /** The environment the link opens. */
@@ -306,6 +308,8 @@ export async function openEnvironment(
     ...[...sounds.placedSettings].map(([name, settings]) => section(`sound-${name}`, settings, HEARD_DESCRIBED, true)),
   );
   configure(sections, await config);
+  // The link has the last word, so one walkthrough serves walks with and without sound.
+  if (environment.sound) Object.assign(sounds.sound, { on: environment.sound !== "off", ambient: environment.sound === "on" });
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
   trail(environment, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>

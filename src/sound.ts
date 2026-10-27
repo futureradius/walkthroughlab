@@ -1,7 +1,7 @@
 import { Vector3 } from "three";
 import type { Downloads } from "./download";
 import type { Point } from "./marks";
-import { fixed, number, percent, toggle, type Described } from "./settings";
+import { fixed, number, toggle, type Described } from "./settings";
 
 // Everything the viewer hears (#13, #33): one ambient sound, footsteps,
 // placed sounds, and the sounds of doors and elevators. Sound begins on the
@@ -32,6 +32,8 @@ const FADE_IN = 0.5;
 const FADE_OUT = 0.2;
 /** Within this many metres a sound is heard at full strength. */
 const NEAR = 1;
+/** The quietest loudness, in decibels, which is silence. */
+const SILENT = -60;
 /** How quickly a sound's loudness follows a change, in seconds, so nothing clicks. */
 const FOLLOW = 0.05;
 
@@ -58,8 +60,31 @@ export const SOUND_DESCRIBED: Described<SoundSettings> = {
   }),
 };
 
+/**
+ * The share of a sound's own level that a loudness in decibels plays it at:
+ * 0 dB as it was levelled, -6 dB half the level, -20 dB a tenth. Ears hear
+ * level in ratios, so steps of a decibel sound alike all the way down, where
+ * steps of a share crowd together at the quiet end; -10 dB sounds about half
+ * as loud. The quietest setting is silence.
+ */
+export function gainOf(decibels: number): number {
+  return decibels <= SILENT ? 0 : 10 ** (decibels / 20);
+}
+
+/** A loudness setting: in decibels, from silent to a little above the sound's own level. */
+const loudness = (about: string) =>
+  number({
+    label: "Loudness",
+    min: SILENT,
+    max: 6,
+    step: 1,
+    show: (value) => (value <= SILENT ? "silent" : `${value > 0 ? "+" : ""}${value} dB`),
+    about: `${about} In decibels: 0 is the sound as it was levelled, -10 sounds about half as loud.`,
+  });
+
 /** How loud a sound heard from somewhere is, and how far it carries (#33). */
 export interface HeardSettings {
+  /** Decibels; see gainOf. */
   loudness: number;
   /** Metres up to which it fades as sound really does, halving with each doubling of distance. */
   realistic: number;
@@ -67,19 +92,12 @@ export interface HeardSettings {
   silent: number;
 }
 
-export const HEARD: HeardSettings = { loudness: 1, realistic: 20, silent: 25 };
+export const HEARD: HeardSettings = { loudness: 0, realistic: 20, silent: 25 };
 
 const metres = fixed(0, " m");
 
 export const HEARD_DESCRIBED: Described<HeardSettings> = {
-  loudness: number({
-    label: "Loudness",
-    min: 0,
-    max: 2,
-    step: 0.05,
-    show: percent,
-    about: "How loud it is from up to a metre away.",
-  }),
+  loudness: loudness("How loud it is from up to a metre away."),
   realistic: number({
     label: "Fades as real sound up to",
     min: 1,
@@ -112,17 +130,10 @@ export interface AmbientSettings {
   loudness: number;
 }
 
-export const AMBIENT: AmbientSettings = { loudness: 0.5 };
+export const AMBIENT: AmbientSettings = { loudness: -24 };
 
 export const AMBIENT_DESCRIBED: Described<AmbientSettings> = {
-  loudness: number({
-    label: "Loudness",
-    min: 0,
-    max: 2,
-    step: 0.05,
-    show: percent,
-    about: "How loud the ambient sound is, everywhere.",
-  }),
+  loudness: loudness("How loud the ambient sound is, everywhere."),
 };
 
 /** Footsteps: one per stride, walking or running. */
@@ -134,19 +145,12 @@ export interface FootstepSettings {
   running: number;
 }
 
-export const FOOTSTEPS: FootstepSettings = { loudness: 0.5, walking: 0.75, running: 1.2 };
+export const FOOTSTEPS: FootstepSettings = { loudness: -20, walking: 0.75, running: 1.2 };
 
 const stride = fixed(2, " m");
 
 export const FOOTSTEPS_DESCRIBED: Described<FootstepSettings> = {
-  loudness: number({
-    label: "Loudness",
-    min: 0,
-    max: 2,
-    step: 0.05,
-    show: percent,
-    about: "How loud each footstep is.",
-  }),
+  loudness: loudness("How loud each footstep is."),
   walking: number({
     label: "Stride, walking",
     min: 0.3,
@@ -385,7 +389,7 @@ export class Sounds {
     if (!buffer || !this.sound.on || !this.context || this.context.state !== "running") return;
     const share = at && settings.realistic !== undefined ? heard(at.distanceTo(this.ears), settings as HeardSettings) : 1;
     if (share === 0) return;
-    this.play(buffer, undefined, at, settings.loudness * share);
+    this.play(buffer, undefined, at, gainOf(settings.loudness) * share);
   }
 
   /** Footsteps, placed sounds and the ambient sound, for one frame. */
@@ -418,8 +422,8 @@ export class Sounds {
       this.ambientPlaying = null;
     }
     const ambient = this.sound.ambient ? this.buffers.get("ambient") : undefined;
-    if (ambient && !this.ambientPlaying) this.ambientPlaying = this.fadeIn(this.play(ambient, this.list.ambient.loop, null, this.ambient.loudness));
-    if (this.ambientPlaying) this.follow(this.ambientPlaying, this.ambient.loudness);
+    if (ambient && !this.ambientPlaying) this.ambientPlaying = this.fadeIn(this.play(ambient, this.list.ambient.loop, null, gainOf(this.ambient.loudness)));
+    if (this.ambientPlaying) this.follow(this.ambientPlaying, gainOf(this.ambient.loudness));
 
     if (this.strides.step(feet.walked, seconds, speeds, feet.landed)) this.footstep();
 
@@ -437,7 +441,7 @@ export class Sounds {
         this.fadeOut(spot.playing);
         spot.playing = null;
       }
-      if (spot.playing) this.follow(spot.playing, settings.loudness * heard(spot.at.distanceTo(ears), settings));
+      if (spot.playing) this.follow(spot.playing, gainOf(settings.loudness) * heard(spot.at.distanceTo(ears), settings));
     });
   }
 
@@ -459,7 +463,7 @@ export class Sounds {
     }
     if (!playing) return;
     if (playing.panner) place(playing.panner, ...(riding ? ears : at).toArray());
-    this.follow(playing, settings.loudness * (riding ? 1 : heard(at.distanceTo(ears), settings)));
+    this.follow(playing, gainOf(settings.loudness) * (riding ? 1 : heard(at.distanceTo(ears), settings)));
   }
 
   /** A footstep at the ears, never the same one twice running, each a little different. */
@@ -469,17 +473,17 @@ export class Sounds {
     let pick = Math.floor(Math.random() * steps.length);
     if (steps.length > 1 && pick === this.lastStep) pick = (pick + 1) % steps.length;
     this.lastStep = pick;
-    this.once(steps[pick], null, { loudness: this.footsteps.loudness * (0.85 + Math.random() * 0.3) });
+    this.once(steps[pick], null, { loudness: this.footsteps.loudness - 1.5 + Math.random() * 3 });
   }
 
   /** Start a sound now, looping between its overlaps if `loop` says how long it is. */
-  private play(buffer: AudioBuffer, loop: number | undefined, at: Vector3 | null, loudness: number): Playing {
+  private play(buffer: AudioBuffer, loop: number | undefined, at: Vector3 | null, gain: number): Playing {
     const context = this.context!;
     const source = context.createBufferSource();
     source.buffer = buffer;
     const fade = context.createGain();
     const level = context.createGain();
-    level.gain.value = loudness;
+    level.gain.value = gain;
     let panner: PannerNode | null = null;
     source.connect(fade).connect(level);
     if (at) {
@@ -519,10 +523,10 @@ export class Sounds {
     source.stop(now + FADE_OUT + 0.05);
   }
 
-  /** Let a sound's loudness follow what it should be now, smoothly. */
-  private follow({ level }: Playing, loudness: number) {
-    if (Math.abs(level.gain.value - loudness) < 0.001) return;
-    level.gain.setTargetAtTime(loudness, this.context!.currentTime, FOLLOW);
+  /** Let a sound's level follow what it should be now, smoothly. */
+  private follow({ level }: Playing, gain: number) {
+    if (Math.abs(level.gain.value - gain) < 0.0001) return;
+    level.gain.setTargetAtTime(gain, this.context!.currentTime, FOLLOW);
   }
 
   private rampMaster(to: number, seconds: number) {

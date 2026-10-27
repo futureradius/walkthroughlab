@@ -271,4 +271,21 @@ describe("opening an environment", () => {
     expect(sections.map(({ heading }) => heading)).not.toContain("Ambient occlusion");
     expect(steering.settings.zoom.max).toBe(2);
   });
+
+  it("lets the link turn sound on or off, whatever the config file says", async () => {
+    vi.mocked(loadEnvironment).mockResolvedValue({ ...environment(), sounds: { ambient: { file: "ambient.webm", loop: 120 } } });
+    serve(`${CONFIG}
+## Sound
+
+- on: no
+`);
+    expect((await open().opening).sounds.sound).toEqual({ on: false, ambient: true });
+    serve(`${CONFIG}
+## Sound
+
+- on: no
+`);
+    expect((await open({ address: { ...ADDRESS, sound: "on" } }).opening).sounds.sound).toEqual({ on: true, ambient: true });
+    expect((await open({ address: { ...ADDRESS, sound: "no-ambient" } }).opening).sounds.sound).toEqual({ on: true, ambient: false });
+  });
 });

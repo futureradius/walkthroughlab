@@ -75,13 +75,21 @@ with `?config`:
 
 - `## Sound`: `on: no` turns all sound off, and `ambient: no` the ambient
   sound alone, for walks where sound would distract, such as surveys in
-  public places. What is off is not downloaded either.
+  public places. What is off is not downloaded either. The link has the last
+  word: `?sound=off`, `?sound=no-ambient` or `?sound=on`, so one published
+  walkthrough serves walks with and without sound.
 - `## Ambient sound`: its loudness.
 - `## Footsteps`: their loudness, and the stride walking and running.
 - `## Placed sounds`: how many play at once.
 - `## sound-<name>`: a placed sound's loudness and distances.
 - `## door-hinged`, `## door-sliding`, `## elevator`: their sounds' loudness
   and distances, beside how they move.
+
+Every loudness is in decibels. 0 dB plays a sound at the level optimize
+brought it to; -6 dB is half that level, -20 dB a tenth, and -60 dB is
+silent. Ears hear level in ratios: about 10 dB less sounds half as loud,
+whatever the level, so a step of a decibel is as fine at the quiet end as at
+the loud one.
 
 ## Starting and stopping
 
