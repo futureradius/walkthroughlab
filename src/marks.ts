@@ -209,6 +209,9 @@ function readPart<T>(
   }
   marks.parts.push({ kind: kind.kind, name: kind.name, path, layer });
   if (MOVING.includes(kind.kind)) checkMoving(layer, kind.kind, path, marks, warn);
+  if (kind.kind === "sound" && layer.lines.length === 0 && layer.surfaces === 0) {
+    warn(path, "has nothing on it; draw a line, or put an object, where the sound plays from. It is silent until then.");
+  }
 }
 
 /** A door or an elevator: a line, a `model`, a `collision mesh`, and for some, more inside. */

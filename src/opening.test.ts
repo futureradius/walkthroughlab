@@ -94,6 +94,8 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     traffic: [],
     doors: [],
     elevators: [],
+    sounds: {},
+    placedSounds: [],
     shiny: [],
     glass: [],
     water: [],

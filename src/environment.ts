@@ -32,6 +32,7 @@ import { prepareCloth, withCloth, type ClothNote } from "./cloth";
 import { withReliefAndShine, type Shiny } from "./materials";
 import { propSway, withSway, type PropCopy } from "./props";
 import { readConfig, type Config } from "./settings";
+import type { PlacedSound, SoundList } from "./sound";
 import { handsOwnLight } from "./sunlit";
 import { asWater } from "./water";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
@@ -98,6 +99,9 @@ export interface Environment {
   doors: { motion: DoorMotion; leaves: Leaf[] }[];
   /** Each elevator: its route, car, doors and buttons, their collision meshes kept out of `collision`. */
   elevators: ElevatorParts[];
+  /** Every sound the environment plays, by name, and each placed sound mark's spots (#33). */
+  sounds: SoundList;
+  placedSounds: PlacedSound[];
   /** Surfaces that may show relief or shine, glass and water, for Surfaces to switch and tune. */
   shiny: Shiny[];
   glass: MeshStandardMaterial[];
@@ -449,6 +453,7 @@ export async function loadEnvironment(
   const props: Environment["props"] = [];
   const traffic: Environment["traffic"] = [];
   const cloths = new Set<string>();
+  const placedSounds: PlacedSound[] = [];
   const doorLayers: Object3D[] = [];
   const elevatorLayers: Object3D[] = [];
   gltf.scene.traverse((object) => {
@@ -461,6 +466,7 @@ export async function loadEnvironment(
       props.push({ name, copies, sways });
     }
     if (object.userData.walkthrough === "traffic") traffic.push({ name: object.userData.traffic, loops: object.userData.loops ?? [] });
+    if (object.userData.walkthrough === "sound") placedSounds.push({ name: object.userData.sound, spots: object.userData.spots ?? [] });
     if (object.userData.walkthrough === COLLISION_MESH) collisionLayers.push(object);
     else if (object instanceof Line) lines.push(object);
   });
@@ -493,7 +499,7 @@ export async function loadEnvironment(
   const collision = Float32Array.from(still.flatMap((layer) => Array.from(trianglesOf(layer))));
   // Collision meshes stop the viewpoint unseen, and lines are only marks.
   for (const object of [...collisionLayers, ...lines]) object.removeFromParent();
-  const { start, warnings = [] } = gltf.scene.userData.walkthrough ?? {};
+  const { start, warnings = [], sounds = {} } = gltf.scene.userData.walkthrough ?? {};
 
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   for (const each of bakedLight) {
@@ -517,6 +523,8 @@ export async function loadEnvironment(
     cloths: [...cloths],
     props,
     traffic,
+    sounds,
+    placedSounds,
     doors,
     elevators,
     shiny,

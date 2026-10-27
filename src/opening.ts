@@ -15,6 +15,7 @@ import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
+import { AMBIENT_DESCRIBED, FOOTSTEPS_DESCRIBED, HEARD_DESCRIBED, PLACED_DESCRIBED, SOUND_DESCRIBED, Sounds } from "./sound";
 
 /** An environment's files and its config file. */
 export interface EnvironmentAddress {
@@ -81,6 +82,8 @@ export interface Opened {
   doors: { update(seconds: number): void };
   /** Elevators: move them on every frame, after steering, and tell them of taps. */
   elevators: { update(seconds: number): void; tap(raycaster: Raycaster): void };
+  /** Everything the viewer hears; `update` it every frame, after steering. */
+  sounds: Sounds;
 }
 
 /** Seconds a part of the trailing download may take before the console hears it is still awaited. */
@@ -110,6 +113,7 @@ async function trail(
   swaying: { name: string; crowns: Crowns }[],
   traffic: { name: string; flocks: Flocks }[],
   water: Water,
+  sounds: Sounds,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
   await awaited("ambient occlusion", occlusion?.ready() ?? Promise.resolve());
@@ -153,6 +157,8 @@ async function trail(
       console.warn(`The flocks of traffic-${name} could not be drawn.`, error);
     }
   }
+  // Sound is last (#14).
+  await sounds.download(downloads, import.meta.env.BASE_URL);
 }
 
 /** Use what the config file sets in these sections, saying in the console what it could not. */
@@ -221,6 +227,18 @@ export async function openEnvironment(
   );
   const lifting = { ...ELEVATOR };
   const elevators = loaded.elevators.map((parts) => new Elevator(parts, lifting, sliding));
+  // Doors and elevators are heard as they move (#33).
+  const sounds = new Sounds(loaded.sounds, loaded.placedSounds);
+  doors.forEach((door, i) => {
+    const kind = loaded.doors[i].motion.kind;
+    door.onMove = (opening) => sounds.once(`door-${kind}-${opening ? "open" : "close"}`, door.middle, kind === "hinged" ? hinged : sliding);
+  });
+  for (const elevator of elevators) {
+    const from = () => (elevator.carries(steering.footing) ? null : elevator.middle);
+    elevator.onDepart = () => sounds.once("elevator-start", from(), lifting);
+    elevator.onArrive = () => sounds.once("elevator-arrive", from(), lifting);
+    elevator.onDoors = (opening, at) => sounds.once(`door-sliding-${opening ? "open" : "close"}`, at, sliding);
+  }
   const collision = collisionMesh(loaded.collision, BODY, () => [
     ...doors.flatMap((door) => door.walls()),
     ...elevators.flatMap((elevator) => elevator.triangles()),
@@ -279,11 +297,18 @@ export async function openEnvironment(
         : section(`prop-${name}`, settings, STILL_PROP_DESCRIBED, true),
     ),
     ...traffic.map(({ name, flocks }) => section(`traffic-${name}`, flocks.settings, FLOCK_DESCRIBED, true)),
+    ...(Object.keys(loaded.sounds).length > 0 ? [section("Sound", sounds.sound, SOUND_DESCRIBED, true)] : []),
+    ...(loaded.sounds.ambient ? [section("Ambient sound", sounds.ambient, AMBIENT_DESCRIBED, true)] : []),
+    ...(Object.keys(loaded.sounds).some((name) => name.startsWith("footstep-"))
+      ? [section("Footsteps", sounds.footsteps, FOOTSTEPS_DESCRIBED, true)]
+      : []),
+    ...(loaded.placedSounds.length > 0 ? [section("Placed sounds", sounds.placed, PLACED_DESCRIBED, true)] : []),
+    ...[...sounds.placedSettings].map(([name, settings]) => section(`sound-${name}`, settings, HEARD_DESCRIBED, true)),
   );
   configure(sections, await config);
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  trail(environment, scatters, swaying, traffic, water, { renderer, scene, occlusion, downloads }).catch((error) =>
+  trail(environment, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
     console.error("The trailing download stopped, so what comes after the failure never arrives.", error),
   );
   return {
@@ -315,7 +340,10 @@ export async function openEnvironment(
     },
     elevators: {
       update: (seconds) => {
-        for (const elevator of elevators) elevator.update(seconds, collision, steering);
+        for (const elevator of elevators) {
+          elevator.update(seconds, collision, steering);
+          sounds.hum(elevator, elevator.travelling, elevator.middle, elevator.carries(steering.footing), lifting);
+        }
       },
       tap: (raycaster) => {
         for (const elevator of elevators) {
@@ -324,5 +352,6 @@ export async function openEnvironment(
         }
       },
     },
+    sounds,
   };
 }

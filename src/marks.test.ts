@@ -188,6 +188,20 @@ describe("traffic loops", () => {
   });
 });
 
+describe("placed sounds", () => {
+  it("reads a sound layer with an object or a line on it", () => {
+    const marks = readMarks(model(layer("sound-hum", { surfaces: 1 }), layer("sound-birdsong", { lines: [flat([0, 0], [1, 0])] })));
+    expect(marks.warnings).toEqual([]);
+    expect(marks.parts.map(({ kind, name }) => `${kind} ${name}`)).toEqual(["sound hum", "sound birdsong"]);
+  });
+
+  it("warns about a sound layer with nothing on it", () => {
+    const marks = readMarks(model(layer("sound-hum")));
+    expect(marks.parts[0]).toMatchObject({ kind: "sound", name: "hum" });
+    expect(marks.warnings).toHaveLength(1);
+  });
+});
+
 describe("how far a hinged door turns", () => {
   it("turns the short way to a straight line, either side", () => {
     expect(swingOf([0, 0], [1, 0], [[0, 1]]).angle).toBeCloseTo(Math.PI / 2);

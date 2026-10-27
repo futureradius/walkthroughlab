@@ -4,6 +4,7 @@ import { BODY, collisionMesh } from "./collision";
 import type { DoorSettings } from "./doors";
 import { Elevator, ELEVATOR, type ElevatorParts } from "./elevators";
 import type { Footing } from "./motion";
+import { HEARD } from "./sound";
 
 /** A flat square of floor, `size` across from (x, z), at height `y`, as two triangles. */
 const square = (x: number, z: number, size: number, y: number) => [
@@ -13,7 +14,7 @@ const square = (x: number, z: number, size: number, y: number) => [
 /** Ground and two upper floors beside a shaft at x 0 to 2, z 0 to 2. */
 const STILL = Float32Array.from([...square(-10, -10, 20, 0).map((v, i) => (i % 3 === 1 ? -0.01 : v)), ...square(-6, 0, 6, 3.5), ...square(-6, 0, 6, 6.5)]);
 
-const DOORS: DoorSettings = { seconds: 0.5, near: 1.5, wait: 2 };
+const DOORS: DoorSettings = { seconds: 0.5, near: 1.5, wait: 2, ...HEARD };
 
 /** A button: a small box the tap would land on, and its material, to see it light. */
 function button() {

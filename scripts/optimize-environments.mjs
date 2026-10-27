@@ -2,7 +2,7 @@
 // Rhino exports (.glb) go to public/models/, skies (.exr) to public/skies/.
 // Run with `npm run optimize`, or `npm run optimize -- <environment>` when
 // models-source/ holds more than one Rhino export.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join as joinPath } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -26,6 +26,7 @@ import * as watlas from "watlas";
 import { describeLamps, facingOf, fromRhino as fromRhinoGlow, lumenOf } from "../src/lamps.ts";
 import { buttonOf, COLLISION_MESH, normalise, readMarks, swingOf } from "../src/marks.ts";
 import { readConfig } from "../src/settings.ts";
+import { lengthOf, OVERLAP, SOUND_FILE, writeLoop, writeOnce } from "./sound-files.mjs";
 
 const SOURCE = "models-source";
 const MODELS = "public/models";
@@ -42,6 +43,17 @@ const PROPS = joinPath(MODELS, "props");
 /** Traffic, such as a bird, prepared in Blender, beside the environment (#32). */
 const TRAFFIC_SOURCE = joinPath(SOURCE, "traffic");
 const TRAFFIC = joinPath(MODELS, "traffic");
+/** The environment's own sounds, beside it: its ambient sound, its placed sounds, and any put in place of a default (#33). */
+const SOUNDS_SOURCE = joinPath(SOURCE, "sounds");
+const SOUNDS = joinPath(MODELS, "sounds");
+/** Footsteps, doors and the elevator, which every environment has unless it brings its own: written by scripts/default-sounds.mjs and committed. */
+const DEFAULT_SOUNDS = "public/sounds";
+/** The names of the sounds an environment may put in place of a default. */
+const DEFAULT_NAME = /^(footstep-d+|door-(hinged|sliding)-(open|close)|elevator-(start|hum|arrive))$/;
+/** Sounds that loop, besides placed sounds; the others play once. */
+const LOOPED = new Set(["ambient", "elevator-hum"]);
+/** Seconds of the ambient sound that are kept, as one seamless loop. */
+const AMBIENT_SECONDS = 120;
 /** An unpainted bird's parts flap from this share of its half span outwards. */
 const BODY_SHARE = 0.15;
 /** A prop's parts whose material's name begins with this sway and are lit live (#28). */
@@ -90,6 +102,8 @@ const SMALL_SKY_LIGHT_WIDTH = 256;
 const OPENING_BUDGET = 2;
 /** The whole walkthrough, and all its sound (#14). */
 const WHOLE_BUDGET = 10;
+/** All the sound, which is part of the whole (#14). */
+const SOUND_BUDGET = 3;
 /** The page's own code, which optimize cannot measure: about this much on the wire. */
 const CODE_ESTIMATE = 0.2;
 /** Brightens or darkens a sky, both as seen and as a light source. */
@@ -388,6 +402,20 @@ function markEnvironment(document, file, traffic) {
     layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "traffic", traffic: name, loops });
     const said = traffic.has(name) ? traffic.get(name).warnings : [`${path}: there is no ${TRAFFIC_SOURCE}/${name}.glb to fly round its loops.`];
     for (const warning of said) {
+      marks.warnings.push(warning);
+      console.warn(`${file}: ${warning}`);
+    }
+  }
+  // A placed sound plays from the middle of each object on its layer (#33).
+  for (const { kind, name, path, layer } of marks.parts) {
+    if (kind !== "sound") continue;
+    const spots = layer.node.listChildren().filter((object) => object.getMesh()).map((object) => {
+      const { min, max } = getBounds(object);
+      return [0, 1, 2].map((k) => (min[k] + max[k]) / 2);
+    });
+    layer.node.setExtras({ ...layer.node.getExtras(), walkthrough: "sound", sound: name, spots });
+    if (!soundSource(name)) {
+      const warning = `${path}: there is no ${SOUNDS_SOURCE}/${name} sound file to play.`;
       marks.warnings.push(warning);
       console.warn(`${file}: ${warning}`);
     }
@@ -1287,12 +1315,24 @@ async function optimizeEnvironment(io, file, props, traffic) {
     // Rhino writes one mesh per face; merge them so each layer draws at once.
     // Lines are marks, each saying something of its own, so never merge them:
     // two lines on one layer would become one polyline.
-    join({ filter: (node) => !node.getMesh()?.listPrimitives().some((primitive) => primitive.getMode() !== TRIANGLES) }),
+    // A placed sound plays from the middle of each object on its layer, so
+    // those are kept apart too.
+    join({
+      filter: (node) =>
+        !node.getMesh()?.listPrimitives().some((primitive) => primitive.getMode() !== TRIANGLES) &&
+        !node.listParents().some((parent) => parent.propertyType === PropertyType.NODE && normalise(parent.getName()).startsWith("sound-")),
+    }),
     prune(),
   );
   await compressTextures(document);
   const marks = markEnvironment(document, file, traffic);
   marks.warnings.push(...said);
+  const sounds = writeSounds(marks, (text) => {
+    marks.warnings.push(text);
+    console.warn(`${file}: ${text}`);
+  });
+  const scene = document.getRoot().listScenes()[0];
+  scene.setExtras({ ...scene.getExtras(), walkthrough: { ...scene.getExtras().walkthrough, sounds } });
   prepareCloths(document, marks, (text) => {
     marks.warnings.push(text);
     console.warn(`${file}: ${text}`);
@@ -1331,7 +1371,7 @@ async function optimizeEnvironment(io, file, props, traffic) {
   await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
   await io.write(to, document);
   console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}`);
-  return marks.parts.filter(({ kind }) => kind === "scatter").map(({ name }) => name);
+  return { scattered: marks.parts.filter(({ kind }) => kind === "scatter").map(({ name }) => name), sounds };
 }
 
 /** Bytes a file takes on the wire: GitHub Pages compresses all but pictures. */
@@ -1340,11 +1380,63 @@ async function onTheWire(path) {
   return /.(jpe?g|png|webp)$/.test(path) ? bytes.length : gzipSync(bytes).length;
 }
 
+/** The raw file of the environment's sound of this name, such as `hum.wav` for `sound-hum`, if there is one. */
+function soundSource(name) {
+  if (!existsSync(SOUNDS_SOURCE)) return undefined;
+  return readdirSync(SOUNDS_SOURCE).find((file) => SOUND_FILE.test(file) && normalise(file.replace(SOUND_FILE, "")) === name);
+}
+
+/**
+ * Encode the sounds the environment plays into public/models/sounds/: its
+ * ambient sound, the first AMBIENT_SECONDS of it as a seamless loop, each
+ * placed sound a mark names, looped, and any it puts in place of a default.
+ * Only those, so a file left in models-source/sounds/ is never published by
+ * mistake. Returns every sound the walkthrough plays, by name, with its
+ * address under the page and, for a loop, its length in seconds; defaults
+ * fill in the rest, and footsteps of the environment's own replace all the
+ * default ones (#33).
+ */
+function writeSounds(marks, warn) {
+  const placed = new Set(marks.parts.filter(({ kind }) => kind === "sound").map(({ name }) => name));
+  const own = existsSync(SOUNDS_SOURCE) ? readdirSync(SOUNDS_SOURCE).filter((file) => SOUND_FILE.test(file)) : [];
+  const written = new Map();
+  for (const file of own) {
+    const name = normalise(file.replace(SOUND_FILE, ""));
+    if (name !== "ambient" && !placed.has(name) && !DEFAULT_NAME.test(name)) {
+      warn(`${SOUNDS_SOURCE}/${file}: no mark or fixed name plays it, so it is left out; see docs/sound.md.`);
+      continue;
+    }
+    written.set(name, file);
+  }
+  const sounds = {};
+  if (written.size > 0) mkdirSync(SOUNDS, { recursive: true });
+  for (const [name, file] of written) {
+    const from = joinPath(SOUNDS_SOURCE, file);
+    const to = joinPath(SOUNDS, `${name}.webm`);
+    const loops = LOOPED.has(name) || placed.has(name);
+    const loop = loops ? writeLoop(from, to, name === "ambient" ? { stereo: true, seconds: AMBIENT_SECONDS } : {}) : writeOnce(from, to);
+    sounds[name] = { file: `models/sounds/${name}.webm`, ...(loop ? { loop } : {}) };
+    console.log(`sounds/${file}: ${loops ? `a loop of ${loop.toFixed(1)} s, ` : ""}${(statSync(to).size / 1024).toFixed(0)} KB`);
+  }
+  // Left from sounds that are gone, they would be published for nothing.
+  if (existsSync(SOUNDS)) for (const old of readdirSync(SOUNDS)) if (!written.has(old.replace(/.webm$/, ""))) rmSync(joinPath(SOUNDS, old));
+  const ownSteps = [...written.keys()].some((name) => name.startsWith("footstep-"));
+  const defaults = existsSync(DEFAULT_SOUNDS) ? readdirSync(DEFAULT_SOUNDS).filter((file) => file.endsWith(".webm")) : [];
+  for (const file of defaults) {
+    const name = file.replace(/.webm$/, "");
+    if (sounds[name] || (ownSteps && name.startsWith("footstep-"))) continue;
+    const loop = LOOPED.has(name) ? lengthOf(joinPath(DEFAULT_SOUNDS, file)) - 2 * OVERLAP : undefined;
+    sounds[name] = { file: `sounds/${file}`, ...(loop ? { loop } : {}) };
+  }
+  if (!sounds.ambient) warn(`there is no ${SOUNDS_SOURCE}/ambient sound file, so the environment has no ambient sound.`);
+  return sounds;
+}
+
 /**
  * Say how the environment's downloads compare with the download budget,
  * warning, never failing, when one is over (#14).
  */
-async function reportBudget(environment, sky) {
+async function reportBudget(environment, sky, sounds) {
   const megabytes = async (paths) => {
     let bytes = 0;
     for (const path of paths) bytes += await onTheWire(path).catch(() => 0);
@@ -1364,14 +1456,16 @@ async function reportBudget(environment, sky) {
   const scattered = [SCATTER, PROPS, TRAFFIC].flatMap((folder) =>
     existsSync(folder) ? readdirSync(folder).map((file) => joinPath(folder, file)) : [],
   );
+  const sound = await megabytes(Object.values(sounds).map(({ file }) => joinPath("public", file)));
   const whole =
     opening +
+    sound +
     (await megabytes([joinPath(SKIES, renamed(sky, ".jpg")), joinPath(SKIES, renamed(sky, ".hdr")), ...scattered]));
   const line = (what, size, budget) =>
     `${what}: about ${size.toFixed(2)} MB on the wire, of ${budget} MB${size > budget ? " - OVER BUDGET" : ""}`;
   console.log(line("Opening download, with about 0.2 MB of page code", opening, OPENING_BUDGET));
   console.log(line("Whole walkthrough", whole, WHOLE_BUDGET));
-  console.log(line("Sound", 0, 3));
+  console.log(line("Sound", sound, SOUND_BUDGET));
 }
 
 /**
@@ -1524,9 +1618,14 @@ if (environments.length + skies.length === 0) {
 const props = await readProps(io);
 const traffic = await readTraffic(io);
 const scattered = new Set();
-for (const file of environments) for (const name of await optimizeEnvironment(io, file, props, traffic)) scattered.add(name);
+let sounds = {};
+for (const file of environments) {
+  const optimized = await optimizeEnvironment(io, file, props, traffic);
+  for (const name of optimized.scattered) scattered.add(name);
+  sounds = optimized.sounds;
+}
 for (const file of skies) await optimizeSky(file);
 await optimizeScatter(io, scattered);
 await writeProps(io, props);
 await writeTraffic(io, traffic);
-if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0]);
+if (environments.length === 1 && skies.length === 1) await reportBudget(environments[0], skies[0], sounds);

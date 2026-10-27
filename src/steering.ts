@@ -180,6 +180,8 @@ export class Steering {
   /** The share of a sideways push that sidesteps; the rest turns. */
   private sidestepping = 0;
   private fall: Fall | null = null;
+  /** What the feet did in the last step, for footsteps: metres walked across the floor, and whether a fall ended. */
+  readonly feet = { walked: 0, landed: false };
 
   constructor(private readonly place: Place) {
     this.viewpoint = place.start;
@@ -237,6 +239,8 @@ export class Steering {
   step(readings: Readings, seconds: number, screen: Screen): View {
     const { walking, joystick } = this.settings;
     const { knob, keys } = readings;
+    this.feet.walked = 0;
+    this.feet.landed = false;
     const stick = pushOf(knob, joystick.deadZone);
 
     // One pixel covers this angle at the present zoom, so a dragged spot
@@ -282,6 +286,7 @@ export class Steering {
   private walk(intent: Intent, seconds: number): Viewpoint {
     const from = this.viewpoint;
     const moved = advance(from, intent, seconds, this.place.terrain, this.settings.walking);
+    this.feet.walked = Math.hypot(moved.x - from.x, moved.z - from.z);
     if (moved.floor < from.floor - BODY.maxStep && seconds > 0) {
       this.fall = {
         feet: from.floor,
@@ -312,6 +317,7 @@ export class Steering {
     if (fall.feet <= floor) {
       fall.feet = floor;
       this.fall = null;
+      this.feet.landed = true;
     }
     this.eyes = fall.feet + this.settings.walking.eyeHeight;
   }

@@ -18,6 +18,19 @@ Walkthroughlab is a study prototype for experiencing architectural spaces from t
 
 Test environment prepared in Rhino. Sources and licences of its textures and of the statue model are still to be added here.
 
+### Sounds
+
+All from [Freesound](https://freesound.org/). Licence: [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+- Ambient sound: [kesklinn_ambience](https://freesound.org/s/875300/) by Mihacappy
+- Hum: [Foley_Object_Fridge_Motor_Humming_Loop_Mono_NTG4](https://freesound.org/s/556369/) by Nox_Sound
+- Footsteps: [footsteps shoes walk hard floor stone patio](https://freesound.org/s/637555/) by kyles
+- Hinged door opening: [Wooden door open-close](https://freesound.org/s/125958/) by Ryding
+- Hinged door closing: [Door_Close_01](https://freesound.org/s/872998/) by SignatureSoundsOrg
+- Sliding doors: [Opening and closing elevator doors](https://freesound.org/s/723110/) by nomerodin1
+- Elevator: [Elevator.wav](https://freesound.org/s/463840/) by Jstevens625
+- Elevator chime: [A320 tritone chime](https://freesound.org/s/244583/) by nachosose
+
 ### Software
 
 - [Three.js](https://threejs.org/), [MIT licence](https://github.com/mrdoob/three.js/blob/dev/LICENSE)

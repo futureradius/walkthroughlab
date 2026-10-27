@@ -3,14 +3,15 @@ import type { CollisionMesh, Triangle } from "./collision";
 import { Door, type DoorMotion, type DoorSettings, type Leaf } from "./doors";
 import type { Footing } from "./motion";
 import { fixed, number, type Described } from "./settings";
+import { HEARD, HEARD_DESCRIBED, type HeardSettings } from "./sound";
 
-/** How an elevator rides, set per environment under `## elevator` (#26). */
-export interface ElevatorSettings {
+/** How an elevator rides and sounds, set per environment under `## elevator` (#26, #33). */
+export interface ElevatorSettings extends HeardSettings {
   /** Metres a second the car travels at, on average. */
   speed: number;
 }
 
-export const ELEVATOR: ElevatorSettings = { speed: 1 };
+export const ELEVATOR: ElevatorSettings = { speed: 1, ...HEARD };
 
 export const ELEVATOR_DESCRIBED: Described<ElevatorSettings> = {
   speed: number({
@@ -21,10 +22,13 @@ export const ELEVATOR_DESCRIBED: Described<ElevatorSettings> = {
     show: fixed(1, " m/s"),
     about: "How fast the car travels, on average; it starts and stops gently.",
   }),
+  ...HEARD_DESCRIBED,
 };
 
 /** How far a button may be from the viewpoint and still be pressed, in metres. */
 export const BUTTON_REACH = 2.5;
+/** How far above its floor the car's sounds are heard from, in metres. */
+const CAR_MIDDLE = 1.2;
 /** How far above or below the car's floor the viewer may stand and still ride along, in metres. */
 const ABOARD = 0.5;
 
@@ -86,6 +90,11 @@ export class Elevator {
   /** Seconds the doors have stood open at the current stop. */
   private openFor: number | null = null;
   private walls: Triangle[] = [];
+  /** Told when the car sets off and when it arrives at a stop, for their sounds (#33). */
+  onDepart: () => void = () => {};
+  onArrive: () => void = () => {};
+  /** Told when its car doors start to open or to close, and where they are; the floor doors move with them unheard. */
+  onDoors: (opening: boolean, at: Vector3) => void = () => {};
 
   constructor(parts: ElevatorParts, settings: ElevatorSettings, doorSettings: DoorSettings) {
     this.route = parts.route.map(([x, y, z]) => new Vector3(x, y, z));
@@ -102,7 +111,11 @@ export class Elevator {
       closed,
     };
     const carried = () => this.offset;
-    this.carDoors = parts.carDoors.map(({ motion, leaves }) => new Door(motion, leaves, doorSettings, { told: true, carried }));
+    this.carDoors = parts.carDoors.map(({ motion, leaves }) => {
+      const door = new Door(motion, leaves, doorSettings, { told: true, carried });
+      door.onMove = (opening) => this.onDoors(opening, door.middle);
+      return door;
+    });
     this.floorDoors = parts.floorDoors.map(({ stop, motion, leaves }) => ({
       stop: stop - 1,
       door: new Door(motion, leaves, doorSettings, { told: true }),
@@ -114,6 +127,22 @@ export class Elevator {
   /** Every wall and floor of the car and its doors, as they stand now. */
   triangles(): Triangle[] {
     return [...this.walls, ...this.carDoors.flatMap((door) => door.walls()), ...this.floorDoors.flatMap(({ door }) => door.walls())];
+  }
+
+  /** Whether the car is travelling between stops. */
+  get travelling(): boolean {
+    return this.trip !== null;
+  }
+
+  /** Where the car's sounds are heard from: its middle, above its floor. */
+  get middle(): Vector3 {
+    const floor = this.floor();
+    return floor.setY(floor.y + CAR_MIDDLE);
+  }
+
+  /** Whether a viewer standing here rides in the car. */
+  carries(at: Footing): boolean {
+    return this.aboard(at, this.floor());
   }
 
   /** Every button, to tell which a tap lands on. */
@@ -148,7 +177,10 @@ export class Elevator {
     } else if (this.queue.length > 0 && this.doorsAt(this.at).every((door) => door.shut)) {
       const next = this.queue.shift()!;
       if (next === this.at) this.arrive();
-      else this.trip = { from: this.at, to: next, share: 0, length: this.lengthBetween(this.at, next) };
+      else {
+        this.trip = { from: this.at, to: next, share: 0, length: this.lengthBetween(this.at, next) };
+        this.onDepart();
+      }
     }
     for (const door of this.carDoors) door.update(seconds, collision, viewer);
     for (const { door } of this.floorDoors) door.update(seconds, collision, viewer);
@@ -164,6 +196,7 @@ export class Elevator {
   }
 
   private arrive() {
+    this.onArrive();
     for (const button of this.buttons) if (button.stop === this.at) button.light(false);
     this.openDoors();
   }

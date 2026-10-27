@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BODY, collisionMesh } from "./collision";
 import { Door, type DoorMotion, type DoorSettings } from "./doors";
 import type { Footing } from "./motion";
+import { HEARD } from "./sound";
 
 /** A floor 20 m across at height 0, as two triangles. */
 const FLOOR = [-10, 0, -10, 10, 0, -10, 10, 0, 10, -10, 0, -10, 10, 0, 10, -10, 0, 10];
@@ -12,7 +13,7 @@ const wall = (x1: number, z1: number, x2: number, z2: number) => [
 ];
 
 /** Settings the tests count on, whatever the usual ones are. */
-const SETTINGS: DoorSettings = { seconds: 1.2, near: 1.5, wait: 3 };
+const SETTINGS: DoorSettings = { seconds: 1.2, near: 1.5, wait: 3, ...HEARD };
 
 /** A door 1 m wide, hinged at the origin, closed along +x, turning a quarter turn towards +z. */
 const MOTION: DoorMotion = {

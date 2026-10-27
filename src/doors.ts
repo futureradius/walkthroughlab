@@ -2,9 +2,10 @@ import { Matrix4, Vector3, type Object3D } from "three";
 import type { CollisionMesh, Triangle } from "./collision";
 import type { Footing } from "./motion";
 import { fixed, number, type Described } from "./settings";
+import { HEARD, HEARD_DESCRIBED, type HeardSettings } from "./sound";
 
-/** How a kind of door moves, set per environment under `## door-hinged` and `## door-sliding` (#7). */
-export interface DoorSettings {
+/** How a kind of door moves and sounds, set per environment under `## door-hinged` and `## door-sliding` (#7, #33). */
+export interface DoorSettings extends HeardSettings {
   /** Seconds a door takes to open or close. */
   seconds: number;
   /** Metres from a door within which the viewer opens it. */
@@ -13,8 +14,8 @@ export interface DoorSettings {
   wait: number;
 }
 
-export const HINGED_DOOR: DoorSettings = { seconds: 0.7, near: 3.5, wait: 5 };
-export const SLIDING_DOOR: DoorSettings = { seconds: 0.7, near: 3.5, wait: 5 };
+export const HINGED_DOOR: DoorSettings = { seconds: 0.7, near: 3.5, wait: 5, ...HEARD };
+export const SLIDING_DOOR: DoorSettings = { seconds: 0.7, near: 3.5, wait: 5, ...HEARD };
 
 export const DOOR_DESCRIBED: Described<DoorSettings> = {
   seconds: number({
@@ -41,6 +42,7 @@ export const DOOR_DESCRIBED: Described<DoorSettings> = {
     show: fixed(1, " s"),
     about: "How long a door stays open once the viewer is out of range.",
   }),
+  ...HEARD_DESCRIBED,
 };
 
 /** What `npm run optimize` notes on a door's layer about how it moves. */
@@ -111,6 +113,10 @@ export class Door {
   private readonly told: boolean;
   /** Where the door has been carried to, as by an elevator's car, from where it was modelled. */
   private readonly carried: () => Matrix4;
+  /** Which way it is moving: 1 opening, -1 closing, 0 still. */
+  private moving = 0;
+  /** Told when it starts to open or to close, for its sound (#33). */
+  onMove: (opening: boolean) => void = () => {};
 
   constructor(
     motion: DoorMotion,
@@ -159,6 +165,12 @@ export class Door {
   /** Whether it has finished opening. */
   get opened(): boolean {
     return this.openness === 1;
+  }
+
+  /** Where its sound is heard from: the middle of the closed door, wherever it has been carried. */
+  get middle(): Vector3 {
+    const { centre, bottom, top } = this.motion;
+    return new Vector3(centre[0], (bottom + top) / 2, centre[1]).applyMatrix4(this.carried());
   }
 
   /** Take in where it has been carried to, so its walls are where it is seen. */
@@ -221,7 +233,10 @@ export class Door {
       this.awayFor += seconds;
       if (this.awayFor >= this.settings.wait) this.target = 0;
     }
-    if (this.openness === this.target) return;
+    if (this.openness === this.target) {
+      this.moving = 0;
+      return;
+    }
     const step = seconds / Math.max(this.settings.seconds, 0.01);
     const next =
       this.target > this.openness ? Math.min(this.target, this.openness + step) : Math.max(this.target, this.openness - step);
@@ -246,6 +261,9 @@ export class Door {
       }
       viewer.shove(pushed);
     }
+    const moving = Math.sign(this.target - this.openness);
+    if (moving !== this.moving) this.onMove(moving > 0);
+    this.moving = moving;
     this.openness = next;
     this.show(next);
   }
