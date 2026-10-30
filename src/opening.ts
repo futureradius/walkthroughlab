@@ -15,7 +15,7 @@ import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
-import { sharpenTextures } from "./textures";
+import { quietMoment, sharpenTextures, type Pace } from "./textures";
 import { AMBIENT_DESCRIBED, FOOTSTEPS_DESCRIBED, HEARD_DESCRIBED, PLACED_DESCRIBED, SOUND_DESCRIBED, Sounds } from "./sound";
 
 /** An environment's files and its config file. */
@@ -127,6 +127,7 @@ async function trail(
   environment: EnvironmentAddress,
   textures: Map<string, Texture[]>,
   finerTextures: string[],
+  steering: Steering,
   scatters: { name: string; scatter: Scatter }[],
   swaying: { name: string; crowns: Crowns }[],
   traffic: { name: string; flocks: Flocks }[],
@@ -134,7 +135,9 @@ async function trail(
   sounds: Sounds,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
-  await awaited("the sharp textures", sharpenTextures(textures, environment.texture, downloads));
+  const pace: Pace = { moment: () => quietMoment(() => steering.still), upload: (texture) => renderer.initTexture(texture) };
+  // Handed over at a walking viewer's pace, which nothing after them should have to wait for.
+  const sharp = sharpenTextures(textures, environment.texture, downloads, { pace });
   await awaited("ambient occlusion", occlusion?.ready() ?? Promise.resolve());
   // Made here rather than downloaded; flat until then.
   water.grow();
@@ -178,8 +181,9 @@ async function trail(
   }
   // Sound comes after everything seen (#14).
   await sounds.download(downloads, import.meta.env.BASE_URL);
+  await sharp;
   const finer = new Map(finerTextures.flatMap((name) => (textures.has(name) ? [[name, textures.get(name)!]] : [])));
-  await awaited("the finer textures", sharpenTextures(finer, (name) => environment.texture(`${name}-finer`), downloads));
+  await awaited("the finer textures", sharpenTextures(finer, (name) => environment.texture(`${name}-finer`), downloads, { pace }));
 }
 
 /** Use what the config file sets in these sections, saying in the console what it could not. */
@@ -335,7 +339,7 @@ export async function openEnvironment(
   if (environment.sound) Object.assign(sounds.sound, { on: environment.sound !== "off", ambient: environment.sound === "on" });
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  trail(environment, loaded.textures, loaded.finerTextures, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
+  trail(environment, loaded.textures, loaded.finerTextures, steering, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
     console.error("The trailing download stopped, so what comes after the failure never arrives.", error),
   );
   return {

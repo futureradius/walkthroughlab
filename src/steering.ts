@@ -182,6 +182,8 @@ export class Steering {
   private fall: Fall | null = null;
   /** What the feet did in the last step, for footsteps: metres walked across the floor, and whether a fall ended. */
   readonly feet = { walked: 0, landed: false };
+  /** Whether the last step left the view where it was, so a stalled frame would hardly show. */
+  still = true;
 
   constructor(private readonly place: Place) {
     this.viewpoint = place.start;
@@ -268,12 +270,14 @@ export class Steering {
     // In the air the viewer can look around but not steer.
     const intent = this.fall ? { ...steered, walk: 0, sidestep: 0, turn: 0 } : steered;
 
+    const before = this.viewpoint;
     const moved = this.fall
       ? this.drift(this.fall, advance(this.viewpoint, intent, seconds, stay, walking), seconds)
       : this.walk(intent, seconds);
     // Zoom wears off by the same share as the view levels out.
     this.viewpoint = this.zoom.step(moved, seconds, levelling(intent, seconds, walking), screen);
     const { x, z, floor, heading, pitch } = this.viewpoint;
+    this.still = x === before.x && z === before.z && floor === before.floor && heading === before.heading && pitch === before.pitch;
     if (this.fall) this.drop(this.fall, floor, seconds);
     else {
       this.eyes +=

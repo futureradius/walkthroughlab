@@ -41,6 +41,18 @@ function walkthrough(terrain: Terrain = open) {
 /** The share of a sideways push that sidestepped in a frame, from how far it moved. */
 const sidestepping = (moved: number) => moved / (WALKING.speed * FRAME);
 
+describe("standing still", () => {
+  it("says so until the viewer walks, and again once they stop", () => {
+    const { steering, frame, hold } = walkthrough();
+    frame();
+    expect(steering.still).toBe(true);
+    hold({ x: 0, y: 1 }, 0.2);
+    expect(steering.still).toBe(false);
+    hold(centred, 3);
+    expect(steering.still).toBe(true);
+  });
+});
+
 /** How far the view is zoomed in, from its field of view on an upright screen. */
 const zoomOf = (view: View) =>
   Math.tan((ZOOM.upright * Math.PI) / 360) / Math.tan((view.fov * Math.PI) / 360);
