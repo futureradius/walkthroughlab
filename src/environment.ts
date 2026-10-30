@@ -34,6 +34,7 @@ import { propSway, withSway, type PropCopy } from "./props";
 import { readConfig, type Config } from "./settings";
 import type { PlacedSound, SoundList } from "./sound";
 import { handsOwnLight } from "./sunlit";
+import { texturesOf } from "./textures";
 import { asWater } from "./water";
 /** Brightest light a baked light picture holds: LIGHT_RANGE in scripts/bake.mjs. */
 export const BAKED_LIGHT_RANGE = 4;
@@ -87,6 +88,8 @@ export interface Environment {
   start?: Start;
   /** Spots to open at instead, by the name after `view-` on their layers (#34). */
   views: Record<string, Start>;
+  /** The textures it arrived with, tiny until their sharp pictures follow in the trailing download (#34). */
+  textures: Map<string, Texture[]>;
   /** What `npm run optimize` found wrong with the marks, for the ?config panel. */
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
@@ -503,6 +506,8 @@ export async function loadEnvironment(
   for (const object of [...collisionLayers, ...lines]) object.removeFromParent();
   const { start, views = {}, warnings = [], sounds = {} } = gltf.scene.userData.walkthrough ?? {};
 
+  // Gathered before surfaces are sorted, which leaves some materials off their meshes until shine asks for them.
+  const textures = texturesOf(gltf.scene);
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   for (const each of bakedLight) {
     each.colorSpace = SRGBColorSpace;
@@ -521,6 +526,7 @@ export async function loadEnvironment(
     bakedLight,
     start,
     views,
+    textures,
     warnings,
     scatter,
     cloths: [...cloths],

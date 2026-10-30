@@ -186,17 +186,13 @@ everything else. That costs download for every copy. If the download budget
 
 ## Making the opening download smaller
 
-Textures have been at most 512 px at WebP quality 70 since 2026-10-30 (#34),
-which brought the test environment's opening download from 3.65 MB to about
-2 MB on the wire. If the real building's is too big, these are next, from
-smallest change to biggest. (#23)
+Since 2026-10-30 (#34) textures are at most 512 px at WebP quality 70 and
+arrive in the trailing download, which brought the test environment's opening
+download from 3.65 MB to about 1.2 MB on the wire. If the real building's is
+too big, these are next. (#23)
 
-- **Textures in the trailing download.** Surfaces first show in their own
-  average colour with baked light, like a clay model, and their textures fade
-  in a few seconds later, so the opening download stays about 1 MB however
-  many textures there are. Kept in reserve: Loading makes the files smaller
-  with WebP textures and compressed geometry first; come back to this if
-  Materials (#6) pushes the opening download over 2 MB again. (#23)
+- **A fade from the blurred textures to the sharp ones**, as they arrive. Today
+  each swaps at once, which is cheap and over in a few seconds. (#34)
 - **GPU texture compression (KTX2/Basis)**: much less graphics memory, though
   files are not always smaller than WebP; worth weighing if phones run short
   of memory rather than bandwidth.

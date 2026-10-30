@@ -67,6 +67,11 @@ const PROBE_ABOVE = 0.2;
 /** Longest side of any texture, in pixels. */
 const MAX_TEXTURE_SIZE = 512;
 const WEBP_QUALITY = 70;
+/** Where an environment's textures go for the trailing download, after its name. */
+const TEXTURES_FOLDER = "-textures";
+/** Longest side of the copy of a texture that stays in the environment's file, in pixels. */
+const TINY_TEXTURE_SIZE = 16;
+const TINY_TEXTURE_QUALITY = 50;
 /** Materials that let more light through than this are shown as glass. */
 const GLASS_TRANSMISSION = 0.5;
 /** How strongly a material reflects, which the walkthrough honours on glass. */
@@ -259,6 +264,28 @@ async function compressTextures(document) {
     texture.setImage(image).setMimeType("image/webp").setURI(texture.getURI().replace(/.[^.]+$/, ".webp"));
   }
   if (textures.length > 0) document.createExtension(EXTTextureWebP).setRequired(true);
+}
+
+/**
+ * Write each texture of an environment to a file of its own for the trailing
+ * download, named by its number, and leave only a tiny blurred copy in the
+ * model, so what the viewer waits for is geometry and baked light (#34).
+ * Returns how many there are.
+ */
+async function sendTexturesAhead(document, file) {
+  const folder = joinPath(MODELS, renamed(file, TEXTURES_FOLDER));
+  await rm(folder, { recursive: true, force: true });
+  await mkdir(folder, { recursive: true });
+  const textures = document.getRoot().listTextures();
+  for (const [number, texture] of textures.entries()) {
+    await writeFile(joinPath(folder, `${number}.webp`), texture.getImage());
+    const tiny = await sharp(texture.getImage())
+      .resize(TINY_TEXTURE_SIZE, TINY_TEXTURE_SIZE, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: TINY_TEXTURE_QUALITY, smartSubsample: true })
+      .toBuffer();
+    texture.setImage(tiny).setName(String(number)).setURI(`${number}.webp`);
+  }
+  return textures.length;
 }
 
 /**
@@ -1367,10 +1394,11 @@ async function optimizeEnvironment(io, file, props, traffic) {
     for (const { probe } of placing) if (probe) disposeTree(probe);
   }
   await document.transform(tidy());
+  const textures = await sendTexturesAhead(document, file);
   // Geometry stored compressed, a few times smaller (#23).
   await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
   await io.write(to, document);
-  console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}`);
+  console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}, and ${textures} textures in the trailing download`);
   return { scattered: marks.parts.filter(({ kind }) => kind === "scatter").map(({ name }) => name), sounds };
 }
 
@@ -1453,7 +1481,7 @@ async function reportBudget(environment, sky, sounds) {
       joinPath(SKIES, renamed(sky, "-small.jpg")),
       joinPath(SKIES, renamed(sky, "-small.hdr")),
     ]));
-  const scattered = [SCATTER, PROPS, TRAFFIC].flatMap((folder) =>
+  const scattered = [SCATTER, PROPS, TRAFFIC, joinPath(MODELS, renamed(environment, TEXTURES_FOLDER))].flatMap((folder) =>
     existsSync(folder) ? readdirSync(folder).map((file) => joinPath(folder, file)) : [],
   );
   const sound = await megabytes(Object.values(sounds).map(({ file }) => joinPath("public", file)));

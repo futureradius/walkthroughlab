@@ -1,4 +1,4 @@
-import type { Raycaster, Scene, WebGLRenderer } from "three";
+import type { Raycaster, Scene, Texture, WebGLRenderer } from "three";
 import { BODY, collisionMesh } from "./collision";
 import { Door, DOOR_DESCRIBED, HINGED_DOOR, SLIDING_DOOR } from "./doors";
 import { buttonUnder, Elevator, ELEVATOR, ELEVATOR_DESCRIBED } from "./elevators";
@@ -15,12 +15,15 @@ import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
+import { sharpenTextures } from "./textures";
 import { AMBIENT_DESCRIBED, FOOTSTEPS_DESCRIBED, HEARD_DESCRIBED, PLACED_DESCRIBED, SOUND_DESCRIBED, Sounds } from "./sound";
 
 /** An environment's files and its config file. */
 export interface EnvironmentAddress {
   files: EnvironmentFiles;
   config: string;
+  /** Where the sharp picture of a texture lies, by the name `npm run optimize` gave it. */
+  texture: (name: string) => string;
   /** Where the file a scatter mark copies lies, by the mark's name, such as "grass". */
   scatter: (name: string) => string;
   /** Where the swaying parts of a prop lie, by its mark's name, such as "tree". */
@@ -50,6 +53,7 @@ export function addressOf(name: string): EnvironmentAddress {
       bakedLight: `${import.meta.env.BASE_URL}models/${name}-light-`,
     },
     config: `${import.meta.env.BASE_URL}models/${name}-config.md`,
+    texture: (texture) => `${import.meta.env.BASE_URL}models/${name}-textures/${texture}.webp`,
     scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
     prop: (name) => `${import.meta.env.BASE_URL}models/props/${name}.glb`,
     traffic: (name) => `${import.meta.env.BASE_URL}models/traffic/${name}.glb`,
@@ -113,11 +117,13 @@ async function awaited<T>(what: string, part: Promise<T>): Promise<T> {
 
 /**
  * The trailing download, in order, each part fading in or sharpening what is
- * there as it arrives. Ambient occlusion fades in by itself once its method
- * has arrived, and water's waves rise once their pictures are made.
+ * there as it arrives. Textures come first, since a blurred surface shows the
+ * most. Ambient occlusion fades in by itself once its method has arrived, and
+ * water's waves rise once their pictures are made.
  */
 async function trail(
   environment: EnvironmentAddress,
+  textures: Map<string, Texture[]>,
   scatters: { name: string; scatter: Scatter }[],
   swaying: { name: string; crowns: Crowns }[],
   traffic: { name: string; flocks: Flocks }[],
@@ -125,6 +131,7 @@ async function trail(
   sounds: Sounds,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
+  await awaited("the sharp textures", sharpenTextures(textures, environment.texture, downloads));
   await awaited("ambient occlusion", occlusion?.ready() ?? Promise.resolve());
   // Made here rather than downloaded; flat until then.
   water.grow();
@@ -323,7 +330,7 @@ export async function openEnvironment(
   if (environment.sound) Object.assign(sounds.sound, { on: environment.sound !== "off", ambient: environment.sound === "on" });
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  trail(environment, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
+  trail(environment, loaded.textures, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
     console.error("The trailing download stopped, so what comes after the failure never arrives.", error),
   );
   return {
