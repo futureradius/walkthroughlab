@@ -435,7 +435,7 @@ function markEnvironment(document, file, traffic) {
       console.warn(`${file}: ${path}: ${text}`);
     });
   }
-  scene.setExtras({ ...scene.getExtras(), walkthrough: { start: marks.start, warnings: marks.warnings } });
+  scene.setExtras({ ...scene.getExtras(), walkthrough: { start: marks.start, views: marks.views, warnings: marks.warnings } });
   const kinds = new Map();
   for (const { kind } of marks.parts) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
   const found = [...kinds].map(([kind, count]) => `${count} ${kind}`).join(", ");

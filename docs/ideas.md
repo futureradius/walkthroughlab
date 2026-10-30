@@ -224,11 +224,11 @@ Measured on the test environment, from smallest change to biggest. (#23)
 
 ## Comparing with renders
 
-- **Named views for comparing with a render**: a layer such as `view-1` with
-  one flat line, like the start spot, and a named view of the same spot saved
-  in Rhino, so the walkthrough opened at that view can be set side by side
-  with a render of it. After the finish line; the readiness check's fixed
-  route (#34) uses named views of its own. (#27)
+- **Named views for comparing with a render**: a `view-` layer, as the fixed
+  route's stops use (#34), and a named view of the same spot saved in Rhino, so
+  the walkthrough opened at that view can be set side by side with a render of
+  it. The two need the same lens; the walkthrough's is not yet matched to
+  Rhino's. After the finish line. (#27)
 
 ## Author conveniences
 

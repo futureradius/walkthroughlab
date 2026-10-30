@@ -170,13 +170,38 @@ Ticked by the author after walking on the Redmi Note 8. **Every box is ticked
 on one version** of the walkthrough. "Convincing" is the author's own
 judgement; other people's impressions belong in the written account. (#15)
 
-**The fixed route** is a list of stops: the start spot, the stacked-glass view
-zoomed in, an elevator ride, a door, outside among the grass and birds, and so
-on. It is written here once the last component is in the test environment.
+**One version** is one commit, whose hash is written at the top of this
+checklist when the sitting begins. Any change after that, even to a config
+file, makes a new version, and the walk starts again. Ticks made before the
+sitting only say a component passed then, so they are cleared when it begins.
+Moving a door from Rhino to the published walkthrough, one of the boxes below,
+is the last commit before the hash. (#34)
+
+**The fixed route** is walked in one go from the start spot with `?fps`, without
+reloading, and the `lowest` it shows is the reading that counts. Each stop is a
+named view, to come back to one with `?view=<name>` when something needs a
+second look; that reload resets `lowest`. In order: (#34)
+
+1. The start spot: the sculpture and the grass hill
+2. `view-grass`: outside among the grass and birds, the flag seen in passing
+3. `view-glass`: the stacked-glass view, zoomed in
+4. `view-water`: the pool's edge, water filling the screen
+5. `view-blocks`: the material blocks
+6. `view-stairs`: the pavilion stairs, then through a door
+7. `view-inside`: inside the pavilion, past the curtain
+8. `view-elevator`: a ride to every stop and back
 
 **The stress copy** is the finished test environment with its pavilion copied
-side by side until there are four. It is served from the laptop to the Redmi
-and never published (#15, #16, #34).
+in Rhino. As built, that adds four copies of its door, a second elevator with
+five stops beside the first, and six placed hums in place of one. Its views
+are the same as the test environment's, so the route stays in the original
+pavilion. Its files stay out of git, so it is never published. It opens with
+`?environment=stress-copy`, served from the laptop to the Redmi with
+`npm run build` and `npm run preview`, so what is walked is built as the
+published walkthrough is (#15, #16, #34). It is walked once as a rehearsal
+before the hash is written, so what it turns up is fixed before the sitting.
+A frame-rate, sharpness or bake-time box that fails holds up the finish line
+until the walkthrough is fixed; the bar does not drop.
 
 ### Test environment, on the Redmi Note 8, each present and convincing
 
@@ -220,9 +245,12 @@ and never published (#15, #16, #34).
 
 - [ ] Bakes in under 2 hours on the main laptop's NVIDIA card
 - [ ] Baked light as sharp as in the test environment, with no visible seams
-- [ ] The fixed route through its first pavilion holds the same frame-rate rule
-- [ ] The 4 placed sounds playing at once (#33) hold the same frame-rate rule
-- [ ] Its opening download and time to move are recorded; going over budget is
+- [ ] The fixed route through its original pavilion holds the same frame-rate
+      rule
+- [ ] Its placed sounds playing at once, at least 4 (#33), hold the same
+      frame-rate rule; as built there are 6, and if those fail, 4 are tried
+- [ ] Its bake time, number of light pictures, opening download, time to move
+      and frame rates are recorded here with the hash; going over budget is
       allowed
 
 ### Optional, not part of the gate

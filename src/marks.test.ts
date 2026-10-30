@@ -122,6 +122,34 @@ describe("reading marks", () => {
     expect(marks.start!.x).toBe(16.62);
     expect(marks.warnings).toEqual(["start: there is more than one start layer; only the first is used."]);
   });
+
+  it("reads a named view from its line, by the name after view-, and leaves it out of the parts", () => {
+    const marks = readMarks(model(layer("View - Stairs", { lines: [flat([31, -4], [31, -5], 1.2)] })));
+    expect(marks.warnings).toEqual([]);
+    expect(marks.parts).toEqual([]);
+    expect(marks.views.stairs).toMatchObject({ x: 31, y: 1.2, z: -4 });
+    expect(marks.views.stairs.heading).toBeCloseTo(0);
+  });
+
+  it("warns about a named view with two lines, no line, no name, or the name of another", () => {
+    const one = () => flat([0, 0], [0, -1]);
+    const marks = readMarks(
+      model(
+        layer("view-water", { lines: [one(), flat([5, 5], [5, 4])] }),
+        layer("view-glass"),
+        layer("view-"),
+        layer("view-water", { lines: [flat([9, 9], [9, 8])] }),
+      ),
+    );
+    expect(marks.views.water.x).toBe(0);
+    expect(marks.views.glass).toBeUndefined();
+    expect(marks.warnings).toEqual([
+      "view-water: holds more than one line; only one is used.",
+      expect.stringMatching(/^view-glass: draw one flat line/),
+      expect.stringMatching(/^view-: has no name after view-/),
+      "view-water: there is more than one layer of this name; only the first is used.",
+    ]);
+  });
 });
 
 describe("prop copies", () => {

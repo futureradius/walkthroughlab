@@ -87,6 +87,7 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     skyLight: new Texture(),
     bakedLight: [new Texture()],
     start,
+    views: { stairs: { x: -3, y: 2, z: 4, heading: 1 } },
     warnings: [],
     scatter: [],
     cloths: [],
@@ -204,6 +205,32 @@ describe("opening an environment", () => {
     );
     expect(view).toMatchObject({ x: 1, z: -2, heading: 0.5, pitch: 0 });
     expect(view.y).toBeCloseTo(2 + WALKING.eyeHeight);
+  });
+
+  it("opens at a named view from the link, on the floor there", async () => {
+    const { opening } = open({ address: { ...ADDRESS, view: "stairs" } });
+    const { steering, warnings } = await opening;
+    const view = steering.step(
+      { knob: { x: 0, y: 0 }, keys: { walk: 0, sidestep: 0, turn: 0, run: false } },
+      0,
+      { width: 400, height: 800 },
+    );
+    expect(view).toMatchObject({ x: -3, z: 4, heading: 1 });
+    expect(view.y).toBeCloseTo(2 + WALKING.eyeHeight);
+    expect(warnings).toEqual([]);
+  });
+
+  it("opens at the start spot and says so when the named view does not exist", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { opening } = open({ address: { ...ADDRESS, view: "stiars" } });
+    const { steering, warnings } = await opening;
+    const view = steering.step(
+      { knob: { x: 0, y: 0 }, keys: { walk: 0, sidestep: 0, turn: 0, run: false } },
+      0,
+      { width: 400, height: 800 },
+    );
+    expect(view).toMatchObject({ x: 1, z: -2 });
+    expect(warnings).toEqual([expect.stringMatching(/^\?view=stiars: there is no view-stiars layer/)]);
   });
 
   it("fails when the start spot is not over the collision mesh", async () => {

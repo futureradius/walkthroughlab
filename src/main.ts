@@ -7,7 +7,7 @@ import { AmbientOcclusion } from "./occlusion";
 import { Joystick } from "./joystick";
 import { Keyboard } from "./keyboard";
 import { whileLoading } from "./loading";
-import { openEnvironment, TEST_ENVIRONMENT } from "./opening";
+import { addressOf, openEnvironment, TEST_ENVIRONMENT } from "./opening";
 import { NET_DESCRIBED, SafetyNet } from "./safetynet";
 import { section } from "./settings";
 import { onTap } from "./taps";
@@ -92,6 +92,12 @@ const downloads = new Downloads();
 // the compass bearing (0 north, 90 east), instead of at the start spot; a
 // fourth number picks the floor nearest that height, for upper storeys.
 const [atX, atZ, bearing, atHeight] = (params.get("at") ?? "").split(",").map(Number);
+// Add ?view=stairs to open at the spot on the layer view-stairs, a stop of
+// the fixed route. ?at wins over it.
+const view = params.get("view")?.toLowerCase();
+// Add ?environment=stress-copy to open that environment instead, which only
+// the laptop serves: its files stay out of git, so it is never published.
+const environmentName = params.get("environment") ?? TEST_ENVIRONMENT;
 // Add ?sound=off for no sound at all, ?sound=no-ambient for all but the
 // ambient sound, or ?sound=on for all of it, whatever the config file says.
 const soundFlag = params.get("sound");
@@ -99,7 +105,8 @@ const SOUND_FLAGS = ["on", "off", "no-ambient"] as const;
 const sound = SOUND_FLAGS.find((flag) => flag === soundFlag);
 if (soundFlag !== null && !sound) console.warn(`?sound=${soundFlag} is not on, off or no-ambient, so the config file decides.`);
 const environment = {
-  ...TEST_ENVIRONMENT,
+  ...addressOf(environmentName),
+  view,
   sound,
   ...(Number.isFinite(atZ)
     ? { at: { x: atX, z: atZ, heading: ((bearing || 0) * Math.PI) / 180, y: Number.isFinite(atHeight) ? atHeight : undefined } }
@@ -198,8 +205,9 @@ renderer.setAnimationLoop((now) => {
       resize();
     }
     if (fps) {
-      lowest = Math.min(lowest, rate);
-      fps.textContent = `${rate} fps (lowest ${lowest})${net.describe()}`;
+      // Only seconds the net counts, so the settling after loading doesn't lower it.
+      if (counts) lowest = Math.min(lowest, rate);
+      fps.textContent = `${rate} fps${Number.isFinite(lowest) ? ` (lowest ${lowest})` : ""}${net.describe()}`;
     }
     frames = 0;
     windowStart = now;

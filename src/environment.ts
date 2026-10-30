@@ -85,6 +85,8 @@ export interface Environment {
   bakedLight: Texture[];
   /** Where the viewpoint begins, drawn in the model. */
   start?: Start;
+  /** Spots to open at instead, by the name after `view-` on their layers (#34). */
+  views: Record<string, Start>;
   /** What `npm run optimize` found wrong with the marks, for the ?config panel. */
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
@@ -499,7 +501,7 @@ export async function loadEnvironment(
   const collision = Float32Array.from(still.flatMap((layer) => Array.from(trianglesOf(layer))));
   // Collision meshes stop the viewpoint unseen, and lines are only marks.
   for (const object of [...collisionLayers, ...lines]) object.removeFromParent();
-  const { start, warnings = [], sounds = {} } = gltf.scene.userData.walkthrough ?? {};
+  const { start, views = {}, warnings = [], sounds = {} } = gltf.scene.userData.walkthrough ?? {};
 
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   for (const each of bakedLight) {
@@ -518,6 +520,7 @@ export async function loadEnvironment(
     skyLight: asSkyLight(skyLight, renderer),
     bakedLight,
     start,
+    views,
     warnings,
     scatter,
     cloths: [...cloths],

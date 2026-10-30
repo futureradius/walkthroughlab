@@ -17,3 +17,7 @@ Props are prepared in Blender, not Rhino, so what a prop's parts are is said in 
 - **`sway-…` materials** mark the parts of a prop that sway, such as `sway-leaves`: the second material-name mark beside `water`, because which parts of a tree sway is a matter of its surfaces, and Blender has no Walkthrough layer. The word after `sway-` is only a name with no settings of its own, so `## sway-…` headings in the config file stay with the Rhino `sway-` layers of curtains and flags (#31). How much each part sways is painted as vertex colour.
 - **A `collision mesh` object** in the prop's file is copied into the collision mesh at each copy, named as the layers that hold collision in Rhino.
 - **A prop's line is measured**: its length is the copy's size, 1 m for the prop's own, so one line says where, which way and how large. That is a length drawn, not a number written in a name.
+
+## Amended 2026-10-30: named views
+
+A `view-<name>` layer holds one flat line like the start spot's, and `?view=<name>` opens the walkthrough there (#34). The fixed route's stops are marks rather than `?at` coordinates so they live in the model and survive a change to it, and the same layers can be pasted from one Rhino file to another. A view's line is only a mark: nothing about it reaches the bake.

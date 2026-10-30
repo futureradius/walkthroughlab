@@ -29,25 +29,32 @@ export interface EnvironmentAddress {
   traffic: (name: string) => string;
   /** For testing, a spot to open at instead of the start spot: x and z on the floor plan, heading, and near which floor height. */
   at?: { x: number; z: number; heading: number; y?: number };
+  /** From the link, a named view to open at instead of the start spot, by the name after `view-` on its layer. */
+  view?: string;
   /** From the link, whatever the config file says: all sound on or off, or everything but the ambient sound. */
   sound?: "on" | "off" | "no-ambient";
 }
 
 /** The environment the link opens. */
-export const TEST_ENVIRONMENT: EnvironmentAddress = {
-  files: {
-    model: `${import.meta.env.BASE_URL}models/test-environment.glb`,
-    smallSkyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.jpg`,
-    smallSkyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.hdr`,
-    skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
-    skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
-    bakedLight: `${import.meta.env.BASE_URL}models/test-environment-light-`,
-  },
-  config: `${import.meta.env.BASE_URL}models/test-environment-config.md`,
-  scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
-  prop: (name) => `${import.meta.env.BASE_URL}models/props/${name}.glb`,
-  traffic: (name) => `${import.meta.env.BASE_URL}models/traffic/${name}.glb`,
-};
+export const TEST_ENVIRONMENT = "test-environment";
+
+/** Where the files of the environment of this name lie, beside the page. */
+export function addressOf(name: string): EnvironmentAddress {
+  return {
+    files: {
+      model: `${import.meta.env.BASE_URL}models/${name}.glb`,
+      smallSkyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.jpg`,
+      smallSkyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k-small.hdr`,
+      skyPicture: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.jpg`,
+      skyLight: `${import.meta.env.BASE_URL}skies/golden_gate_hills_8k.hdr`,
+      bakedLight: `${import.meta.env.BASE_URL}models/${name}-light-`,
+    },
+    config: `${import.meta.env.BASE_URL}models/${name}-config.md`,
+    scatter: (name) => `${import.meta.env.BASE_URL}models/scatter/${name}.glb`,
+    prop: (name) => `${import.meta.env.BASE_URL}models/props/${name}.glb`,
+    traffic: (name) => `${import.meta.env.BASE_URL}models/traffic/${name}.glb`,
+  };
+}
 
 /** What the environment is opened into. */
 export interface Walkthrough {
@@ -220,6 +227,10 @@ export async function openEnvironment(
   const faces = new Faces(loaded.visible);
   scene.background = loaded.skyPicture;
   scene.environment = loaded.skyLight;
+  const view = environment.view === undefined ? undefined : loaded.views[environment.view];
+  if (environment.view !== undefined && !view) {
+    loaded.warnings.push(`?view=${environment.view}: there is no view-${environment.view} layer, so the walkthrough opened at the start spot.`);
+  }
   for (const warning of loaded.warnings) console.warn(warning);
   // Doors' walls move, so collision asks them where they stand each time.
   const hinged = { ...HINGED_DOOR };
@@ -252,7 +263,7 @@ export async function openEnvironment(
   // The start line is drawn near the floor the viewer stands on.
   const { x, y, z, heading } = environment.at
     ? { ...environment.at, y: environment.at.y ?? loaded.start.y }
-    : loaded.start;
+    : view ?? loaded.start;
   const floor = floorAt(x, z, y);
   if (floor === undefined) {
     throw new Error("The start spot is not over the collision mesh.");

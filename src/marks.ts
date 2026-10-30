@@ -56,6 +56,8 @@ export interface Copy {
 /** Everything the marks of one model say. */
 export interface Marks<T> {
   start?: Start;
+  /** Named views, by the name after `view-`: spots to open at with `?view=<name>`, one for each stop of the fixed route (#34). */
+  views: Record<string, Start>;
   /** Every collision mesh layer: the still one and each moving part's piece. */
   collision: T[];
   parts: Part<T>[];
@@ -68,6 +70,7 @@ export interface Marks<T> {
 export const WALKTHROUGH = "walkthrough";
 export const COLLISION_MESH = "collision mesh";
 const START = "start";
+const VIEW = "view-";
 const MODEL = "model";
 const LEAVES = ["leaf-left", "leaf-right"];
 
@@ -115,7 +118,7 @@ export function headingOf(from: Point, to: Point): number {
 
 /** Read the marks of a model whose top layers are `layers`. */
 export function readMarks<T>(layers: Layer<T>[]): Marks<T> {
-  const marks: Marks<T> = { collision: [], parts: [], warnings: [], errors: [] };
+  const marks: Marks<T> = { views: {}, collision: [], parts: [], warnings: [], errors: [] };
   const top = layers.find((layer) => normalise(layer.name) === WALKTHROUGH);
   if (!top) {
     marks.errors.push('The model has no "Walkthrough" layer, so it has no collision mesh or start spot.');
@@ -148,6 +151,10 @@ export function readMarks<T>(layers: Layer<T>[]): Marks<T> {
       readStart(layer, marks, starts > 1);
       continue;
     }
+    if (plain.startsWith(VIEW)) {
+      readView(layer, plain.slice(VIEW.length), marks);
+      continue;
+    }
     readPart(layer, layer.name, marks, warn);
   }
 
@@ -165,16 +172,35 @@ function readStart<T>(layer: Layer<T>, marks: Marks<T>, again: boolean) {
     marks.warnings.push("start: there is more than one start layer; only the first is used.");
     return;
   }
-  const [line, ...others] = layer.lines;
-  if (!line || line.length < 2) {
-    marks.errors.push("start: draw one flat line, from where the viewer stands towards where they look.");
+  const spot = spotOf(layer, "start", marks);
+  if (spot) marks.start = spot;
+  else marks.errors.push("start: draw one flat line, from where the viewer stands towards where they look.");
+}
+
+function readView<T>(layer: Layer<T>, name: string, marks: Marks<T>) {
+  const path = `${VIEW}${name}`;
+  if (name === "") {
+    marks.warnings.push(`${layer.name}: has no name after ${VIEW}; call it ${VIEW}1. It opens nothing until then.`);
     return;
   }
-  if (others.length > 0) marks.warnings.push("start: holds more than one line; only one is used.");
-  if (line.length > 2) marks.warnings.push("start: is a polyline; only its first stretch is used.");
-  if (!isFlat(line.slice(0, 2))) marks.warnings.push("start: its line is not flat; only its direction across the floor counts.");
+  if (marks.views[name]) {
+    marks.warnings.push(`${path}: there is more than one layer of this name; only the first is used.`);
+    return;
+  }
+  const spot = spotOf(layer, path, marks);
+  if (spot) marks.views[name] = spot;
+  else marks.warnings.push(`${path}: draw one flat line, from where the viewer stands towards where they look. It opens nothing until then.`);
+}
+
+/** The spot a layer's line says, and what is odd about the line, as the start spot and named views share them. */
+function spotOf<T>(layer: Layer<T>, path: string, marks: Marks<T>): Start | undefined {
+  const [line, ...others] = layer.lines;
+  if (!line || line.length < 2) return undefined;
+  if (others.length > 0) marks.warnings.push(`${path}: holds more than one line; only one is used.`);
+  if (line.length > 2) marks.warnings.push(`${path}: is a polyline; only its first stretch is used.`);
+  if (!isFlat(line.slice(0, 2))) marks.warnings.push(`${path}: its line is not flat; only its direction across the floor counts.`);
   const [from, to] = line;
-  marks.start = { x: from[0], y: from[1], z: from[2], heading: headingOf(from, to) };
+  return { x: from[0], y: from[1], z: from[2], heading: headingOf(from, to) };
 }
 
 /** A layer inside `Walkthrough` that should be a mark of some kind. */
@@ -191,7 +217,7 @@ function readPart<T>(
       ? " A door is door-hinged-… or door-sliding-…."
       : plain.startsWith("button")
         ? " Buttons belong inside an elevator: button-call-… beside its floor doors, button-… in its car's model."
-        : ` Marks begin with ${KINDS.join(", ")}, "collision mesh" or "start".`;
+        : ` Marks begin with ${KINDS.join(", ")}, "view", "collision mesh" or "start".`;
     warn(path, `is not a kind of mark, so its things stay still.${hint}`);
     return;
   }

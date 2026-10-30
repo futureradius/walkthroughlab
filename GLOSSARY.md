@@ -56,6 +56,10 @@ _Avoid_: Camera, player, character
 The spot and direction where the viewpoint begins when a viewer opens an environment, drawn by the author in the model.
 _Avoid_: Spawn point, start position, origin
 
+**Named view**:
+A spot and direction drawn like the start spot, on a layer such as `view-stairs`, that the walkthrough opens at with `?view=stairs`. The stops of the fixed route are named views.
+_Avoid_: Bookmark, camera, viewpoint
+
 **Steering**:
 How the viewer's joystick, keys, free look and zoom move the viewpoint, frame by frame.
 _Avoid_: Player controller, camera controller, input handling
@@ -93,7 +97,7 @@ The one environment where every part of the walkthrough is tried before the real
 _Avoid_: Material test environment, sandbox, demo scene
 
 **Stress copy**:
-The finished test environment with its pavilion copied side by side in Rhino until there are four, baked and walked once on an old phone to show that the walkthrough holds at the size of the real building. It is never published, and thrown away afterwards.
+The finished test environment with its pavilion copied in Rhino, baked and walked on an old phone to show that the walkthrough holds at the size of the real building. It is never published, and thrown away afterwards.
 _Avoid_: Stress test, benchmark scene, load test
 
 ### Loading
