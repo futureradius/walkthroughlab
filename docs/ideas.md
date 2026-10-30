@@ -186,15 +186,11 @@ everything else. That costs download for every copy. If the download budget
 
 ## Making the opening download smaller
 
-The opening download is about 2.2 MB on the wire (2026-10-23, after the baked
-light became WebP), over the 2 MB budget. That is accepted while the test environment isn't optimised for size;
-come back to these when the real building's opening download is too big.
-Measured on the test environment, from smallest change to biggest. (#23)
+Textures have been at most 512 px at WebP quality 70 since 2026-10-30 (#34),
+which brought the test environment's opening download from 3.65 MB to about
+2 MB on the wire. If the real building's is too big, these are next, from
+smallest change to biggest. (#23)
 
-- **Stronger texture compression**: WebP quality 70 instead of 80, a little
-  softer up close.
-- **Smaller textures**: at most 512 px instead of 1024, about a fifth of the
-  size, but visibly blurrier up close.
 - **Textures in the trailing download.** Surfaces first show in their own
   average colour with baked light, like a clay model, and their textures fade
   in a few seconds later, so the opening download stays about 1 MB however

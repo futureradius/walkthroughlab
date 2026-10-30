@@ -65,8 +65,8 @@ const PROBE_SIZE = 0.4;
 /** How far above the top of its crown a light probe lies, likewise. */
 const PROBE_ABOVE = 0.2;
 /** Longest side of any texture, in pixels. */
-const MAX_TEXTURE_SIZE = 1024;
-const WEBP_QUALITY = 80;
+const MAX_TEXTURE_SIZE = 512;
+const WEBP_QUALITY = 70;
 /** Materials that let more light through than this are shown as glass. */
 const GLASS_TRANSMISSION = 0.5;
 /** How strongly a material reflects, which the walkthrough honours on glass. */
