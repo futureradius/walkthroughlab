@@ -175,7 +175,11 @@ checklist when the sitting begins. Any change after that, even to a config
 file, makes a new version, and the walk starts again. Ticks made before the
 sitting only say a component passed then, so they are cleared when it begins.
 Moving a door from Rhino to the published walkthrough, one of the boxes below,
-is the last commit before the hash. (#34)
+is the last commit before the hash. Editing this checklist is not a change to
+the walkthrough. (#34)
+
+**The version being walked: `cfb91d8`** (2026-10-30). The boxes ticked below
+are those checked on it without the Redmi; the rest are the author's.
 
 **The fixed route** is walked in one go from the start spot with `?fps`, without
 reloading, and the `lowest` it shows is the reading that counts. Each stop is a
@@ -206,21 +210,21 @@ until the walkthrough is fixed; the bar does not drop.
 ### Test environment, on the Redmi Note 8, each present and convincing
 
 - [ ] Movement as it stands, including falling off a ledge
-- [x] Baked light from the sky and from lamps (glowing materials)
+- [ ] Baked light from the sky and from lamps (glowing materials)
 - [ ] Ambient occlusion
 - [ ] Glass
-- [x] Water: tints, reflects the sky through small waves, still for reduced
+- [ ] Water: tints, reflects the sky through small waves, still for reduced
       motion
 - [ ] Materials: plain, relief, shine and both, each used at least once, tuned
       in the test environment
 - [ ] Grass as swaying scatter
 - [ ] Still props (chairs, tables) with baked shadow; potted plants swaying;
       trees and bushes placed by hand, swaying as painted
-- [x] Curtains and flags swaying
-- [x] Birds on their loop, absent for reduced motion
+- [ ] Curtains and flags swaying
+- [ ] Birds on their loop, absent for reduced motion
 - [ ] A door that opens, closes and stops the viewpoint when closed
 - [ ] An elevator that carries the viewpoint between floors
-- [x] Sound: ambient, footsteps, a placed sound, door and elevator sounds;
+- [ ] Sound: ambient, footsteps, a placed sound, door and elevator sounds;
       starts on first touch, pauses off screen
 - [ ] Loading: "Loading into <name>", the trailing download fading in, a
       dropped connection recovered (flight mode on halfway, then off)
@@ -231,19 +235,20 @@ until the walkthrough is fixed; the bar does not drop.
       occlusion on in ordinary views, safety net allowed
 - [ ] On Slow 4G in DevTools: moving within 10 s, opening download about 2 MB
       at most
-- [ ] Reported by `optimize`: whole walkthrough under 10 MB, sound under 3 MB
+- [x] Reported by `optimize`: whole walkthrough under 10 MB, sound under 3 MB
+      (7.00 MB and 0.80 MB)
 - [ ] One run on the Redmi over mobile data
 
 ### The author's side
 
-- [ ] Every mark from ADR 0004 used at least once in the test model
-- [ ] `optimize` reports a deliberately misspelt mark
-- [ ] One change, such as moving a door, goes from Rhino to the published
-      walkthrough without touching code
+- [x] Every mark from ADR 0004 used at least once in the test model
+- [x] `optimize` reports a deliberately misspelt mark
+- [x] One change, such as moving a door, goes from Rhino to the published
+      walkthrough without touching code (`door-hinged-2`, 1 m)
 
 ### Stress copy
 
-- [ ] Bakes in under 2 hours on the main laptop's NVIDIA card
+- [x] Bakes in under 2 hours on the main laptop's NVIDIA card (21.7 min)
 - [ ] Baked light as sharp as in the test environment, with no visible seams
 - [ ] The fixed route through its original pavilion holds the same frame-rate
       rule
@@ -251,7 +256,7 @@ until the walkthrough is fixed; the bar does not drop.
       frame-rate rule; as built there are 6, and if those fail, 4 are tried
 - [ ] Its bake time, number of light pictures, opening download, time to move
       and frame rates are recorded here with the hash; going over budget is
-      allowed
+      allowed. So far: 21.7 min, 4 pictures, 2.01 MB
 
 ### Optional, not part of the gate
 
