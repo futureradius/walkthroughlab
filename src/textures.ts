@@ -17,7 +17,30 @@ export interface Pace {
 
 const NO_PACE: Pace = { moment: async () => {}, upload: () => {} };
 
-/** Seconds at least between two pictures handed to the graphics card. */
+/** How many of the first sharp pictures go to the graphics card each second, walking or not: blurred surfaces show more than stutters do. */
+export const SHARP_PER_SECOND = 6;
+
+const sleep = (seconds: number) => new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000));
+
+/**
+ * Moments at a steady number per second. Each is reckoned from when the last
+ * was due, so a timer that fires late on a busy phone doesn't lower the rate.
+ */
+export function steadyMoments(
+  perSecond: number,
+  now: () => number = () => performance.now() / 1000,
+  wait: (seconds: number) => Promise<void> = sleep,
+): () => Promise<void> {
+  let next = 0;
+  return async () => {
+    const time = now();
+    const due = Math.max(next, time);
+    next = due + 1 / perSecond;
+    if (due > time) await wait(due - time);
+  };
+}
+
+/** Seconds at least between two of the finer pictures handed to the graphics card. */
 const SHORTEST_GAP_SECONDS = 0.25;
 /** Seconds at most the next picture waits for the viewer to stand still. */
 const LONGEST_GAP_SECONDS = 2;
@@ -29,7 +52,7 @@ const LONGEST_GAP_SECONDS = 2;
  */
 export async function quietMoment(
   still: () => boolean,
-  wait: (seconds: number) => Promise<void> = (seconds) => new Promise((resolve) => setTimeout(resolve, seconds * 1000)),
+  wait: (seconds: number) => Promise<void> = sleep,
 ): Promise<void> {
   let waited = 0;
   do {

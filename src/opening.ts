@@ -15,7 +15,7 @@ import { Faces, FACES_DESCRIBED } from "./faces";
 import { OCCLUSION_DESCRIBED, type AmbientOcclusion } from "./occlusion";
 import { applyConfig, section, type Config, type Section } from "./settings";
 import { Steering, STEERING_DESCRIBED } from "./steering";
-import { quietMoment, sharpenTextures, type Pace } from "./textures";
+import { quietMoment, SHARP_PER_SECOND, sharpenTextures, steadyMoments } from "./textures";
 import { AMBIENT_DESCRIBED, FOOTSTEPS_DESCRIBED, HEARD_DESCRIBED, PLACED_DESCRIBED, SOUND_DESCRIBED, Sounds } from "./sound";
 
 /** An environment's files and its config file. */
@@ -135,9 +135,9 @@ async function trail(
   sounds: Sounds,
   { renderer, scene, occlusion, downloads }: Walkthrough,
 ) {
-  const pace: Pace = { moment: () => quietMoment(() => steering.still), upload: (texture) => renderer.initTexture(texture) };
-  // Handed over at a walking viewer's pace, which nothing after them should have to wait for.
-  const sharp = sharpenTextures(textures, environment.texture, downloads, { pace });
+  const upload = (texture: Texture) => renderer.initTexture(texture);
+  // Handed over a few at a time, which nothing after them should have to wait for.
+  const sharp = sharpenTextures(textures, environment.texture, downloads, { pace: { moment: steadyMoments(SHARP_PER_SECOND), upload } });
   await awaited("ambient occlusion", occlusion?.ready() ?? Promise.resolve());
   // Made here rather than downloaded; flat until then.
   water.grow();
@@ -183,6 +183,8 @@ async function trail(
   await sounds.download(downloads, import.meta.env.BASE_URL);
   await sharp;
   const finer = new Map(finerTextures.flatMap((name) => (textures.has(name) ? [[name, textures.get(name)!]] : [])));
+  // A refinement, so these can wait for a viewer who is walking to stop.
+  const pace = { moment: () => quietMoment(() => steering.still), upload };
   await awaited("the finer textures", sharpenTextures(finer, (name) => environment.texture(`${name}-finer`), downloads, { pace }));
 }
 

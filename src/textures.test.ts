@@ -1,7 +1,7 @@
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { Downloads, type Network } from "./download";
-import { quietMoment, sharpenTextures, texturesOf, type Decode } from "./textures";
+import { quietMoment, sharpenTextures, steadyMoments, texturesOf, type Decode } from "./textures";
 
 const named = (name: string) => Object.assign(new Texture(), { name });
 const mesh = (material: MeshBasicMaterial | MeshStandardMaterial) => new Mesh(new BoxGeometry(), material);
@@ -31,6 +31,46 @@ describe("texturesOf", () => {
     expect([...found.keys()].sort()).toEqual(["0", "1"]);
     expect(found.get("0")).toEqual([colour, sameColour]);
     expect(found.get("1")).toEqual([relief]);
+  });
+});
+
+describe("steadyMoments", () => {
+  /** Moments on a clock of their own, each timer firing `late` seconds after it was asked for. */
+  function clocked(perSecond: number, late = 0) {
+    const clock = { time: 100 };
+    const moment = steadyMoments(
+      perSecond,
+      () => clock.time,
+      async (seconds) => {
+        clock.time += seconds + late;
+      },
+    );
+    return { clock, moment };
+  }
+
+  it("gives the first moment at once, and the next a share of a second later", async () => {
+    const { clock, moment } = clocked(6);
+    await moment();
+    expect(clock.time).toBe(100);
+    await moment();
+    expect(clock.time).toBeCloseTo(100 + 1 / 6);
+  });
+
+  it("keeps its rate over a second when timers fire late", async () => {
+    const { clock, moment } = clocked(6, 0.02);
+    for (let i = 0; i < 7; i++) await moment();
+    // Seven moments span six gaps, which take a second but for the last timer's lateness.
+    expect(clock.time - 100).toBeCloseTo(1.02);
+  });
+
+  it("does not make up for a time with nothing to hand over", async () => {
+    const { clock, moment } = clocked(6);
+    await moment();
+    clock.time += 5;
+    await moment();
+    expect(clock.time).toBe(105);
+    await moment();
+    expect(clock.time).toBeCloseTo(105 + 1 / 6);
   });
 });
 
