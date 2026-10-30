@@ -90,6 +90,8 @@ export interface Environment {
   views: Record<string, Start>;
   /** The textures it arrived with, tiny until their sharp pictures follow in the trailing download (#34). */
   textures: Map<string, Texture[]>;
+  /** The names of those with a finer picture, last of all to arrive. */
+  finerTextures: string[];
   /** What `npm run optimize` found wrong with the marks, for the ?config panel. */
   warnings: string[];
   /** Each scatter mark's name, such as "grass", and the layer whose surfaces it grows on. */
@@ -504,7 +506,7 @@ export async function loadEnvironment(
   const collision = Float32Array.from(still.flatMap((layer) => Array.from(trianglesOf(layer))));
   // Collision meshes stop the viewpoint unseen, and lines are only marks.
   for (const object of [...collisionLayers, ...lines]) object.removeFromParent();
-  const { start, views = {}, warnings = [], sounds = {} } = gltf.scene.userData.walkthrough ?? {};
+  const { start, views = {}, finerTextures = [], warnings = [], sounds = {} } = gltf.scene.userData.walkthrough ?? {};
 
   // Gathered before surfaces are sorted, which leaves some materials off their meshes until shine asks for them.
   const textures = texturesOf(gltf.scene);
@@ -527,6 +529,7 @@ export async function loadEnvironment(
     start,
     views,
     textures,
+    finerTextures,
     warnings,
     scatter,
     cloths: [...cloths],

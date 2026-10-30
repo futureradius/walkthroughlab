@@ -130,7 +130,7 @@ export interface AmbientSettings {
   loudness: number;
 }
 
-export const AMBIENT: AmbientSettings = { loudness: -24 };
+export const AMBIENT: AmbientSettings = { loudness: -25 };
 
 export const AMBIENT_DESCRIBED: Described<AmbientSettings> = {
   loudness: loudness("How loud the ambient sound is, everywhere."),

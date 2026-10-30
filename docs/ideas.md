@@ -186,10 +186,11 @@ everything else. That costs download for every copy. If the download budget
 
 ## Making the opening download smaller
 
-Since 2026-10-30 (#34) textures are at most 512 px at WebP quality 70 and
-arrive in the trailing download, which brought the test environment's opening
-download from 3.65 MB to about 1.2 MB on the wire. If the real building's is
-too big, these are next. (#23)
+Since 2026-10-30 (#34) textures arrive in the trailing download, which brought
+the test environment's opening download from 3.65 MB to about 1.2 MB on the
+wire: at most 512 px at WebP quality 70 first, then, after everything else,
+1024 px at quality 80 for those bigger than 512. If the real building's is too
+big, these are next. (#23)
 
 - **A fade from the blurred textures to the sharp ones**, as they arrive. Today
   each swaps at once, which is cheap and over in a few seconds. (#34)

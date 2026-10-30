@@ -90,6 +90,7 @@ function environment(start = { x: 1, y: 2, z: -2, heading: 0.5 }): Environment {
     start,
     views: { stairs: { x: -3, y: 2, z: 4, heading: 1 } },
     textures: new Map(),
+    finerTextures: [],
     warnings: [],
     scatter: [],
     cloths: [],

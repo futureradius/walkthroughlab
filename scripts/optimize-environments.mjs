@@ -72,6 +72,11 @@ const TEXTURES_FOLDER = "-textures";
 /** Longest side of the copy of a texture that stays in the environment's file, in pixels. */
 const TINY_TEXTURE_SIZE = 16;
 const TINY_TEXTURE_QUALITY = 50;
+/** Longest side and quality of the finer picture of a texture bigger than MAX_TEXTURE_SIZE, last of all to arrive. */
+const FINER_TEXTURE_SIZE = 1024;
+const FINER_WEBP_QUALITY = 80;
+/** After a texture's number, in the name of the file holding its finer picture; `src/opening.ts` adds the same. */
+const FINER_SUFFIX = "-finer";
 /** Materials that let more light through than this are shown as glass. */
 const GLASS_TRANSMISSION = 0.5;
 /** How strongly a material reflects, which the walkthrough honours on glass. */
@@ -267,25 +272,52 @@ async function compressTextures(document) {
 }
 
 /**
- * Write each texture of an environment to a file of its own for the trailing
- * download, named by its number, and leave only a tiny blurred copy in the
- * model, so what the viewer waits for is geometry and baked light (#34).
- * Returns how many there are.
+ * A finer picture of each texture bigger than MAX_TEXTURE_SIZE, from what it
+ * is before compressTextures shrinks it, for the very end of the trailing
+ * download (#34).
  */
-async function sendTexturesAhead(document, file) {
+async function finerPictures(document) {
+  const finer = new Map();
+  for (const texture of document.getRoot().listTextures()) {
+    const { width, height } = await sharp(texture.getImage(), { limitInputPixels: false }).metadata();
+    if (Math.max(width, height) <= MAX_TEXTURE_SIZE) continue;
+    const picture = await sharp(texture.getImage(), { limitInputPixels: false })
+      .resize(FINER_TEXTURE_SIZE, FINER_TEXTURE_SIZE, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: FINER_WEBP_QUALITY, smartSubsample: true })
+      .toBuffer();
+    finer.set(texture, picture);
+  }
+  return finer;
+}
+
+/**
+ * Write each texture of an environment to a file of its own for the trailing
+ * download, named by its number, with a finer one beside it if it has one, and
+ * leave only a tiny blurred copy in the model, so what the viewer waits for is
+ * geometry and baked light (#34). Returns how many of each there are.
+ */
+async function sendTexturesAhead(document, file, finer) {
   const folder = joinPath(MODELS, renamed(file, TEXTURES_FOLDER));
   await rm(folder, { recursive: true, force: true });
   await mkdir(folder, { recursive: true });
   const textures = document.getRoot().listTextures();
+  const finerNames = [];
   for (const [number, texture] of textures.entries()) {
     await writeFile(joinPath(folder, `${number}.webp`), texture.getImage());
+    if (finer.has(texture)) {
+      await writeFile(joinPath(folder, `${number}${FINER_SUFFIX}.webp`), finer.get(texture));
+      finerNames.push(String(number));
+    }
     const tiny = await sharp(texture.getImage())
       .resize(TINY_TEXTURE_SIZE, TINY_TEXTURE_SIZE, { fit: "inside", withoutEnlargement: true })
       .webp({ quality: TINY_TEXTURE_QUALITY, smartSubsample: true })
       .toBuffer();
     texture.setImage(tiny).setName(String(number)).setURI(`${number}.webp`);
   }
-  return textures.length;
+  const scene = document.getRoot().listScenes()[0];
+  const { walkthrough } = scene.getExtras();
+  scene.setExtras({ ...scene.getExtras(), walkthrough: { ...walkthrough, finerTextures: finerNames } });
+  return { sharp: textures.length, finer: finerNames.length };
 }
 
 /**
@@ -1351,6 +1383,7 @@ async function optimizeEnvironment(io, file, props, traffic) {
     }),
     prune(),
   );
+  const finer = await finerPictures(document);
   await compressTextures(document);
   const marks = markEnvironment(document, file, traffic);
   marks.warnings.push(...said);
@@ -1394,11 +1427,11 @@ async function optimizeEnvironment(io, file, props, traffic) {
     for (const { probe } of placing) if (probe) disposeTree(probe);
   }
   await document.transform(tidy());
-  const textures = await sendTexturesAhead(document, file);
+  const textures = await sendTexturesAhead(document, file, finer);
   // Geometry stored compressed, a few times smaller (#23).
   await document.transform(meshopt({ encoder: MeshoptEncoder, level: "medium" }));
   await io.write(to, document);
-  console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}, and ${textures} textures in the trailing download`);
+  console.log(`${file}: ${await megabytes(from)} -> ${await megabytes(to)}, and ${textures.sharp} textures in the trailing download, ${textures.finer} of them with a finer picture`);
   return { scattered: marks.parts.filter(({ kind }) => kind === "scatter").map(({ name }) => name), sounds };
 }
 

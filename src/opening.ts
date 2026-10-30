@@ -118,12 +118,15 @@ async function awaited<T>(what: string, part: Promise<T>): Promise<T> {
 /**
  * The trailing download, in order, each part fading in or sharpening what is
  * there as it arrives. Textures come first, since a blurred surface shows the
- * most. Ambient occlusion fades in by itself once its method has arrived, and
- * water's waves rise once their pictures are made.
+ * most, and finer pictures of the biggest of them last of all, so the walkthrough
+ * goes on improving even on a weak connection. Ambient occlusion fades in by
+ * itself once its method has arrived, and water's waves rise once their pictures
+ * are made.
  */
 async function trail(
   environment: EnvironmentAddress,
   textures: Map<string, Texture[]>,
+  finerTextures: string[],
   scatters: { name: string; scatter: Scatter }[],
   swaying: { name: string; crowns: Crowns }[],
   traffic: { name: string; flocks: Flocks }[],
@@ -173,8 +176,10 @@ async function trail(
       console.warn(`The flocks of traffic-${name} could not be drawn.`, error);
     }
   }
-  // Sound is last (#14).
+  // Sound comes after everything seen (#14).
   await sounds.download(downloads, import.meta.env.BASE_URL);
+  const finer = new Map(finerTextures.flatMap((name) => (textures.has(name) ? [[name, textures.get(name)!]] : [])));
+  await awaited("the finer textures", sharpenTextures(finer, (name) => environment.texture(`${name}-finer`), downloads));
 }
 
 /** Use what the config file sets in these sections, saying in the console what it could not. */
@@ -330,7 +335,7 @@ export async function openEnvironment(
   if (environment.sound) Object.assign(sounds.sound, { on: environment.sound !== "off", ambient: environment.sound === "on" });
   surfaces.apply(true);
   const swaying = props.flatMap(({ name, crowns }) => (crowns ? [{ name, crowns }] : []));
-  trail(environment, loaded.textures, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
+  trail(environment, loaded.textures, loaded.finerTextures, scatters, swaying, traffic, water, sounds, { renderer, scene, occlusion, downloads }).catch((error) =>
     console.error("The trailing download stopped, so what comes after the failure never arrives.", error),
   );
   return {

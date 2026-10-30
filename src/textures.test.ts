@@ -48,6 +48,15 @@ describe("sharpenTextures", () => {
     expect(first.version).toBeGreaterThan(version);
   });
 
+  it("lets go of the picture it replaces, once for all the textures that held it", async () => {
+    const close = vi.fn();
+    const first = named("0");
+    const second = named("0");
+    first.image = second.image = { close };
+    await sharpenTextures(new Map([["0", [first, second]]]), (name) => `${name}.webp`, new Downloads(site("0.webp")), decode);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("keeps the same textures, so materials and shaders need nothing new", async () => {
     const texture = named("0");
     const material = new MeshBasicMaterial({ map: texture });
