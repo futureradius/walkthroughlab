@@ -195,7 +195,7 @@ and never published (#15, #16, #34).
 - [x] Birds on their loop, absent for reduced motion
 - [ ] A door that opens, closes and stops the viewpoint when closed
 - [ ] An elevator that carries the viewpoint between floors
-- [ ] Sound: ambient, footsteps, a placed sound, door and elevator sounds;
+- [x] Sound: ambient, footsteps, a placed sound, door and elevator sounds;
       starts on first touch, pauses off screen
 - [ ] Loading: "Loading into <name>", the trailing download fading in, a
       dropped connection recovered (flight mode on halfway, then off)
@@ -221,6 +221,7 @@ and never published (#15, #16, #34).
 - [ ] Bakes in under 2 hours on the main laptop's NVIDIA card
 - [ ] Baked light as sharp as in the test environment, with no visible seams
 - [ ] The fixed route through its first pavilion holds the same frame-rate rule
+- [ ] The 4 placed sounds playing at once (#33) hold the same frame-rate rule
 - [ ] Its opening download and time to move are recorded; going over budget is
       allowed
 
