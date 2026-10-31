@@ -178,8 +178,8 @@ Moving a door from Rhino to the published walkthrough, one of the boxes below,
 is the last commit before the hash. Editing this checklist is not a change to
 the walkthrough. (#34)
 
-**The version being walked: `cfb91d8`** (2026-10-30). The boxes ticked below
-are those checked on it without the Redmi; the rest are the author's.
+**Every box was ticked on `cfb91d8`** by 2026-10-31, so the finish line is
+reached (#34).
 
 **The fixed route** is walked in one go from the start spot with `?fps`, without
 reloading, and the `lowest` it shows is the reading that counts. Each stop is a
@@ -249,14 +249,17 @@ until the walkthrough is fixed; the bar does not drop.
 ### Stress copy
 
 - [x] Bakes in under 2 hours on the main laptop's NVIDIA card (21.7 min)
-- [ ] Baked light as sharp as in the test environment, with no visible seams
-- [ ] The fixed route through its original pavilion holds the same frame-rate
-      rule
-- [ ] Its placed sounds playing at once, at least 4 (#33), hold the same
+- [x] Baked light as sharp as in the test environment, with no visible seams
+- [x] The fixed route through its original pavilion holds the same frame-rate
+      rule (30 fps, the very limit)
+- [x] Its placed sounds playing at once, at least 4 (#33), hold the same
       frame-rate rule; as built there are 6, and if those fail, 4 are tried
-- [ ] Its bake time, number of light pictures, opening download, time to move
+      (all 6 held it)
+- [x] Its bake time, number of light pictures, opening download, time to move
       and frame rates are recorded here with the hash; going over budget is
-      allowed. So far: 21.7 min, 4 pictures, 2.01 MB
+      allowed. On `cfb91d8`: 21.7 min, 4 pictures, 2.01 MB, moving after about
+      16.2 s at the same slow setting as the test environment and 3.8 s over the
+      local network, lowest 30 fps
 
 ### Optional, not part of the gate
 
