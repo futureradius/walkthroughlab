@@ -209,35 +209,35 @@ until the walkthrough is fixed; the bar does not drop.
 
 ### Test environment, on the Redmi Note 8, each present and convincing
 
-- [ ] Movement as it stands, including falling off a ledge
-- [ ] Baked light from the sky and from lamps (glowing materials)
-- [ ] Ambient occlusion
-- [ ] Glass
-- [ ] Water: tints, reflects the sky through small waves, still for reduced
+- [x] Movement as it stands, including falling off a ledge
+- [x] Baked light from the sky and from lamps (glowing materials)
+- [x] Ambient occlusion
+- [x] Glass
+- [x] Water: tints, reflects the sky through small waves, still for reduced
       motion
-- [ ] Materials: plain, relief, shine and both, each used at least once, tuned
+- [x] Materials: plain, relief, shine and both, each used at least once, tuned
       in the test environment
-- [ ] Grass as swaying scatter
-- [ ] Still props (chairs, tables) with baked shadow; potted plants swaying;
+- [x] Grass as swaying scatter
+- [x] Still props (chairs, tables) with baked shadow; potted plants swaying;
       trees and bushes placed by hand, swaying as painted
-- [ ] Curtains and flags swaying
-- [ ] Birds on their loop, absent for reduced motion
-- [ ] A door that opens, closes and stops the viewpoint when closed
-- [ ] An elevator that carries the viewpoint between floors
-- [ ] Sound: ambient, footsteps, a placed sound, door and elevator sounds;
+- [x] Curtains and flags swaying
+- [x] Birds on their loop, absent for reduced motion
+- [x] A door that opens, closes and stops the viewpoint when closed
+- [x] An elevator that carries the viewpoint between floors
+- [x] Sound: ambient, footsteps, a placed sound, door and elevator sounds;
       starts on first touch, pauses off screen
-- [ ] Loading: "Loading into <name>", the trailing download fading in, a
+- [x] Loading: "Loading into <name>", the trailing download fading in, a
       dropped connection recovered (flight mode on halfway, then off)
 
 ### Numbers
 
-- [ ] The fixed route on the Redmi: lowest reading at least 30 fps, ambient
-      occlusion on in ordinary views, safety net allowed
-- [ ] On Slow 4G in DevTools: moving within 10 s, opening download about 2 MB
-      at most
+- [x] The fixed route on the Redmi: lowest reading at least 30 fps, ambient
+      occlusion on in ordinary views, safety net allowed (35 fps)
+- [x] On Slow 4G in DevTools: moving within 10 s, opening download about 2 MB
+      at most (about 8.4 s at 1500 kbit/s, 1.17 MB)
 - [x] Reported by `optimize`: whole walkthrough under 10 MB, sound under 3 MB
       (7.00 MB and 0.80 MB)
-- [ ] One run on the Redmi over mobile data
+- [x] One run on the Redmi over mobile data
 
 ### The author's side
 
