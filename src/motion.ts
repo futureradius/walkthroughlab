@@ -1,5 +1,21 @@
 import { fixed, number, type Described } from "./settings";
 
+/** An amount east and south on the floor plan: metres, or metres per second. */
+export interface Ground {
+  east: number;
+  south: number;
+}
+
+/** How the viewer's body gets where the joystick and the keys ask: see Inertia. */
+export interface Carrier {
+  /** Metres per second the body is going at. */
+  readonly speed: number;
+  /** The metres the body goes this frame, wanting to go at this velocity. */
+  carry(wanted: Ground, seconds: number): Ground;
+  /** A step of these metres ended up as those, short of a wall or along it. */
+  met(asked: Ground, got: Ground): void;
+}
+
 /** A spot on the floor plan and the height of the floor there. */
 export interface Footing {
   /** Metres east of the origin. */
@@ -52,6 +68,13 @@ export interface Limits {
 export interface WalkingSettings {
   /** Metres per second at full push, unless running forward. */
   speed: number;
+  /**
+   * Seconds the body takes to stop from walking pace. The brake is the same
+   * from any speed, so a run takes longer to stop. 0 stops at once.
+   */
+  stopping: number;
+  /** Seconds the body takes to pick up to walking pace. 0 is there at once. */
+  settingOff: number;
   /** Seconds a full turn takes at full push while standing still. */
   standingTurn: number;
   /**
@@ -75,6 +98,8 @@ export interface WalkingSettings {
  */
 export const WALKING: WalkingSettings = {
   speed: 1.4,
+  stopping: 0.25,
+  settingOff: 0.15,
   standingTurn: 3,
   walkingTurn: 4,
   levelling: 4,
@@ -94,6 +119,22 @@ export const WALKING_DESCRIBED: Described<WalkingSettings> = {
     step: 0.1,
     show: fixed(1, " m/s"),
     about: "How fast the viewer walks at a full push, and backs and sidesteps even while running.",
+  }),
+  stopping: number({
+    label: "Stopping",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: fixed(2, " s"),
+    about: "How long the body takes to stop from a walk, on letting go or turning back. The same brake takes longer from a run. 0 stops at once.",
+  }),
+  settingOff: number({
+    label: "Setting off",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: fixed(2, " s"),
+    about: "How long the body takes to pick up to a walk, from standing or after turning back. 0 is there at once.",
   }),
   standingTurn: number({
     label: "Turning, standing",
@@ -188,7 +229,8 @@ export function withinLimits(limits: Limits): Terrain {
  * Move the viewpoint for one frame. Turning is quickest standing still and
  * eases off the faster the viewer moves, so curves stay gentle. The view
  * returns to level while the viewer moves, unless they are holding a free
- * look drag.
+ * look drag. A `body` gives the viewer inertia; without one they go at once
+ * at the speed asked.
  */
 export function advance(
   from: Viewpoint,
@@ -196,6 +238,7 @@ export function advance(
   seconds: number,
   terrain: Terrain,
   walking: WalkingSettings = WALKING,
+  body?: Carrier,
 ): Viewpoint {
   // A diagonal push is no faster than a straight one.
   const push = Math.max(1, Math.hypot(intent.walk, intent.sidestep));
@@ -203,7 +246,7 @@ export function advance(
   const sidestep = intent.sidestep / push;
   // Only forward is any faster for running.
   const forwardSpeed = walk > 0 ? intent.forwardSpeed : walking.speed;
-  const pace = Math.hypot(walk * forwardSpeed, sidestep * walking.speed) / walking.speed;
+  const pace = (body ? body.speed : Math.hypot(walk * forwardSpeed, sidestep * walking.speed)) / walking.speed;
 
   const standing = (Math.PI * 2) / walking.standingTurn;
   const moving = (Math.PI * 2) / walking.walkingTurn;
@@ -213,12 +256,14 @@ export function advance(
   const pitch =
     clamp(from.pitch + intent.lookUp, MAX_PITCH) * levelling(intent, seconds, walking);
 
-  const forward = walk * forwardSpeed * seconds;
-  const right = sidestep * walking.speed * seconds;
-  const footing = terrain(
-    from,
-    from.x + Math.sin(heading) * forward + Math.cos(heading) * right,
-    from.z - Math.cos(heading) * forward + Math.sin(heading) * right,
-  );
+  const forward = walk * forwardSpeed;
+  const right = sidestep * walking.speed;
+  const wanted = {
+    east: Math.sin(heading) * forward + Math.cos(heading) * right,
+    south: -Math.cos(heading) * forward + Math.sin(heading) * right,
+  };
+  const asked = body ? body.carry(wanted, seconds) : { east: wanted.east * seconds, south: wanted.south * seconds };
+  const footing = terrain(from, from.x + asked.east, from.z + asked.south);
+  body?.met(asked, { east: footing.x - from.x, south: footing.z - from.z });
   return { heading, pitch, x: footing.x, z: footing.z, floor: footing.floor };
 }

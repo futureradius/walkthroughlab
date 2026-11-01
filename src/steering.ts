@@ -1,5 +1,6 @@
 import { COASTING, COASTING_DESCRIBED, Coasting, glideOf, type CoastingSettings } from "./coasting";
 import { BODY } from "./collision";
+import { Inertia } from "./inertia";
 import {
   advance,
   levelling,
@@ -168,6 +169,7 @@ export class Steering {
   private readonly coasting = new Coasting(this.settings.coasting);
   private readonly running = new Running(this.settings.running, this.settings.walking);
   private readonly zoom = new Zoom(this.settings.zoom);
+  private readonly inertia = new Inertia(this.settings.walking);
   private viewpoint: Viewpoint;
   /** Metres the eyes are above the origin, catching up with the floor. */
   private eyes: number;
@@ -289,7 +291,7 @@ export class Steering {
   /** Walk for a frame, and begin a fall where that steps off a ledge taller than a step. */
   private walk(intent: Intent, seconds: number): Viewpoint {
     const from = this.viewpoint;
-    const moved = advance(from, intent, seconds, this.place.terrain, this.settings.walking);
+    const moved = advance(from, intent, seconds, this.place.terrain, this.settings.walking, this.inertia);
     this.feet.walked = Math.hypot(moved.x - from.x, moved.z - from.z);
     if (moved.floor < from.floor - BODY.maxStep && seconds > 0) {
       this.fall = {
@@ -322,6 +324,8 @@ export class Steering {
       fall.feet = floor;
       this.fall = null;
       this.feet.landed = true;
+      // Still moving as they touch down, they stop as from a walk or a run.
+      this.inertia.carryOn({ east: fall.east, south: fall.south });
     }
     this.eyes = fall.feet + this.settings.walking.eyeHeight;
   }

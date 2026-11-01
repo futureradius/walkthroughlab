@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collisionMesh } from "./collision";
+import { BODY, collisionMesh } from "./collision";
 import { WALKING, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { RUNNING } from "./running";
 import { JOYSTICK, Steering, type Keys, type Stick, type View } from "./steering";
@@ -19,8 +19,10 @@ const forward: Stick = { x: 0, y: 1 };
 const STANDING_TURN_SPEED = (Math.PI * 2) / WALKING.standingTurn;
 
 /** A walkthrough on an upright screen, stepped a frame at a time. */
-function walkthrough(terrain: Terrain = open) {
+function walkthrough(terrain: Terrain = open, inertia = false) {
   const steering = new Steering({ terrain, start });
+  // Most of what steering does is plainest without inertia; it has its own tests.
+  if (!inertia) Object.assign(steering.settings.walking, { stopping: 0, settingOff: 0 });
   let view = steering.step({ knob: centred, keys: noKeys }, 0, UPRIGHT);
   /** One frame, and how far the viewpoint moved and turned in it. */
   const frame = (knob = centred, keys = noKeys, seconds = FRAME) => {
@@ -215,6 +217,180 @@ describe("steering", () => {
       hold(forward, 0.1);
       hold(centred, 0.1);
       expect(hold(forward, 1).moved).toBeCloseTo(RUNNING.speed * FRAME);
+    });
+  });
+
+  describe("inertia", () => {
+    /** Metres travelled and seconds taken from now until the body stands still. */
+    function comingToRest({ frame }: ReturnType<typeof walkthrough>, frameLength = FRAME) {
+      let metres = 0;
+      let seconds = 0;
+      for (;;) {
+        const { moved } = frame(centred, noKeys, frameLength);
+        if (moved === 0) return { metres, seconds };
+        metres += moved;
+        seconds += frameLength;
+      }
+    }
+
+    it("slows from a walk in about the time set, and goes on the way it was going", () => {
+      const walked = walkthrough(open, true);
+      walked.hold(forward, 1);
+      const { metres, seconds } = comingToRest(walked);
+      expect(seconds).toBeCloseTo(WALKING.stopping, 1);
+      expect(metres).toBeCloseTo((WALKING.speed * WALKING.stopping) / 2, 2);
+    });
+
+    it("takes longer from a run, by the same brake", () => {
+      const ran = walkthrough(open, true);
+      ran.hold(centred, 1.5, { ...noKeys, walk: 1, run: true });
+      const { metres } = comingToRest(ran);
+      const brake = WALKING.speed / WALKING.stopping;
+      expect(metres).toBeCloseTo(RUNNING.speed ** 2 / (2 * brake), 1);
+    });
+
+    it("stops the same at any frame rate", () => {
+      const at = (frameLength: number) => {
+        const walked = walkthrough(open, true);
+        for (let t = 0; t < 1; t += frameLength) walked.frame(forward, noKeys, frameLength);
+        return comingToRest(walked, frameLength).metres;
+      };
+      expect(at(1 / 24)).toBeCloseTo(at(1 / 120), 3);
+    });
+
+    it("carries on the way it was going when the view turns while slowing", () => {
+      const walked = walkthrough(open, true);
+      walked.hold(forward, 1);
+      const { x } = walked.view();
+      walked.steering.touch();
+      walked.steering.drag(-UPRIGHT.height, 0);
+      walked.frame();
+      walked.steering.letGo();
+      walked.hold(centred, 0.1);
+      expect(walked.view().x).toBeCloseTo(x);
+    });
+
+    it("slows through a reversal, then picks up the other way", () => {
+      const walked = walkthrough(open, true);
+      walked.hold(forward, 1);
+      const before = walked.view().z;
+      const reversing = walked.frame({ x: 0, y: -1 });
+      // Still going forward, which is towards -z, a frame after pushing back.
+      expect(reversing.view.z).toBeLessThan(before);
+      walked.hold({ x: 0, y: -1 }, 0.5);
+      const settled = walked.frame({ x: 0, y: -1 });
+      expect(settled.moved).toBeCloseTo(WALKING.speed * FRAME);
+      expect(settled.view.z).toBeGreaterThan(reversing.view.z);
+    });
+
+    it("takes a small push almost at once", () => {
+      const { hold } = walkthrough(open, true);
+      const small = JOYSTICK.deadZone + (1 - JOYSTICK.deadZone) * 0.1;
+      expect(hold({ x: 0, y: small }, 0.05).moved).toBeCloseTo(WALKING.speed * 0.1 * FRAME);
+    });
+
+    /** A wall along z = -1 across the whole floor, stopping anything beyond it. */
+    const walled: Terrain = (_from, x, z) => ({ x, z: Math.max(z, -1), floor: 0 });
+
+    it("loses speed going into a wall", () => {
+      const walked = walkthrough(walled, true);
+      walked.hold(forward, 2);
+      // Let go right after pressing the wall, nothing carries on.
+      expect(walked.frame().moved).toBe(0);
+    });
+
+    it("keeps speed going along a wall, no faster than without inertia", () => {
+      const facing = Math.PI / 4;
+      const place = { terrain: walled, start: { ...start, heading: facing } };
+      const steering = new Steering(place);
+      let last = steering.step({ knob: forward, keys: noKeys }, FRAME, UPRIGHT);
+      let along = 0;
+      for (let t = 0; t < 3; t += FRAME) {
+        const next = steering.step({ knob: forward, keys: noKeys }, FRAME, UPRIGHT);
+        along = next.x - last.x;
+        last = next;
+      }
+      expect(last.z).toBeCloseTo(-1);
+      expect(along).toBeCloseTo(WALKING.speed * Math.sin(facing) * FRAME, 3);
+      const coasted = steering.step({ knob: centred, keys: noKeys }, FRAME, UPRIGHT);
+      expect(coasted.x).toBeGreaterThan(last.x);
+    });
+
+    it("slides along a modelled wall as fast as without inertia, and slows along it", () => {
+      const quad = ([a, b, c, d]: number[][]) => [...a, ...b, ...c, ...a, ...c, ...d];
+      const { terrain } = collisionMesh([
+        ...quad([[-50, 0, -5], [50, 0, -5], [50, 0, 50], [-50, 0, 50]]),
+        ...quad([[-50, 0, -5], [50, 0, -5], [50, 3, -5], [-50, 3, -5]]),
+      ]);
+      const facing = Math.PI / 4;
+      const steering = new Steering({ terrain, start: { ...start, heading: facing } });
+      const pushing = { knob: forward, keys: noKeys };
+      let last = steering.step(pushing, FRAME, UPRIGHT);
+      let along = 0;
+      for (let t = 0; t < 8; t += FRAME) {
+        const next = steering.step(pushing, FRAME, UPRIGHT);
+        along = next.x - last.x;
+        last = next;
+      }
+      expect(last.z).toBeCloseTo(-5 + BODY.radius, 2);
+      expect(along).toBeCloseTo(WALKING.speed * Math.sin(facing) * FRAME, 3);
+      const letGo = steering.step({ knob: centred, keys: noKeys }, FRAME, UPRIGHT);
+      expect(letGo.x).toBeGreaterThan(last.x);
+      expect(letGo.x - last.x).toBeLessThan(along);
+      expect(letGo.z).toBeCloseTo(last.z, 3);
+    });
+
+    /** A floor that drops by 3 m half a metre ahead. */
+    const ledge: Terrain = (_from, x, z) => ({ x, z, floor: z < -0.5 ? -3 : 0 });
+
+    it("starts a fall at the speed it has when slowing past a ledge", () => {
+      const walked = walkthrough(ledge, true);
+      walked.hold(forward, 0.35);
+      expect(walked.view().z).toBeGreaterThan(-0.5);
+      walked.hold(centred, 0.3);
+      expect(walked.view().z).toBeLessThan(-0.5);
+      expect(walked.view().y).toBeLessThan(WALKING.eyeHeight);
+    });
+
+    it("lands still moving, and stops as usual", () => {
+      const walked = walkthrough(ledge, true);
+      walked.hold(forward, 1);
+      let { view, moved } = walked.frame();
+      while (view.y > WALKING.eyeHeight - 3 + 1e-6) ({ view, moved } = walked.frame());
+      expect(moved).toBeCloseTo(WALKING.speed * FRAME);
+      const landed = walked.frame().moved;
+      expect(landed).toBeGreaterThan(0);
+      expect(landed).toBeLessThan(WALKING.speed * FRAME);
+      expect(walked.hold(centred, 0.5).moved).toBe(0);
+    });
+
+    it("builds up no speed from being pushed", () => {
+      const walked = walkthrough(open, true);
+      walked.frame();
+      for (let frames = 0; frames < 30; frames++) {
+        const { x, z, floor } = walked.steering.footing;
+        walked.steering.shove({ x: x + 0.05, z, floor });
+        walked.frame();
+      }
+      const before = walked.view().x;
+      expect(walked.frame().view.x).toBe(before);
+    });
+
+    it("is the same with reduced motion", () => {
+      const walked = walkthrough(open, true);
+      walked.steering.reducedMotion = true;
+      walked.hold(forward, 1);
+      const { metres } = comingToRest(walked);
+      expect(metres).toBeCloseTo((WALKING.speed * WALKING.stopping) / 2, 2);
+    });
+
+    it("eases off turning as the body goes faster, not as the push asks", () => {
+      const walked = walkthrough(open, true);
+      walked.hold(forward, 1);
+      const whileSlowing = walked.frame(right).turned;
+      expect(whileSlowing).toBeLessThan(STANDING_TURN_SPEED * FRAME);
+      walked.hold(centred, 1);
+      expect(walked.frame(right).turned).toBeCloseTo(STANDING_TURN_SPEED * FRAME);
     });
   });
 

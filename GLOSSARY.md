@@ -80,6 +80,18 @@ _Avoid_: Camera control, orbit, mouse look
 The view carrying on turning after a free-look drag is let go, slowing to a stop unless the viewer catches it by touching the view.
 _Avoid_: Inertia, momentum, fling, kinetic scrolling
 
+**Inertia**:
+The viewer's body taking a moment to change how fast and which way it goes: the joystick or keys ask, and the body gets there by slowing and picking up speed. It belongs to the feet; the view's turning has coasting.
+_Avoid_: Momentum, friction, acceleration, glide
+
+**Stride**:
+The distance from one footfall to the next, shared by footsteps and head bob.
+_Avoid_: Step length, gait cycle
+
+**Head bob**:
+The eyes rising, falling and swaying gently with each stride. It never changes where the viewer stands or what stops them.
+_Avoid_: Camera shake, view bobbing
+
 **Zoom**:
 Narrowing the view to bring distant detail closer, without the viewpoint moving. The viewer pinches or scrolls towards a spot, which stays under their fingers or pointer. It stays while they stand still or hold the view, and wears off as they walk, like the view levelling out.
 _Avoid_: Field of view, FOV, dolly, magnify
