@@ -68,10 +68,7 @@ export interface Limits {
 export interface WalkingSettings {
   /** Metres per second at full push, unless running forward. */
   speed: number;
-  /**
-   * Seconds the body takes to stop from walking pace. The brake is the same
-   * from any speed, so a run takes longer to stop. 0 stops at once.
-   */
+  /** Seconds the body takes to stop from walking pace. 0 stops at once. */
   stopping: number;
   /** Seconds the body takes to pick up to walking pace. 0 is there at once. */
   settingOff: number;
@@ -98,7 +95,7 @@ export interface WalkingSettings {
  */
 export const WALKING: WalkingSettings = {
   speed: 1.4,
-  stopping: 0.25,
+  stopping: 0.1,
   settingOff: 0.15,
   standingTurn: 3,
   walkingTurn: 4,
@@ -126,7 +123,7 @@ export const WALKING_DESCRIBED: Described<WalkingSettings> = {
     max: 1,
     step: 0.01,
     show: fixed(2, " s"),
-    about: "How long the body takes to stop from a walk, on letting go or turning back. The same brake takes longer from a run. 0 stops at once.",
+    about: "How long the body takes to stop from a walk, on letting go or turning back. A run has its own, under Running. 0 stops at once.",
   }),
   settingOff: number({
     label: "Setting off",

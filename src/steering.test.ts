@@ -22,7 +22,10 @@ const STANDING_TURN_SPEED = (Math.PI * 2) / WALKING.standingTurn;
 function walkthrough(terrain: Terrain = open, inertia = false) {
   const steering = new Steering({ terrain, start });
   // Most of what steering does is plainest without inertia; it has its own tests.
-  if (!inertia) Object.assign(steering.settings.walking, { stopping: 0, settingOff: 0 });
+  if (!inertia) {
+    Object.assign(steering.settings.walking, { stopping: 0, settingOff: 0 });
+    steering.settings.running.stopping = 0;
+  }
   let view = steering.step({ knob: centred, keys: noKeys }, 0, UPRIGHT);
   /** One frame, and how far the viewpoint moved and turned in it. */
   const frame = (knob = centred, keys = noKeys, seconds = FRAME) => {
@@ -241,12 +244,40 @@ describe("steering", () => {
       expect(metres).toBeCloseTo((WALKING.speed * WALKING.stopping) / 2, 2);
     });
 
-    it("takes longer from a run, by the same brake", () => {
+    it("brakes harder from a run, stopping in its own time", () => {
       const ran = walkthrough(open, true);
       ran.hold(centred, 1.5, { ...noKeys, walk: 1, run: true });
+      const { metres, seconds } = comingToRest(ran);
+      expect(seconds).toBeCloseTo(RUNNING.stopping, 1);
+      const shedding = ((RUNNING.speed + WALKING.speed) / 2) * (RUNNING.stopping - WALKING.stopping);
+      const walkingOut = (WALKING.speed * WALKING.stopping) / 2;
+      expect(metres).toBeCloseTo(shedding + walkingOut, 1);
+    });
+
+    it("stops a run at once when its stopping time is 0", () => {
+      const ran = walkthrough(open, true);
+      ran.steering.settings.running.stopping = 0;
+      ran.hold(centred, 1.5, { ...noKeys, walk: 1, run: true });
+      expect(comingToRest(ran).metres).toBe(0);
+    });
+
+    it("drops quickly to walking pace, then stops as from a walk, with a run's stopping time no longer than a walk's", () => {
+      const ran = walkthrough(open, true);
+      ran.steering.settings.running.stopping = WALKING.stopping;
+      ran.hold(centred, 1.5, { ...noKeys, walk: 1, run: true });
       const { metres } = comingToRest(ran);
-      const brake = WALKING.speed / WALKING.stopping;
-      expect(metres).toBeCloseTo(RUNNING.speed ** 2 / (2 * brake), 1);
+      expect(metres).toBeGreaterThan((WALKING.speed * WALKING.stopping) / 2);
+      expect(metres).toBeLessThan((WALKING.speed * WALKING.stopping) / 2 + 0.1);
+    });
+
+    it("stops from a run the same at any frame rate", () => {
+      const at = (frameLength: number) => {
+        const ran = walkthrough(open, true);
+        const run = { ...noKeys, walk: 1, run: true };
+        for (let t = 0; t < 1.5; t += frameLength) ran.frame(centred, run, frameLength);
+        return comingToRest(ran, frameLength).metres;
+      };
+      expect(at(1 / 24)).toBeCloseTo(at(1 / 120), 2);
     });
 
     it("stops the same at any frame rate", () => {
@@ -345,7 +376,7 @@ describe("steering", () => {
 
     it("starts a fall at the speed it has when slowing past a ledge", () => {
       const walked = walkthrough(ledge, true);
-      walked.hold(forward, 0.35);
+      walked.hold(forward, 0.4);
       expect(walked.view().z).toBeGreaterThan(-0.5);
       walked.hold(centred, 0.3);
       expect(walked.view().z).toBeLessThan(-0.5);

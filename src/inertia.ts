@@ -1,4 +1,5 @@
 import type { Carrier, Ground, WalkingSettings } from "./motion";
+import type { RunningSettings } from "./running";
 
 /**
  * Change a velocity towards the one wanted, in a straight line and exactly,
@@ -48,6 +49,15 @@ export function chase(
   return { velocity: wanted, metres };
 }
 
+/**
+ * Longest piece of a frame worked out with one brake. The brake changes with
+ * speed, so short pieces keep the result the same at any frame rate.
+ */
+const LONGEST_PIECE = 1 / 240;
+
+/** Least seconds a run takes to drop to walking pace, unless it is set to stop at once. */
+const SHORTEST_SHEDDING = 0.02;
+
 /** A difference this many metres from a step as asked is only rounding. */
 const ROUNDING = 1e-9;
 
@@ -59,17 +69,41 @@ export class Inertia implements Carrier {
   /** Metres per second east and south the body is going at. */
   private velocity: Ground = { east: 0, south: 0 };
 
-  constructor(private readonly walking: WalkingSettings) {}
+  constructor(
+    private readonly walking: WalkingSettings,
+    private readonly running: RunningSettings,
+  ) {}
 
   get speed() {
     return Math.hypot(this.velocity.east, this.velocity.south);
   }
 
   carry(wanted: Ground, seconds: number): Ground {
-    const { speed, stopping, settingOff } = this.walking;
-    const { velocity, metres } = chase(this.velocity, wanted, seconds, speed / stopping, speed / settingOff);
-    this.velocity = velocity;
+    const { speed, settingOff } = this.walking;
+    const metres = { east: 0, south: 0 };
+    const pieces = Math.ceil(seconds / LONGEST_PIECE);
+    for (let piece = 0; piece < pieces; piece++) {
+      const step = chase(this.velocity, wanted, seconds / pieces, this.brake, speed / settingOff);
+      this.velocity = step.velocity;
+      metres.east += step.metres.east;
+      metres.south += step.metres.south;
+    }
     return metres;
+  }
+
+  /**
+   * The brake at the present speed, in metres per second per second: above
+   * walking pace it sheds the speed of a run in the time left over from
+   * stopping from a walk, however short, and from walking pace down it is the
+   * walking brake.
+   */
+  private get brake() {
+    const walk = this.walking.speed;
+    const stopping = this.walking.stopping;
+    if (this.speed <= walk) return walk / stopping;
+    if (this.running.stopping === 0) return Infinity;
+    const left = Math.max(this.running.stopping - stopping, SHORTEST_SHEDDING);
+    return Math.max(this.running.speed - walk, 0.01) / left;
   }
 
   /**

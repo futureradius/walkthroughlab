@@ -6,6 +6,8 @@ import type { Stick } from "./steering";
 export interface RunningSettings {
   /** Metres per second at full push forward while running. */
   speed: number;
+  /** Seconds the body takes to stop from a full run. */
+  stopping: number;
   /** Share of the joystick's reach each push must go past. */
   push: number;
   /** Share of the joystick's reach the dip must come back inside. */
@@ -22,6 +24,7 @@ export interface RunningSettings {
  */
 export const RUNNING: RunningSettings = {
   speed: 3.5,
+  stopping: 0.15,
   push: 0.8,
   dip: 0.5,
   time: 0.4,
@@ -38,6 +41,14 @@ export const RUNNING_DESCRIBED: Described<RunningSettings> = {
     step: 0.1,
     show: fixed(1, " m/s"),
     about: "How fast the viewer runs at a full push forward.",
+  }),
+  stopping: number({
+    label: "Stopping",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: seconds,
+    about: "How long the body takes to stop from a full run, on letting go or turning back. At or below the Stopping time under Walking, a run drops almost at once to walking pace and stops from there. 0 stops at once.",
   }),
   push: number({
     label: "Push past",

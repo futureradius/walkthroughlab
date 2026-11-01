@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chase, Inertia } from "./inertia";
 import { WALKING } from "./motion";
+import { RUNNING } from "./running";
 
 const BRAKE = 5.6;
 const PICK_UP = 9.3;
@@ -78,7 +79,7 @@ describe("chasing a velocity", () => {
 
 describe("inertia", () => {
   const body = () => {
-    const inertia = new Inertia(WALKING);
+    const inertia = new Inertia(WALKING, RUNNING);
     inertia.carryOn({ east: 1, south: 1 });
     return inertia;
   };
@@ -102,7 +103,7 @@ describe("inertia", () => {
   });
 
   it("takes its brake and pick-up from walking pace and the seconds set", () => {
-    const inertia = new Inertia(WALKING);
+    const inertia = new Inertia(WALKING, RUNNING);
     inertia.carry(east(WALKING.speed), WALKING.settingOff / 2);
     expect(inertia.speed).toBeCloseTo(WALKING.speed / 2);
     inertia.carry(still, WALKING.stopping / 4);

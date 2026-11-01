@@ -169,7 +169,7 @@ export class Steering {
   private readonly coasting = new Coasting(this.settings.coasting);
   private readonly running = new Running(this.settings.running, this.settings.walking);
   private readonly zoom = new Zoom(this.settings.zoom);
-  private readonly inertia = new Inertia(this.settings.walking);
+  private readonly inertia = new Inertia(this.settings.walking, this.settings.running);
   private viewpoint: Viewpoint;
   /** Metres the eyes are above the origin, catching up with the floor. */
   private eyes: number;
