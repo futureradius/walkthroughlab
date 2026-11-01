@@ -199,11 +199,12 @@ function configure(sections: Section[], config: Config) {
 }
 
 function steeringSections(steering: Steering): Section[] {
-  const { walking, running, coasting, joystick, zoom } = steering.settings;
+  const { walking, running, strides, coasting, joystick, zoom } = steering.settings;
   const described = STEERING_DESCRIBED;
   return [
     section("Walking", walking, described.walking),
     section("Running", running, described.running),
+    section("Strides", strides, described.strides, true),
     section("Coasting", coasting, described.coasting),
     section("Joystick", joystick, described.joystick),
     section("Zoom", zoom, described.zoom, true),

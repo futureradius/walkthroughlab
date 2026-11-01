@@ -79,7 +79,8 @@ with `?config`:
   word: `?sound=off`, `?sound=no-ambient` or `?sound=on`, so one published
   walkthrough serves walks with and without sound.
 - `## Ambient sound`: its loudness.
-- `## Footsteps`: their loudness, and the stride walking and running.
+- `## Footsteps`: their loudness. How far apart they fall is under `## Strides`,
+  beside the head bob, since both go by the same stride.
 - `## Placed sounds`: how many play at once.
 - `## sound-<name>`: a placed sound's loudness and distances.
 - `## door-hinged`, `## door-sliding`, `## elevator`: their sounds' loudness

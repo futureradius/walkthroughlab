@@ -285,6 +285,7 @@ describe("opening an environment", () => {
       "Faces",
       "Walking",
       "Running",
+      "Strides",
       "Coasting",
       "Joystick",
       "Zoom",

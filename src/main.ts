@@ -178,7 +178,7 @@ renderer.setAnimationLoop((now) => {
   camera.rotation.x = view.pitch;
   camera.fov = view.fov;
   camera.updateProjectionMatrix();
-  sounds.update(seconds, view, steering.feet, { walking: steering.settings.walking.speed, running: steering.settings.running.speed });
+  sounds.update(view, steering.feet);
   faces.update();
   blow(wind, seconds, accessibility.reducedMotion);
   for (const scatter of scatters) scatter.update(seconds, camera.position);

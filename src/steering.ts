@@ -14,6 +14,7 @@ import {
 } from "./motion";
 import { RUNNING, RUNNING_DESCRIBED, Running, type RunningSettings } from "./running";
 import { fixed, number, percent, type Described } from "./settings";
+import { STRIDES, STRIDES_DESCRIBED, Strides, type StridesSettings } from "./strides";
 import { Zoom, ZOOM, ZOOM_DESCRIBED, type Screen, type Spot, type ZoomSettings } from "./zoom";
 
 /** Where the joystick's knob sits, each axis as a share of its reach in [-1, 1]. */
@@ -91,6 +92,7 @@ export const JOYSTICK_DESCRIBED: Described<JoystickSettings> = {
 export interface SteeringSettings {
   walking: WalkingSettings;
   running: RunningSettings;
+  strides: StridesSettings;
   coasting: CoastingSettings;
   joystick: JoystickSettings;
   zoom: ZoomSettings;
@@ -100,6 +102,7 @@ export interface SteeringSettings {
 export const STEERING_DESCRIBED: { [K in keyof SteeringSettings]: Described<SteeringSettings[K]> } = {
   walking: WALKING_DESCRIBED,
   running: RUNNING_DESCRIBED,
+  strides: STRIDES_DESCRIBED,
   coasting: COASTING_DESCRIBED,
   joystick: JOYSTICK_DESCRIBED,
   zoom: ZOOM_DESCRIBED,
@@ -162,6 +165,7 @@ export class Steering {
   readonly settings: SteeringSettings = {
     walking: { ...WALKING },
     running: { ...RUNNING },
+    strides: { ...STRIDES },
     coasting: { ...COASTING },
     joystick: { ...JOYSTICK },
     zoom: { ...ZOOM },
@@ -170,6 +174,7 @@ export class Steering {
   private readonly running = new Running(this.settings.running, this.settings.walking);
   private readonly zoom = new Zoom(this.settings.zoom);
   private readonly inertia = new Inertia(this.settings.walking, this.settings.running);
+  private readonly strides = new Strides(this.settings.strides);
   private viewpoint: Viewpoint;
   /** Metres the eyes are above the origin, catching up with the floor. */
   private eyes: number;
@@ -182,8 +187,8 @@ export class Steering {
   /** The share of a sideways push that sidesteps; the rest turns. */
   private sidestepping = 0;
   private fall: Fall | null = null;
-  /** What the feet did in the last step, for footsteps: metres walked across the floor, and whether a fall ended. */
-  readonly feet = { walked: 0, landed: false };
+  /** What the feet did in the last step: metres walked across the floor, whether a fall ended, and whether a foot fell. */
+  readonly feet = { walked: 0, landed: false, fell: false };
   /** Whether the last step left the view where it was, so a stalled frame would hardly show. */
   still = true;
 
@@ -205,7 +210,7 @@ export class Steering {
     this.viewpoint = { ...this.viewpoint, ...to };
   }
 
-  /** Whether to brake a thrown view as for reduced motion; see Accessibility. */
+  /** Whether to brake a thrown view and keep the eyes from bobbing, as for reduced motion; see Accessibility. */
   set reducedMotion(reduced: boolean) {
     this.coasting.reduced = reduced;
   }
@@ -279,13 +284,24 @@ export class Steering {
     // Zoom wears off by the same share as the view levels out.
     this.viewpoint = this.zoom.step(moved, seconds, levelling(intent, seconds, walking), screen);
     const { x, z, floor, heading, pitch } = this.viewpoint;
-    this.still = x === before.x && z === before.z && floor === before.floor && heading === before.heading && pitch === before.pitch;
     if (this.fall) this.drop(this.fall, floor, seconds);
     else {
       this.eyes +=
         (floor + walking.eyeHeight - this.eyes) * Math.min(1, seconds * walking.eyeCatchUp);
     }
-    return { x, y: this.eyes, z, heading, pitch, fov: this.zoom.fov(screen) };
+    const speeds = { walking: walking.speed, running: this.settings.running.speed };
+    this.feet.fell = this.strides.step(this.feet.walked, seconds, speeds, this.feet.landed, this.coasting.reduced);
+    this.still = x === before.x && z === before.z && floor === before.floor && heading === before.heading && pitch === before.pitch && this.strides.settled;
+    // The eyes alone bob: where the viewer stands, and so what stops them, stays as it is.
+    const { up, right } = this.strides.bob;
+    return {
+      x: x + Math.cos(heading) * right,
+      y: this.eyes + up,
+      z: z + Math.sin(heading) * right,
+      heading,
+      pitch,
+      fov: this.zoom.fov(screen),
+    };
   }
 
   /** Walk for a frame, and begin a fall where that steps off a ledge taller than a step. */

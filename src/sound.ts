@@ -139,34 +139,12 @@ export const AMBIENT_DESCRIBED: Described<AmbientSettings> = {
 /** Footsteps: one per stride, walking or running. */
 export interface FootstepSettings {
   loudness: number;
-  /** Metres from one footstep to the next while walking. */
-  walking: number;
-  /** Metres from one footstep to the next at a full run. */
-  running: number;
 }
 
-export const FOOTSTEPS: FootstepSettings = { loudness: -20, walking: 0.75, running: 1.2 };
-
-const stride = fixed(2, " m");
+export const FOOTSTEPS: FootstepSettings = { loudness: -20 };
 
 export const FOOTSTEPS_DESCRIBED: Described<FootstepSettings> = {
   loudness: loudness("How loud each footstep is."),
-  walking: number({
-    label: "Stride, walking",
-    min: 0.3,
-    max: 2,
-    step: 0.05,
-    show: stride,
-    about: "How far the viewer walks from one footstep to the next.",
-  }),
-  running: number({
-    label: "Stride, running",
-    min: 0.3,
-    max: 3,
-    step: 0.05,
-    show: stride,
-    about: "How far the viewer runs from one footstep to the next at full speed; between walking and running it is in between.",
-  }),
 };
 
 /** All placed sounds together. */
@@ -200,44 +178,6 @@ export function nearest(spots: { at: Vector3; silent: number }[], from: Vector3,
   );
 }
 
-/**
- * When footsteps fall: one per stride walked across the floor, a stride
- * between the walking and the running one by how fast the viewer goes, and
- * one on landing from a fall. A viewer setting off steps within half a
- * stride. Standing, turning, falling and riding make no steps.
- */
-export class Strides {
-  /** Metres walked since the last footstep. */
-  private since: number;
-
-  constructor(private readonly settings: FootstepSettings) {
-    this.since = settings.walking / 2;
-  }
-
-  /**
-   * One frame: metres walked across the floor in `seconds`, the speeds of a
-   * walk and of a full run, and whether a fall ended. Whether a footstep falls.
-   */
-  step(walked: number, seconds: number, speeds: { walking: number; running: number }, landed: boolean): boolean {
-    if (landed) {
-      this.since = 0;
-      return true;
-    }
-    const { walking, running } = this.settings;
-    const speed = seconds > 0 ? walked / seconds : 0;
-    const share = Math.max(0, Math.min(1, (speed - speeds.walking) / Math.max(speeds.running - speeds.walking, 0.01)));
-    const length = walking + (running - walking) * share;
-    if (walked === 0) {
-      this.since = Math.max(this.since, length / 2);
-      return false;
-    }
-    this.since += walked;
-    if (this.since < length) return false;
-    this.since = Math.min(this.since - length, length);
-    return true;
-  }
-}
-
 /** A sound being played: its source, its fade and its loudness, and where it is heard from. */
 interface Playing {
   source: AudioBufferSourceNode;
@@ -248,8 +188,8 @@ interface Playing {
 
 /** What the feet did in a frame, from steering. */
 export interface Feet {
-  walked: number;
-  landed: boolean;
+  /** Whether a foot fell. */
+  fell: boolean;
 }
 
 /** Where the eyes are and which way they look, from steering. */
@@ -302,7 +242,6 @@ export class Sounds {
   private readonly master: GainNode | null;
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly spots: { name: string; at: Vector3; playing: Playing | null }[];
-  private readonly strides = new Strides(this.footsteps);
   private readonly hums = new Map<object, Playing>();
   private ambientPlaying: Playing | null = null;
   private lastStep = -1;
@@ -393,7 +332,7 @@ export class Sounds {
   }
 
   /** Footsteps, placed sounds and the ambient sound, for one frame. */
-  update(seconds: number, eyes: Ears, feet: Feet, speeds: { walking: number; running: number }) {
+  update(eyes: Ears, feet: Feet) {
     if (!this.context || !this.master) return;
     const ears = this.ears.set(eyes.x, eyes.y, eyes.z);
     const listener = this.context.listener;
@@ -425,7 +364,7 @@ export class Sounds {
     if (ambient && !this.ambientPlaying) this.ambientPlaying = this.fadeIn(this.play(ambient, this.list.ambient.loop, null, gainOf(this.ambient.loudness)));
     if (this.ambientPlaying) this.follow(this.ambientPlaying, gainOf(this.ambient.loudness));
 
-    if (this.strides.step(feet.walked, seconds, speeds, feet.landed)) this.footstep();
+    if (feet.fell) this.footstep();
 
     const chosen = nearest(
       this.spots.map(({ name, at }) => ({ at, silent: this.placedSettings.get(name)!.silent })),

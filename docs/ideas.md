@@ -110,10 +110,6 @@ Each was on #6, #20 or #21 and is left out of the finish line. (#11)
 
 Movement is done until the finish line (#8).
 
-- **Head bob while walking or running**: a gentle rise and fall of the
-  viewpoint with each step. Suggested while deciding how running works
-  (3a1ae8a) and left out of that step on purpose. (#17)
-
 - **Feeling acceleration**: the head, the camera, dips slightly as an
   elevator speeds up going up and rises slightly as it speeds up going down,
   and sways sideways in a curve, so a ride is felt as well as seen, for

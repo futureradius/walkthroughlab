@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { FOOTSTEPS, gainOf, heard, nearest, Strides } from "./sound";
+import { gainOf, heard, nearest } from "./sound";
 
 describe("loudness in decibels", () => {
   it("plays 0 dB at the sound's own level, -20 dB at a tenth of it, and -6 dB at about half", () => {
@@ -51,43 +51,5 @@ describe("which placed sounds play", () => {
 
   it("leaves out a near sound that carries less far than the distance to it", () => {
     expect(nearest([spot(10, 8), spot(20)], new Vector3(), 4)).toEqual(new Set([1]));
-  });
-});
-
-describe("footsteps", () => {
-  const speeds = { walking: 1.4, running: 3.5 };
-  /** How many steps fall in `seconds` at `speed`, frame by frame. */
-  const steps = (strides: Strides, speed: number, seconds: number, frame = 1 / 60) => {
-    let count = 0;
-    for (let t = 0; t < seconds - 1e-9; t += frame) if (strides.step(speed * frame, frame, speeds, false)) count++;
-    return count;
-  };
-
-  it("fall once per walking stride, the first within half a stride", () => {
-    const strides = new Strides({ ...FOOTSTEPS });
-    // Half a stride, 0.375 m, takes about 0.27 s at 1.4 m/s.
-    expect(steps(strides, 1.4, 0.3)).toBe(1);
-    // Then one every 0.75 m: 7 m in 5 s.
-    expect(steps(strides, 1.4, 5)).toBe(9);
-  });
-
-  it("fall less often per metre at a full run", () => {
-    const strides = new Strides({ ...FOOTSTEPS });
-    steps(strides, 3.5, 0.2);
-    // 12 m at 1.2 m a stride.
-    expect(steps(strides, 3.5, 12 / 3.5)).toBe(10);
-  });
-
-  it("stay silent standing still, and begin again within half a stride", () => {
-    const strides = new Strides({ ...FOOTSTEPS });
-    steps(strides, 1.4, 1);
-    expect(steps(strides, 0, 3)).toBe(0);
-    expect(steps(strides, 1.4, 0.3)).toBe(1);
-  });
-
-  it("fall once on landing from a fall", () => {
-    const strides = new Strides({ ...FOOTSTEPS });
-    expect(strides.step(0, 1 / 60, speeds, true)).toBe(true);
-    expect(strides.step(0, 1 / 60, speeds, false)).toBe(false);
   });
 });

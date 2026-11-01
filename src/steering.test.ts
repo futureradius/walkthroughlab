@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BODY, collisionMesh } from "./collision";
 import { WALKING, withinLimits, type Terrain, type Viewpoint } from "./motion";
 import { RUNNING } from "./running";
+import { STRIDES } from "./strides";
 import { JOYSTICK, Steering, type Keys, type Stick, type View } from "./steering";
 import { ZOOM } from "./zoom";
 
@@ -26,6 +27,8 @@ function walkthrough(terrain: Terrain = open, inertia = false) {
     Object.assign(steering.settings.walking, { stopping: 0, settingOff: 0 });
     steering.settings.running.stopping = 0;
   }
+  // Nor is head bob part of most of it; the eyes have their own tests.
+  Object.assign(steering.settings.strides, { bobWalking: 0, bobRunning: 0 });
   let view = steering.step({ knob: centred, keys: noKeys }, 0, UPRIGHT);
   /** One frame, and how far the viewpoint moved and turned in it. */
   const frame = (knob = centred, keys = noKeys, seconds = FRAME) => {
@@ -334,6 +337,7 @@ describe("steering", () => {
       const facing = Math.PI / 4;
       const place = { terrain: walled, start: { ...start, heading: facing } };
       const steering = new Steering(place);
+      Object.assign(steering.settings.strides, { bobWalking: 0, bobRunning: 0 });
       let last = steering.step({ knob: forward, keys: noKeys }, FRAME, UPRIGHT);
       let along = 0;
       for (let t = 0; t < 3; t += FRAME) {
@@ -355,6 +359,7 @@ describe("steering", () => {
       ]);
       const facing = Math.PI / 4;
       const steering = new Steering({ terrain, start: { ...start, heading: facing } });
+      Object.assign(steering.settings.strides, { bobWalking: 0, bobRunning: 0 });
       const pushing = { knob: forward, keys: noKeys };
       let last = steering.step(pushing, FRAME, UPRIGHT);
       let along = 0;
@@ -422,6 +427,102 @@ describe("steering", () => {
       expect(whileSlowing).toBeLessThan(STANDING_TURN_SPEED * FRAME);
       walked.hold(centred, 1);
       expect(walked.frame(right).turned).toBeCloseTo(STANDING_TURN_SPEED * FRAME);
+    });
+  });
+
+  describe("head bob", () => {
+    /** A walkthrough with the usual head bob. */
+    function bobbing(terrain: Terrain = open) {
+      const walked = walkthrough(terrain);
+      Object.assign(walked.steering.settings.strides, STRIDES);
+      return walked;
+    }
+
+    it("moves the eyes but never where the viewer stands", () => {
+      const { steering, hold, view } = bobbing();
+      hold(forward, 2);
+      let farthest = 0;
+      for (let frames = 0; frames < 60; frames++) {
+        hold(forward, FRAME);
+        const { x, z, floor } = steering.footing;
+        farthest = Math.max(farthest, Math.hypot(view().x - x, view().z - z));
+        expect(Math.hypot(view().x - x, view().z - z)).toBeLessThanOrEqual(STRIDES.bobWalking + 1e-9);
+        expect(Math.abs(view().y - (floor + WALKING.eyeHeight))).toBeLessThanOrEqual(STRIDES.bobWalking + 1e-9);
+      }
+      expect(farthest).toBeGreaterThan(0);
+    });
+
+    it("reaches its lowest as a foot falls", () => {
+      const { steering, frame } = bobbing();
+      for (let frames = 0; frames < 120; frames++) frame(forward);
+      let heard = 0;
+      for (let frames = 0; frames < 120; frames++) {
+        const { view } = frame(forward);
+        if (steering.feet.fell) {
+          heard++;
+          expect(view.y).toBeLessThan(WALKING.eyeHeight - STRIDES.bobWalking * 0.9);
+        }
+      }
+      expect(heard).toBeGreaterThan(2);
+    });
+
+    it("sways to the viewer's side whichever way they face", () => {
+      const { steering, frame } = bobbing();
+      steering.touch();
+      steering.drag(-UPRIGHT.height / 2, 0);
+      frame();
+      steering.letGo();
+      frame();
+      const facing = steering.step({ knob: centred, keys: noKeys }, 0, UPRIGHT).heading;
+      let most = 0;
+      for (let frames = 0; frames < 240; frames++) {
+        const { view } = frame(forward);
+        const { x, z } = steering.footing;
+        // Off to the side, and none of it along the way they face.
+        const along = Math.sin(facing) * (view.x - x) - Math.cos(facing) * (view.z - z);
+        expect(along).toBeCloseTo(0);
+        most = Math.max(most, Math.hypot(view.x - x, view.z - z));
+      }
+      expect(most).toBeCloseTo(STRIDES.bobWalking * STRIDES.sway, 3);
+    });
+
+    it("settles after stopping, and only then counts as still", () => {
+      const { steering, hold, view } = bobbing();
+      hold(forward, 2);
+      hold(centred, 0.02);
+      expect(steering.still).toBe(false);
+      hold(centred, 1);
+      expect(steering.still).toBe(true);
+      expect(view().y).toBeCloseTo(WALKING.eyeHeight);
+      expect(view().x).toBe(steering.footing.x);
+    });
+
+    it("stays off with reduced motion, and the feet still fall", () => {
+      const { steering, frame } = bobbing();
+      steering.reducedMotion = true;
+      let fell = 0;
+      for (let frames = 0; frames < 240; frames++) {
+        const { view } = frame(forward);
+        expect(view.y).toBeCloseTo(WALKING.eyeHeight);
+        expect(view.x).toBe(steering.footing.x);
+        if (steering.feet.fell) fell++;
+      }
+      expect(fell).toBeGreaterThan(2);
+    });
+
+    it("makes nothing of being carried", () => {
+      // A floor that rises, as an elevator's car does.
+      let level = 0;
+      const { steering, frame } = bobbing((_from, x, z) => ({ x, z, floor: level }));
+      frame();
+      for (let frames = 0; frames < 120; frames++) {
+        level += 0.01;
+        const { x, z } = steering.footing;
+        steering.shove({ x, z, floor: level });
+        const { view } = frame();
+        expect(steering.feet.fell).toBe(false);
+        expect(view.y).toBeCloseTo(steering.footing.floor + WALKING.eyeHeight);
+      }
     });
   });
 
