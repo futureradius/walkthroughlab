@@ -161,7 +161,7 @@ function pushOf(knob: Stick, deadZone: number): Stick {
  * coasts after it, it sidesteps instead, as with two thumbs in a phone game.
  * Zoomed in, the joystick and the keys turn the view more slowly, by as much
  * as it is zoomed in, so the scene crosses the screen no faster than without
- * zoom.
+ * zoom. While falling, it only turns the view, whatever else is going on.
  */
 export class Steering {
   readonly settings: SteeringSettings = {
@@ -277,8 +277,12 @@ export class Steering {
       looking: this.held,
       forwardSpeed: this.running.step({ knob, stick }, keys.run && keys.walk > 0, seconds),
     };
-    // In the air the viewer can look around but not steer.
-    const intent = this.fall ? { ...steered, walk: 0, sidestep: 0, turn: 0 } : steered;
+    // In the air the viewer can turn but not steer: where the fall carries them
+    // stays as it is, and a sideways push always turns, since a sidestep could
+    // do nothing there.
+    const intent = this.fall
+      ? { ...steered, walk: 0, sidestep: 0, turn: unit(stick.x + keys.turn) / this.zoom.level }
+      : steered;
 
     const before = this.viewpoint;
     const moved = this.fall

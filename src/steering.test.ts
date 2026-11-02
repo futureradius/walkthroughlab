@@ -162,10 +162,49 @@ describe("steering", () => {
 
     it("keeps the speed it stepped off with and can't steer in the air", () => {
       const { frame } = steppedOff();
-      const { moved, turned, view } = frame({ x: 1, y: -1 }, { ...noKeys, turn: 1 });
+      const { moved, view } = frame({ x: 1, y: -1 }, { ...noKeys, sidestep: 1 });
       expect(moved).toBeCloseTo(WALKING.speed * FRAME);
-      expect(turned).toBe(0);
       expect(view.x).toBe(0);
+    });
+
+    it("turns in the air with a sideways push, at standing speed", () => {
+      const { frame } = steppedOff();
+      expect(frame(right).turned).toBeCloseTo(STANDING_TURN_SPEED * FRAME);
+    });
+
+    it("turns in the air with the arrow keys, at standing speed", () => {
+      const { frame } = steppedOff();
+      expect(frame(centred, { ...noKeys, turn: 1 }).turned).toBeCloseTo(STANDING_TURN_SPEED * FRAME);
+    });
+
+    it("turns in the air rather than sidesteps, even during free look", () => {
+      const { steering, frame } = steppedOff();
+      steering.touch();
+      const { turned, view } = frame(right);
+      expect(turned).toBeCloseTo(STANDING_TURN_SPEED * FRAME);
+      expect(view.x).toBe(0);
+    });
+
+    it("turns more slowly in the air when zoomed in", () => {
+      const { steering, frame } = steppedOff();
+      steering.pinch(MIDDLE, 2);
+      frame();
+      expect(frame(right).turned).toBeCloseTo((STANDING_TURN_SPEED * FRAME) / 2);
+    });
+
+    it("lands where it would have landed without turning", () => {
+      const straight = steppedOff();
+      const turning = steppedOff();
+      const landing = (walked: ReturnType<typeof steppedOff>, knob: Stick) => {
+        let view = walked.view();
+        while (!walked.steering.feet.landed) view = walked.frame(knob).view;
+        return view;
+      };
+      const unturned = landing(straight, centred);
+      const turned = landing(turning, right);
+      expect(turned.heading).toBeGreaterThan(unturned.heading);
+      expect(turned.x).toBe(unturned.x);
+      expect(turned.z).toBe(unturned.z);
     });
 
     it("still looks around in the air", () => {
