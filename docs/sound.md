@@ -25,13 +25,14 @@ sounds**, and the sounds of doors and elevators (see `GLOSSARY.md`, decided in
 |---|---|---|
 | `ambient` | heard everywhere, in stereo; only its first 2 minutes are kept | as a loop |
 | `footstep-1`, `footstep-2`, … | one footstep each, as many as you like, played in random order | once per stride |
+| `landing` | feet landing from a fall, on top of the ordinary footstep, the fuller the farther the fall | once |
 | `door-hinged-open`, `door-hinged-close` | a hinged door starting to open or close | once |
 | `door-sliding-open`, `door-sliding-close` | a sliding door, the elevator's doors too | once |
 | `elevator-start` | the car setting off | once |
 | `elevator-hum` | the car travelling | as a loop |
 | `elevator-arrive` | the car arriving at a stop, such as a chime | once |
 
-The walkthrough ships with default footsteps, door and elevator sounds, in
+The walkthrough ships with default footsteps, landing, door and elevator sounds, in
 `public/sounds/`. A file in `models-source/sounds/` with one of these names
 replaces the default for the whole environment. Footsteps of your own replace
 all the default ones.
@@ -79,7 +80,8 @@ with `?config`:
   word: `?sound=off`, `?sound=no-ambient` or `?sound=on`, so one published
   walkthrough serves walks with and without sound.
 - `## Ambient sound`: its loudness.
-- `## Footsteps`: their loudness. How far apart they fall is under `## Strides`,
+- `## Footsteps`: their loudness and pitch variation, and the landing sound's
+  loudness and the fall at which it is fullest. How far apart they fall is under `## Strides`,
   beside the head bob, since both go by the same stride.
 - `## Placed sounds`: how many play at once.
 - `## sound-<name>`: a placed sound's loudness and distances.

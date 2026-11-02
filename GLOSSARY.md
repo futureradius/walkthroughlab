@@ -169,5 +169,5 @@ A continuous sound an author attaches to a spot in an environment, such as a fou
 _Avoid_: Audio source, emitter, 3D sound, positional audio
 
 **Footsteps**:
-The sound of the viewer walking, heard only while the viewpoint travels on foot.
+The sound of the viewer walking, heard only while the viewpoint travels on foot. A landing from a fall sounds heavier the farther the fall was.
 _Avoid_: Step sounds, walking sound, foley

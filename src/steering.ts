@@ -131,6 +131,8 @@ const TURNING = 0.01;
 interface Fall {
   /** Metres the feet are above the origin. */
   feet: number;
+  /** Metres the feet were above the origin as the fall began. */
+  top: number;
   /** Metres per second the feet drop at. */
   speed: number;
   /** Metres per second east and south the viewer stepped off at, and keeps. */
@@ -187,8 +189,8 @@ export class Steering {
   /** The share of a sideways push that sidesteps; the rest turns. */
   private sidestepping = 0;
   private fall: Fall | null = null;
-  /** What the feet did in the last step: metres walked across the floor, whether a fall ended, and whether a foot fell. */
-  readonly feet = { walked: 0, landed: false, fell: false };
+  /** What the feet did in the last step: metres walked across the floor, whether a fall ended and how far it was, and whether a foot fell. */
+  readonly feet = { walked: 0, landed: false, dropped: 0, fell: false };
   /** Whether the last step left the view where it was, so a stalled frame would hardly show. */
   still = true;
 
@@ -250,6 +252,7 @@ export class Steering {
     const { knob, keys } = readings;
     this.feet.walked = 0;
     this.feet.landed = false;
+    this.feet.dropped = 0;
     const stick = pushOf(knob, joystick.deadZone);
 
     // One pixel covers this angle at the present zoom, so a dragged spot
@@ -312,6 +315,7 @@ export class Steering {
     if (moved.floor < from.floor - BODY.maxStep && seconds > 0) {
       this.fall = {
         feet: from.floor,
+        top: from.floor,
         speed: 0,
         east: (moved.x - from.x) / seconds,
         south: (moved.z - from.z) / seconds,
@@ -340,6 +344,7 @@ export class Steering {
       fall.feet = floor;
       this.fall = null;
       this.feet.landed = true;
+      this.feet.dropped = fall.top - floor;
       // Still moving as they touch down, they stop as from a walk or a run.
       this.inertia.carryOn({ east: fall.east, south: fall.south });
     }

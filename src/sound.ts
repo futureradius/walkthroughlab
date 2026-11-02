@@ -1,6 +1,7 @@
 import { Vector3 } from "three";
 import type { Downloads } from "./download";
 import type { Point } from "./marks";
+import { BODY } from "./collision";
 import { fixed, number, toggle, type Described } from "./settings";
 
 // Everything the viewer hears (#13, #33): one ambient sound, footsteps,
@@ -139,13 +140,56 @@ export const AMBIENT_DESCRIBED: Described<AmbientSettings> = {
 /** Footsteps: one per stride, walking or running. */
 export interface FootstepSettings {
   loudness: number;
+  /** How far each footstep's pitch may lie either side of its own, as a share. */
+  pitch: number;
+  /** How loud the landing sound is at its fullest. */
+  landing: number;
+  /** Metres of fall at which the landing sound is at its fullest. */
+  landingFull: number;
 }
 
-export const FOOTSTEPS: FootstepSettings = { loudness: -20 };
+export const FOOTSTEPS: FootstepSettings = { loudness: -20, pitch: 0.08, landing: -12, landingFull: 3 };
 
 export const FOOTSTEPS_DESCRIBED: Described<FootstepSettings> = {
   loudness: loudness("How loud each footstep is."),
+  pitch: number({
+    label: "Pitch variation",
+    min: 0,
+    max: 0.25,
+    step: 0.01,
+    show: (value) => `± ${Math.round(value * 100)} %`,
+    about: "How far each footstep's pitch may lie above or below its recording, so no two sound quite alike.",
+  }),
+  landing: {
+    ...loudness("How loud the landing sound is at its fullest, on top of the ordinary footstep."),
+    label: "Landing loudness",
+  },
+  landingFull: number({
+    label: "Landing full at",
+    min: 0.5,
+    max: 10,
+    step: 0.1,
+    show: fixed(1, " m"),
+    about: "How far a fall must be for the landing sound to be at its fullest. It starts from silence at the lowest fall.",
+  }),
 };
+
+/** How far a one-off sound's pitch may lie either side of its own, as a share, so repeats differ. */
+const PITCH = 0.04;
+
+/** The speed to play a sound at, which sets its pitch, for a random number from 0 to 1. */
+export function pitchOf(spread: number, random: number): number {
+  return 1 - spread + 2 * spread * random;
+}
+
+/**
+ * How much of its loudness the landing sound plays at after a fall of this
+ * many metres: none at the lowest fall, rising to all of it.
+ */
+export function landingShare(fall: number, { landingFull }: Pick<FootstepSettings, "landingFull">): number {
+  const lowest = BODY.maxStep;
+  return Math.max(0, Math.min(1, (fall - lowest) / Math.max(landingFull - lowest, 0.01)));
+}
 
 /** All placed sounds together. */
 export interface PlacedSettings {
@@ -190,6 +234,8 @@ interface Playing {
 export interface Feet {
   /** Whether a foot fell. */
   fell: boolean;
+  /** Metres fallen, if a fall ended. */
+  dropped: number;
 }
 
 /** Where the eyes are and which way they look, from steering. */
@@ -282,7 +328,7 @@ export class Sounds {
   /** The names of the sounds to download, in the order they are wanted: the ambient sound first. */
   get wanted(): string[] {
     const order = (name: string) =>
-      name === "ambient" ? 0 : name.startsWith("footstep-") ? 1 : name.startsWith("door-") ? 2 : name.startsWith("elevator-") ? 3 : 4;
+      name === "ambient" ? 0 : name.startsWith("footstep-") || name === "landing" ? 1 : name.startsWith("door-") ? 2 : name.startsWith("elevator-") ? 3 : 4;
     return Object.keys(this.list).sort((a, b) => order(a) - order(b));
   }
 
@@ -323,12 +369,12 @@ export class Sounds {
   }
 
   /** A sound that plays once, from `at`, or at the ears if none, as loud as `settings` say from there. */
-  once(name: string, at: Vector3 | null, settings: { loudness: number } & Partial<HeardSettings>) {
+  once(name: string, at: Vector3 | null, settings: { loudness: number; pitch?: number } & Partial<HeardSettings>) {
     const buffer = this.buffers.get(name);
     if (!buffer || !this.sound.on || !this.context || this.context.state !== "running") return;
     const share = at && settings.realistic !== undefined ? heard(at.distanceTo(this.ears), settings as HeardSettings) : 1;
     if (share === 0) return;
-    this.play(buffer, undefined, at, gainOf(settings.loudness) * share);
+    this.play(buffer, undefined, at, gainOf(settings.loudness) * share, settings.pitch);
   }
 
   /** Footsteps, placed sounds and the ambient sound, for one frame. */
@@ -365,6 +411,7 @@ export class Sounds {
     if (this.ambientPlaying) this.follow(this.ambientPlaying, gainOf(this.ambient.loudness));
 
     if (feet.fell) this.footstep();
+    if (feet.dropped > 0) this.landing(feet.dropped);
 
     const chosen = nearest(
       this.spots.map(({ name, at }) => ({ at, silent: this.placedSettings.get(name)!.silent })),
@@ -412,11 +459,18 @@ export class Sounds {
     let pick = Math.floor(Math.random() * steps.length);
     if (steps.length > 1 && pick === this.lastStep) pick = (pick + 1) % steps.length;
     this.lastStep = pick;
-    this.once(steps[pick], null, { loudness: this.footsteps.loudness - 1.5 + Math.random() * 3 });
+    this.once(steps[pick], null, { loudness: this.footsteps.loudness - 1.5 + Math.random() * 3, pitch: this.footsteps.pitch });
+  }
+
+  /** The landing sound at the ears, on top of the footstep, the fuller the farther the fall. */
+  private landing(fall: number) {
+    const share = landingShare(fall, this.footsteps);
+    if (share === 0) return;
+    this.once("landing", null, { loudness: this.footsteps.landing + 20 * Math.log10(share) });
   }
 
   /** Start a sound now, looping between its overlaps if `loop` says how long it is. */
-  private play(buffer: AudioBuffer, loop: number | undefined, at: Vector3 | null, gain: number): Playing {
+  private play(buffer: AudioBuffer, loop: number | undefined, at: Vector3 | null, gain: number, pitch = PITCH): Playing {
     const context = this.context!;
     const source = context.createBufferSource();
     source.buffer = buffer;
@@ -441,7 +495,7 @@ export class Sounds {
       // As if it had been playing all along.
       source.start(0, OVERLAP + (context.currentTime % loop));
     } else {
-      source.playbackRate.value = 0.96 + Math.random() * 0.08;
+      source.playbackRate.value = pitchOf(pitch, Math.random());
       source.start();
     }
     return { source, fade, level, panner };

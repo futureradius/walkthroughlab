@@ -49,7 +49,7 @@ const SOUNDS = joinPath(MODELS, "sounds");
 /** Footsteps, doors and the elevator, which every environment has unless it brings its own: written by scripts/default-sounds.mjs and committed. */
 const DEFAULT_SOUNDS = "public/sounds";
 /** The names of the sounds an environment may put in place of a default. */
-const DEFAULT_NAME = /^(footstep-d+|door-(hinged|sliding)-(open|close)|elevator-(start|hum|arrive))$/;
+const DEFAULT_NAME = /^(footstep-\d+|landing|door-(hinged|sliding)-(open|close)|elevator-(start|hum|arrive))$/;
 /** Sounds that loop, besides placed sounds; the others play once. */
 const LOOPED = new Set(["ambient", "elevator-hum"]);
 /** Seconds of the ambient sound that are kept, as one seamless loop. */

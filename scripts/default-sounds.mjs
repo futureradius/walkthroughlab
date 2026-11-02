@@ -1,5 +1,5 @@
 // Makes the default sounds every environment has unless it brings its own:
-// footsteps, doors and the elevator (#33). Run with
+// footsteps, a landing, doors and the elevator (#33). Run with
 // `node scripts/default-sounds.mjs`, then `npm run optimize`, which lists them
 // in the environment. It needs ffmpeg; see scripts/sound-files.mjs.
 //
@@ -27,6 +27,8 @@ const OUT = "public/sounds";
  */
 const CUTS = [
   { name: "footstep", from: "footsteps", steps: { until: 3.7, length: 0.35 } },
+  // The feet land at 0.52 s, after a faint rustle left out, and settle at about 0.78 s.
+  { name: "landing", from: "landing", start: 0.51, end: 1.02, fade: 0.1 },
   { name: "door-hinged-open", from: "door-hinged-open", start: 0, end: 1.4, fade: 0.3 },
   { name: "door-hinged-close", from: "door-hinged-close", start: -0.2, end: 1.1, fade: 0.2 },
   // An alternative close, a front door with weather stripping: its slam is at 2.4 s.

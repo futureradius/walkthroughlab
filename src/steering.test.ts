@@ -195,6 +195,16 @@ describe("steering", () => {
       expect(farthest).toBeLessThan(WALKING.speed * FRAME * 1.01);
     });
 
+    it("says how far the fall was, once, as it lands", () => {
+      const { steering, frame } = steppedOff();
+      const falls: number[] = [];
+      for (let frames = 0; frames < 120; frames++) {
+        frame();
+        if (steering.feet.dropped > 0) falls.push(steering.feet.dropped);
+      }
+      expect(falls).toEqual([3]);
+    });
+
     it("steers again once landed", () => {
       const { hold, frame } = steppedOff();
       hold(centred, 1);

@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { gainOf, heard, nearest } from "./sound";
+import { FOOTSTEPS, gainOf, heard, landingShare, nearest, pitchOf } from "./sound";
 
 describe("loudness in decibels", () => {
   it("plays 0 dB at the sound's own level, -20 dB at a tenth of it, and -6 dB at about half", () => {
@@ -51,5 +51,32 @@ describe("which placed sounds play", () => {
 
   it("leaves out a near sound that carries less far than the distance to it", () => {
     expect(nearest([spot(10, 8), spot(20)], new Vector3(), 4)).toEqual(new Set([1]));
+  });
+});
+
+describe("pitch", () => {
+  it("lies either side of the recording's own, by the spread", () => {
+    expect(pitchOf(0.08, 0)).toBeCloseTo(0.92);
+    expect(pitchOf(0.08, 0.5)).toBeCloseTo(1);
+    expect(pitchOf(0.08, 1)).toBeCloseTo(1.08);
+  });
+
+  it("stays put with no spread", () => {
+    expect(pitchOf(0, 0.9)).toBe(1);
+  });
+});
+
+describe("the landing sound", () => {
+  it("starts from silence at the lowest fall", () => {
+    expect(landingShare(0.3, FOOTSTEPS)).toBe(0);
+    expect(landingShare(0.35, FOOTSTEPS)).toBeGreaterThan(0);
+    expect(landingShare(0.35, FOOTSTEPS)).toBeLessThan(0.05);
+  });
+
+  it("grows with the height of the fall, and is full at the height set", () => {
+    expect(landingShare(1.65, FOOTSTEPS)).toBeCloseTo(0.5);
+    expect(landingShare(3, FOOTSTEPS)).toBe(1);
+    expect(landingShare(30, FOOTSTEPS)).toBe(1);
+    expect(landingShare(1.15, { landingFull: 2 })).toBeCloseTo(0.5);
   });
 });
